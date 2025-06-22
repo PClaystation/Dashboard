@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Continental ID Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="images/Continental-ID-nbg-w.png" type="image/x-icon">
+</head>
+<body>
+
+    <div id="loading-screen">
+        <img src="images/globe-nbg-w.png" alt="Loading" class="pulsing-image" />
+        <p>Loading...</p>
+      </div>
+      
+
+    <header class="dashboard-header">
+        <div id="status">Checking login...</div>
+        <h1>Continental ID</h1>
+        <button id="logout-btn">Logout</button>
+    </header>
+      
+      
+
+      <nav>
+        <ul class="card-list">
+          <li class="card">
+            <a href="https://site1.continental.com" target="_blank" style="--bg-image: url('images/Echo.png')">
+              <span class="card-title">The Echo Archives</span>
+            </a>
+          </li>
+          <li class="card">
+            <a href="https://site2.continental.com" target="_blank" style="--bg-image: url('images/Continental.png')">
+              <span class="card-title">Continental Home</span>
+            </a>
+          </li>
+          <li class="card">
+            <a href="https://site3.continental.com" target="_blank" style="--bg-image: url('images/StepCast2.png')">
+              <span class="card-title">StepCast</span>
+            </a>
+          </li>
+          <li class="card">
+            <a href="https://site4.continental.com" target="_blank" style="--bg-image: url('images/Minesweeper.png')">
+              <span class="card-title">Minesweeper</span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+      
+      
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="profile">Profile Info</button>
+    <button class="tab-btn" data-tab="linked">Linked Accounts</button>
+    <button class="tab-btn" data-tab="security">Security</button>
+    <button class="tab-btn" data-tab="privacy">Privacy</button>
+    <button class="tab-btn" data-tab="notifications">Notifications</button>
+    <button class="tab-btn" data-tab="activity">Recent Activity</button>
+    <button class="tab-btn" data-tab="delete">Delete Account</button>
+  </div>
+
+  <section id="profile" class="tab-content active">
+    <h2>Profile Info</h2>
+    <p><strong>Name:</strong> John Doe</p>
+    <p><strong>Email:</strong> john.doe@example.com</p>
+    <p><strong>Username:</strong> johndoe123</p>
+  </section>
+
+  <section id="linked" class="tab-content">
+    <h2>Linked Accounts</h2>
+    <ul>
+      <li>Google: linked@example.com <button>Unlink</button></li>
+      <li>Facebook: johndoe.fb <button>Unlink</button></li>
+      <li>Twitter: @johndoe <button>Unlink</button></li>
+    </ul>
+  </section>
+
+  <section id="security" class="tab-content">
+    <h2>Security Settings</h2>
+    <p><button>Change Password</button></p>
+    <p><button>Enable/Disable 2FA</button></p>
+  </section>
+
+  <section id="privacy" class="tab-content">
+    <h2>Privacy Settings</h2>
+    <label><input type="checkbox" checked /> Make my profile public</label><br />
+    <label><input type="checkbox" /> Allow search engines to index me</label>
+  </section>
+
+  <section id="notifications" class="tab-content">
+    <h2>Notification Preferences</h2>
+    <label><input type="checkbox" checked /> Email notifications</label><br />
+    <label><input type="checkbox" /> SMS notifications</label><br />
+    <label><input type="checkbox" checked /> Push notifications</label>
+  </section>
+
+  <section id="activity" class="tab-content">
+    <h2>Recent Activity / Logins</h2>
+    <ul>
+      <li>2025-06-15 09:23 — Logged in from Chrome on Windows</li>
+      <li>2025-06-14 21:11 — Password changed</li>
+      <li>2025-06-13 08:45 — Logged in from Safari on iPhone</li>
+    </ul>
+  </section>
+
+  <section id="delete" class="tab-content">
+    <h2>Delete Account</h2>
+    <p><strong>Warning:</strong> This action is irreversible.</p>
+    <button id="delete-account-btn" style="background:#f44336; color:white; padding: 1rem; border:none; border-radius: 6px; cursor:pointer;">
+      Delete My Account
+    </button>
+  </section>
+
+  <footer>
+    <div class="left-content">
+        <img src="images/C2-dark.png" alt="Logo">
+        <span>Continental</span>
+    </div>
+    <div class="center-content">
+        <p>
+            © 2025 PClaystation | 
+            <a href="https://github.com/PClaystation" target="_blank">GitHub</a> |
+            <a href="" target="_blank" id="contact-button">Contact Us</a>
+            <script>
+                document.getElementById('contact-button').addEventListener('click', function() {
+                    window.location.href = 'contact.html';  // Link to your contact page
+                });
+            </script>
+     </p>
+    </div>
+    <div class="right-content">
+        <a href="https://patreon.com/ContinentalStudios?utm_medium=unknown&utm_source=join_link&utm_campaign=creatorshare_creator&utm_content=copyLink" target="_blank">
+            <img src="images/patreon.svg" alt="Logo">
+        </a>
+        <a href="https://gofund.me/5a43d215" target="_blank">
+            <img src="images/gofundme2.svg" alt="Logo">
+        </a>
+    </div>
+</footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
