@@ -14,8 +14,7 @@ function setLoggedOut() {
   logoutBtn.style.display = 'none';
   localStorage.removeItem('token');
   localStorage.removeItem('userId');
-  const loginURL = `https://pclaystation.github.io/Login/?redirect=${encodeURIComponent(window.location.href)}`;
-  window.location.href = loginURL;
+  openLoginPopup();
 }
 
 function extractParams() {
@@ -74,8 +73,7 @@ window.onload = async () => {
 logoutBtn.onclick = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('userId');
-  const loginURL = `https://pclaystation.github.io/Login/?redirect=${encodeURIComponent(window.location.href)}`;
-  window.location.href = loginURL;
+  setLoggedOut();
 };
 
 // Tab switching
@@ -148,4 +146,30 @@ async function fetchUserInfo() {
       return false;
     }
   }
+  
+
+  function openLoginPopup() {
+    const width = 500;
+    const height = 650;
+    const left = (screen.width / 2) - (width / 2);
+    const top = (screen.height / 2) - (height / 2);
+  
+    window.open(
+      'https://pclaystation.github.io/Login/popup.html',
+      'LoginPopup',
+      `width=${width},height=${height},top=${top},left=${left}`
+    );
+  }
+  
+  window.addEventListener('message', (event) => {
+    if (event.origin !== 'https://pclaystation.github.io') return;
+  
+    if (event.data.type === 'LOGIN_SUCCESS') {
+      console.log('✅ Logged in via popup!', event.data);
+      localStorage.setItem('token', event.data.token);
+      localStorage.setItem('userId', event.data.userId);
+      fetchUserInfo();
+      setLoggedIn(event.data.userId); // or fetchUserInfo().then(setLoggedIn)
+    }
+  });
   
