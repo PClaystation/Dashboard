@@ -1,24 +1,36 @@
 require('dotenv').config();
+
+const crypto = require('crypto');
 const fs = require('fs');
+const http = require('http');
 const https = require('https');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-
 const cookieParser = require('cookie-parser');
 
 const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 
-app.disable('x-powered-by');
-app.set('trust proxy', 1);
-
-app.use(express.json({ limit: '10kb' }));
-
-app.use(cookieParser());
-
-console.log("Current environment:", process.env.NODE_ENV);
+const config = {
+  appName: process.env.APP_NAME || 'continental-id-auth',
+  nodeEnv: process.env.NODE_ENV || 'development',
+  port: Number(process.env.PORT) || 5000,
+  mongoUri: process.env.MONGO_URI,
+  jwtSecret: process.env.JWT_SECRET,
+  refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
+  allowedOrigins: String(process.env.ALLOWED_ORIGINS || 'https://pclaystation.github.io')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean),
+  rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  rateLimitMax: Number(process.env.RATE_LIMIT_MAX) || 180,
+  httpsKeyPath:
+    process.env.HTTPS_KEY_PATH || '/etc/letsencrypt/live/mpmc.ddns.net/privkey.pem',
+  httpsCertPath:
+    process.env.HTTPS_CERT_PATH || '/etc/letsencrypt/live/mpmc.ddns.net/fullchain.pem',
+};
 
 const requiredEnv = ['MONGO_URI', 'JWT_SECRET', 'REFRESH_TOKEN_SECRET'];
 const missingEnv = requiredEnv.filter((key) => !process.env[key]);
@@ -27,129 +39,219 @@ if (missingEnv.length > 0) {
   process.exit(1);
 }
 
+const allowedOriginsSet = new Set(config.allowedOrigins);
 
-const allowedOrigins = [
-    'https://pclaystation.github.io',
-    'http://localhost:5502',
-    'http://127.0.0.1:5501',
-    'http://127.0.0.1:5502',
-    'http://127.0.0.1:5503',
-    'http://127.0.0.1:5504',
-    'http://127.0.0.1:5505',
-    'http://127.0.0.1:5506',
-];
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+
+app.use((req, res, next) => {
+  const requestId = crypto.randomUUID();
+  req.requestId = requestId;
+  res.setHeader('X-Request-Id', requestId);
+  return next();
+});
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
   next();
 });
 
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) {
-      // allow non-browser requests like Postman
-      return callback(null, true);
-    }
+app.use(express.json({ limit: '25kb' }));
+app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
 
-    try {
-      const url = new URL(origin);
-      // Allow all localhost origins regardless of port
-      if ((url.hostname === 'localhost' || url.hostname === '127.0.0.1')) {
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+
+  try {
+    const url = new URL(origin);
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
+  return allowedOriginsSet.has(origin);
+};
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 
-      // Otherwise, allow if in allowedOrigins
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        return callback(null, true);
-      }
-
-      return callback(new Error('Not allowed by CORS'), false);
-    } catch {
-      // If origin is invalid, deny
-      return callback(new Error('Invalid origin'), false);
-    }
-  },
-  credentials: true,
-}));
-
-const rateLimitWindowMs = 15 * 60 * 1000;
-const rateLimitMax = 100;
 const rateLimitStore = new Map();
 
-const getClientId = (req) => {
+const getClientKey = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) return String(forwarded).split(',')[0].trim();
+  if (forwarded) {
+    return String(forwarded).split(',')[0].trim();
+  }
   return req.ip || 'unknown';
 };
 
-const rateLimiter = (req, res, next) => {
-  const key = getClientId(req);
+const apiRateLimiter = (req, res, next) => {
   const now = Date.now();
+  const key = getClientKey(req);
   const entry = rateLimitStore.get(key);
 
-  if (!entry || now - entry.start > rateLimitWindowMs) {
+  if (!entry || now - entry.start > config.rateLimitWindowMs) {
     rateLimitStore.set(key, { start: now, count: 1 });
     return next();
   }
 
-  if (entry.count >= rateLimitMax) {
-    return res.status(429).json({ message: 'Too many requests. Try again later.' });
+  if (entry.count >= config.rateLimitMax) {
+    return res.status(429).json({
+      message: 'Too many requests. Please try again later.',
+      requestId: req.requestId,
+    });
   }
 
   entry.count += 1;
   return next();
 };
 
+const staleBucketCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitStore.entries()) {
+    if (now - entry.start > config.rateLimitWindowMs) {
+      rateLimitStore.delete(key);
+    }
+  }
+}, Math.max(30_000, Math.floor(config.rateLimitWindowMs / 2)));
+
+staleBucketCleanupInterval.unref();
 
 mongoose.set('bufferCommands', false);
 
 const connectToDatabase = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('MongoDB connected');
-  } catch (err) {
-    console.error('MongoDB connection failed:', err);
-    process.exit(1);
-  }
+  await mongoose.connect(config.mongoUri, {
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 5000,
+  });
 };
 
 mongoose.connection.on('error', (err) => {
   console.error('MongoDB connection error:', err);
 });
 
+app.get('/api/health', (req, res) => {
+  const dbConnected = mongoose.connection.readyState === 1;
+  const status = dbConnected ? 200 : 503;
+
+  return res.status(status).json({
+    service: config.appName,
+    environment: config.nodeEnv,
+    status: dbConnected ? 'ok' : 'degraded',
+    db: dbConnected ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.use('/api', apiRateLimiter);
+
 app.use((req, res, next) => {
-  if (mongoose.connection.readyState !== 1) {
-    return res.status(503).json({ message: 'Database unavailable. Try again shortly.' });
+  if (req.path === '/api/health') {
+    return next();
   }
+
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      message: 'Database unavailable. Try again shortly.',
+      requestId: req.requestId,
+    });
+  }
+
   return next();
 });
 
-app.use('/api/auth', rateLimiter, authRoutes);
+app.use('/api/auth', authRoutes);
 
-const PORT = process.env.PORT || 5000;
+app.use('/api', (req, res) => {
+  return res.status(404).json({
+    message: 'API route not found.',
+    requestId: req.requestId,
+  });
+});
 
-const startServer = async () => {
-  await connectToDatabase();
-
-  const keyPath = process.env.HTTPS_KEY_PATH || '/etc/letsencrypt/live/mpmc.ddns.net/privkey.pem';
-  const certPath = process.env.HTTPS_CERT_PATH || '/etc/letsencrypt/live/mpmc.ddns.net/fullchain.pem';
-
-  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-    const privateKey = fs.readFileSync(keyPath, 'utf8');
-    const certificate = fs.readFileSync(certPath, 'utf8');
-    const credentials = { key: privateKey, cert: certificate };
-
-    https.createServer(credentials, app).listen(PORT, () => {
-      console.log(`Auth service HTTPS running on port ${PORT}`);
-    });
-  } else {
-    app.listen(PORT, () => {
-      console.log(`Auth service HTTP running on port ${PORT}`);
+app.use((err, req, res, next) => {
+  if (err?.message === 'Not allowed by CORS') {
+    return res.status(403).json({
+      message: 'CORS origin denied.',
+      requestId: req.requestId,
     });
   }
+
+  console.error(`[${req.requestId}]`, err);
+  return res.status(500).json({
+    message: 'Internal server error.',
+    requestId: req.requestId,
+  });
+});
+
+let server;
+
+const startServer = async () => {
+  try {
+    await connectToDatabase();
+    console.log('MongoDB connected');
+  } catch (err) {
+    console.error('MongoDB connection failed:', err);
+    process.exit(1);
+  }
+
+  const hasHttpsFiles = fs.existsSync(config.httpsKeyPath) && fs.existsSync(config.httpsCertPath);
+
+  if (hasHttpsFiles) {
+    const privateKey = fs.readFileSync(config.httpsKeyPath, 'utf8');
+    const certificate = fs.readFileSync(config.httpsCertPath, 'utf8');
+    server = https.createServer({ key: privateKey, cert: certificate }, app);
+    server.listen(config.port, () => {
+      console.log(`Auth service HTTPS running on port ${config.port}`);
+    });
+    return;
+  }
+
+  server = http.createServer(app);
+  server.listen(config.port, () => {
+    console.log(`Auth service HTTP running on port ${config.port}`);
+  });
 };
+
+const shutdown = async (signal) => {
+  console.log(`Received ${signal}. Shutting down gracefully...`);
+
+  clearInterval(staleBucketCleanupInterval);
+
+  try {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+
+    await mongoose.connection.close();
+    process.exit(0);
+  } catch (err) {
+    console.error('Error during shutdown:', err);
+    process.exit(1);
+  }
+};
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 startServer();

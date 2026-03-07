@@ -1,7 +1,11 @@
 const User = require('../models/User');
 
 exports.verifyEmail = async (req, res) => {
-  const token = req.query.token;
+  const token = String(req.query.token || '').trim();
+
+  if (!token) {
+    return res.status(400).json({ message: 'Verification token is required.' });
+  }
 
   try {
     // Find user with valid, unexpired verification token
@@ -21,10 +25,9 @@ exports.verifyEmail = async (req, res) => {
 
     await user.save();
 
-    res.status(200).json({ message: 'Email verified successfully. You can now log in.' });
+    return res.status(200).json({ message: 'Email verified successfully. You can now log in.' });
   } catch (err) {
     console.error('Email verification error:', err);
-    res.status(500).json({ message: 'Email verification failed.', error: err.message });
+    return res.status(500).json({ message: 'Email verification failed.' });
   }
 };
-

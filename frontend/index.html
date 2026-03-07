@@ -4,148 +4,249 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Continental ID Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Syne:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" href="images/Continental-ID-nbg-w.png" type="image/x-icon">
 </head>
 <body>
+  <div id="loading-screen" aria-live="polite">
+    <img src="images/globe-nbg-w.png" alt="Loading" class="pulsing-image" />
+    <p id="loading-message">Checking your session...</p>
+  </div>
 
-    <div id="loading-screen">
-        <img src="images/globe-nbg-w.png" alt="Loading" class="pulsing-image" />
-        <p>Loading...</p>
+  <div id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <div id="app-content" class="app-shell" style="display:none;">
+    <header class="dashboard-header">
+      <div class="header-meta">
+        <span id="status" class="status-tag">Checking login...</span>
+        <span id="connection-status" class="connection-tag">Online</span>
       </div>
-      
-  <div id="app-content" style="display:none;">
-      <header class="dashboard-header">
-          <div id="status">Checking login...</div>
-          <h1>Continental ID</h1>
-          <button id="logout-btn">Logout</button>
-      </header>
-        
-        
+      <h1>Continental ID Dashboard</h1>
+      <div class="header-actions">
+        <button id="refresh-data-btn" class="secondary-btn" type="button">Refresh Data</button>
+        <button id="logout-btn" class="primary-btn" type="button">Logout</button>
+      </div>
+    </header>
 
-        <nav>
-          <ul class="card-list">
-            <li class="card">
-              <a href="https://site1.continental.com" target="_blank" style="--bg-image: url('images/Echo.png')">
-                <span class="card-title">The Echo Archives</span>
-              </a>
-            </li>
-            <li class="card">
-              <a href="https://site2.continental.com" target="_blank" style="--bg-image: url('images/Continental.png')">
-                <span class="card-title">Continental Home</span>
-              </a>
-            </li>
-            <li class="card">
-              <a href="https://site3.continental.com" target="_blank" style="--bg-image: url('images/StepCast2.png')">
-                <span class="card-title">StepCast</span>
-              </a>
-            </li>
-            <li class="card">
-              <a href="https://site4.continental.com" target="_blank" style="--bg-image: url('images/Minesweeper.png')">
-                <span class="card-title">Minesweeper</span>
-              </a>
-            </li>
-          </ul>
-        </nav>
-        
-        
-
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="profile">Profile Info</button>
-      <button class="tab-btn" data-tab="linked">Linked Accounts</button>
-      <button class="tab-btn" data-tab="security">Security</button>
-      <button class="tab-btn" data-tab="privacy">Privacy</button>
-      <button class="tab-btn" data-tab="notifications">Notifications</button>
-      <button class="tab-btn" data-tab="activity">Recent Activity</button>
-      <button class="tab-btn" data-tab="delete">Delete Account</button>
-    </div>
-
-    <section id="profile" class="tab-content active">
-      <h2>Profile Info</h2>
-      <p><strong>Name:</strong> John Doe</p>
-      <p><strong>Email:</strong> john.doe@example.com</p>
-      <p><strong>Username:</strong> johndoe123</p>
+    <section class="summary-grid" aria-label="Account summary">
+      <article class="summary-card">
+        <p class="summary-label">Continental ID</p>
+        <p class="summary-value" id="summary-id">-</p>
+      </article>
+      <article class="summary-card">
+        <p class="summary-label">Display Name</p>
+        <p class="summary-value" id="summary-display-name">-</p>
+      </article>
+      <article class="summary-card">
+        <p class="summary-label">Last Login</p>
+        <p class="summary-value" id="summary-last-login">-</p>
+      </article>
+      <article class="summary-card">
+        <p class="summary-label">Two-Factor</p>
+        <p class="summary-value" id="summary-2fa">Disabled</p>
+      </article>
     </section>
 
-    <section id="linked" class="tab-content">
-      <h2>Linked Accounts</h2>
-      <ul>
-        <li>Google: linked@example.com <button>Unlink</button></li>
-        <li>Facebook: johndoe.fb <button>Unlink</button></li>
-        <li>Twitter: @johndoe <button>Unlink</button></li>
+    <section class="quick-links" aria-label="Continental services">
+      <h2>Services</h2>
+      <ul class="card-list">
+        <li class="card">
+          <a href="https://site1.continental.com" target="_blank" rel="noopener noreferrer" style="--bg-image: url('images/Echo.png')">
+            <span class="card-title">The Echo Archives</span>
+          </a>
+        </li>
+        <li class="card">
+          <a href="https://site2.continental.com" target="_blank" rel="noopener noreferrer" style="--bg-image: url('images/Continental.png')">
+            <span class="card-title">Continental Home</span>
+          </a>
+        </li>
+        <li class="card">
+          <a href="https://site3.continental.com" target="_blank" rel="noopener noreferrer" style="--bg-image: url('images/StepCast2.png')">
+            <span class="card-title">StepCast</span>
+          </a>
+        </li>
+        <li class="card">
+          <a href="https://site4.continental.com" target="_blank" rel="noopener noreferrer" style="--bg-image: url('images/Minesweeper.png')">
+            <span class="card-title">Minesweeper</span>
+          </a>
+        </li>
       </ul>
     </section>
 
-    <section id="security" class="tab-content">
-      <h2>Security Settings</h2>
-      <p><button>Change Password</button></p>
-      <p><button>Enable/Disable 2FA</button></p>
-    </section>
+    <nav class="tabs" aria-label="Dashboard sections">
+      <button class="tab-btn active" data-tab="profile" type="button">Profile</button>
+      <button class="tab-btn" data-tab="linked" type="button">Linked Accounts</button>
+      <button class="tab-btn" data-tab="security" type="button">Security</button>
+      <button class="tab-btn" data-tab="privacy" type="button">Privacy</button>
+      <button class="tab-btn" data-tab="notifications" type="button">Notifications</button>
+      <button class="tab-btn" data-tab="activity" type="button">Activity</button>
+      <button class="tab-btn danger-tab" data-tab="delete" type="button">Delete Account</button>
+    </nav>
 
-    <section id="privacy" class="tab-content">
-      <h2>Privacy Settings</h2>
-      <label><input type="checkbox" checked /> Make my profile public</label><br />
-      <label><input type="checkbox" /> Allow search engines to index me</label>
-    </section>
+    <main class="tab-panels">
+      <section id="profile" class="tab-content active">
+        <h2>Profile</h2>
+        <form id="profile-form" class="form-grid">
+          <label>
+            Display name
+            <input id="profile-display-name" name="displayName" type="text" minlength="2" maxlength="60" required />
+          </label>
+          <label>
+            Email
+            <input id="profile-email" name="email" type="email" required />
+          </label>
+          <label>
+            Continental ID
+            <input id="profile-id" type="text" disabled />
+          </label>
+          <label>
+            Created
+            <input id="profile-created" type="text" disabled />
+          </label>
+          <button id="profile-save-btn" class="primary-btn" type="submit">Save Profile</button>
+        </form>
+      </section>
 
-    <section id="notifications" class="tab-content">
-      <h2>Notification Preferences</h2>
-      <label><input type="checkbox" checked /> Email notifications</label><br />
-      <label><input type="checkbox" /> SMS notifications</label><br />
-      <label><input type="checkbox" checked /> Push notifications</label>
-    </section>
+      <section id="linked" class="tab-content">
+        <h2>Linked Accounts</h2>
+        <form id="linked-form" class="form-grid">
+          <label>
+            Google
+            <input id="linked-google" name="google" type="text" placeholder="name@gmail.com" />
+          </label>
+          <label>
+            Facebook
+            <input id="linked-facebook" name="facebook" type="text" placeholder="facebook username" />
+          </label>
+          <label>
+            GitHub
+            <input id="linked-github" name="github" type="text" placeholder="github handle" />
+          </label>
+          <label>
+            Twitter/X
+            <input id="linked-twitter" name="twitter" type="text" placeholder="@handle" />
+          </label>
+          <button id="linked-save-btn" class="primary-btn" type="submit">Save Linked Accounts</button>
+        </form>
+      </section>
 
-    <section id="activity" class="tab-content">
-      <h2>Recent Activity / Logins</h2>
-      <ul>
-        <li>2025-06-15 09:23 — Logged in from Chrome on Windows</li>
-        <li>2025-06-14 21:11 — Password changed</li>
-        <li>2025-06-13 08:45 — Logged in from Safari on iPhone</li>
-      </ul>
-    </section>
+      <section id="security" class="tab-content">
+        <h2>Security</h2>
+        <form id="password-form" class="form-grid">
+          <label>
+            Current password
+            <input id="current-password" name="currentPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <label>
+            New password
+            <input id="new-password" name="newPassword" type="password" autocomplete="new-password" required />
+          </label>
+          <label>
+            Confirm new password
+            <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" required />
+          </label>
+          <small id="password-hint">Use 8+ chars with uppercase, lowercase, and number.</small>
+          <button id="password-save-btn" class="primary-btn" type="submit">Update Password</button>
+        </form>
 
-    <section id="delete" class="tab-content">
-      <h2>Delete Account</h2>
-      <p><strong>Warning:</strong> This action is irreversible.</p>
-      <button id="delete-account-btn" style="background:#f44336; color:white; padding: 1rem; border:none; border-radius: 6px; cursor:pointer;">
-        Delete My Account
-      </button>
-    </section>
+        <form id="security-form" class="inline-form">
+          <label class="toggle-label" for="two-fa-toggle">
+            <input id="two-fa-toggle" type="checkbox" />
+            Enable two-factor authentication
+          </label>
+          <button id="security-save-btn" class="secondary-btn" type="submit">Save Security</button>
+        </form>
+      </section>
 
-    <div id="cookie-popup" class="cookie-popup hide"> <!-- note the 'hide' class -->
-      <p>We use cookies to ensure you get the best experience on our website. <a href="/privacy" target="_blank">Learn more</a></p>
-      <button id="cookie-accept">Got it!</button>
+      <section id="privacy" class="tab-content">
+        <h2>Privacy</h2>
+        <form id="privacy-form" class="form-grid compact-form">
+          <label class="toggle-label" for="privacy-public">
+            <input id="privacy-public" type="checkbox" />
+            Make my profile public
+          </label>
+          <label class="toggle-label" for="privacy-searchable">
+            <input id="privacy-searchable" type="checkbox" />
+            Allow account discovery in search
+          </label>
+          <button id="privacy-save-btn" class="primary-btn" type="submit">Save Privacy Settings</button>
+        </form>
+      </section>
+
+      <section id="notifications" class="tab-content">
+        <h2>Notifications</h2>
+        <form id="notification-form" class="form-grid compact-form">
+          <label class="toggle-label" for="notify-email">
+            <input id="notify-email" type="checkbox" />
+            Email notifications
+          </label>
+          <label class="toggle-label" for="notify-sms">
+            <input id="notify-sms" type="checkbox" />
+            SMS notifications
+          </label>
+          <label class="toggle-label" for="notify-push">
+            <input id="notify-push" type="checkbox" />
+            Push notifications
+          </label>
+          <button id="notification-save-btn" class="primary-btn" type="submit">Save Notification Preferences</button>
+        </form>
+      </section>
+
+      <section id="activity" class="tab-content">
+        <h2>Recent Activity</h2>
+        <div class="activity-toolbar">
+          <input id="activity-filter" type="search" placeholder="Filter by IP, browser, or date" />
+          <button id="activity-refresh-btn" class="secondary-btn" type="button">Refresh Activity</button>
+          <button id="activity-export-btn" class="secondary-btn" type="button">Export CSV</button>
+        </div>
+        <ul id="activity-list" class="activity-list">
+          <li>Loading recent activity...</li>
+        </ul>
+      </section>
+
+      <section id="delete" class="tab-content">
+        <h2>Delete Account</h2>
+        <p class="danger-note">This action is permanent and cannot be undone.</p>
+        <form id="delete-form" class="form-grid">
+          <label>
+            Confirm password
+            <input id="delete-password" name="currentPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <label>
+            Type DELETE to confirm
+            <input id="delete-confirm-text" name="confirmText" type="text" pattern="DELETE" required />
+          </label>
+          <button id="delete-account-btn" class="danger-btn" type="submit">Delete My Account</button>
+        </form>
+      </section>
+    </main>
+
+    <div id="cookie-popup" class="cookie-popup hide">
+      <p>We use cookies for secure sign-in and session continuity. <a href="/privacy" target="_blank" rel="noopener noreferrer">Learn more</a></p>
+      <button id="cookie-accept" type="button">Got it</button>
     </div>
-    
 
     <footer>
       <div class="left-content">
-          <img src="images/C2-new-white.png" alt="Logo">
-          <span>Continental</span>
+        <img src="images/C2-new-white.png" alt="Continental logo" />
+        <span>Continental Studios</span>
       </div>
       <div class="center-content">
-          <p>
-              © 2025 PClaystation | 
-              <a href="https://github.com/PClaystation" target="_blank">GitHub</a> |
-              <a href="" target="_blank" id="contact-button">Contact Us</a>
-              <script>
-                  document.getElementById('contact-button').addEventListener('click', function() {
-                      window.location.href = 'contact.html';  // Link to your contact page
-                  });
-              </script>
-      </p>
+        <p>
+          © 2026 PClaystation |
+          <a href="https://github.com/PClaystation" target="_blank" rel="noopener noreferrer">GitHub</a> |
+          <a href="mailto:continental.auth@gmail.com">Contact</a>
+        </p>
       </div>
       <div class="right-content">
-          <a href="https://patreon.com/ContinentalStudios?utm_medium=unknown&utm_source=join_link&utm_campaign=creatorshare_creator&utm_content=copyLink" target="_blank">
-              <img src="images/patreon.svg" alt="Logo">
-          </a>
-          <a href="https://gofund.me/5a43d215" target="_blank">
-              <img src="images/gofundme2.svg" alt="Logo">
-          </a>
+        <a href="https://patreon.com/ContinentalStudios" target="_blank" rel="noopener noreferrer">Patreon</a>
+        <a href="https://gofund.me/5a43d215" target="_blank" rel="noopener noreferrer">Support</a>
       </div>
-  </footer>
-</div>
-
+    </footer>
+  </div>
 
   <script src="script.js"></script>
 </body>
