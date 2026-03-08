@@ -145,7 +145,15 @@ const API_BASE_URL = trimTrailingSlash(
 );
 const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
 
-const DEFAULT_LOGIN_POPUP_URL = new URL('../login popup/popup.html', window.location.href).toString();
+const getDefaultLoginPopupUrl = () => {
+  if (LOCAL_HOSTS.has(window.location.hostname)) {
+    return new URL('../login popup/popup.html', window.location.href).toString();
+  }
+
+  return 'https://login.continental-hub.com/';
+};
+
+const DEFAULT_LOGIN_POPUP_URL = getDefaultLoginPopupUrl();
 const LOGIN_POPUP_URL =
   window.__LOGIN_POPUP_URL__ || localStorage.getItem('loginPopupUrl') || DEFAULT_LOGIN_POPUP_URL;
 

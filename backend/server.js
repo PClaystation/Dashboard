@@ -22,7 +22,7 @@ const config = {
   refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
   allowedOrigins: String(
     process.env.ALLOWED_ORIGINS ||
-      'https://pclaystation.github.io,https://dashboard.continental-hub.com'
+      'https://pclaystation.github.io,https://dashboard.continental-hub.com,https://login.continental-hub.com'
   )
     .split(',')
     .map((value) => value.trim())
