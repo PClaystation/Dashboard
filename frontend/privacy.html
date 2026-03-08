@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Notice | Continental ID</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Syne:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .privacy-shell {
+      width: min(860px, 92vw);
+      margin: 2rem auto;
+      padding: 1.1rem;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .privacy-shell h1,
+    .privacy-shell h2 {
+      margin-bottom: 0.75rem;
+    }
+
+    .privacy-shell section + section {
+      margin-top: 1.25rem;
+    }
+
+    .privacy-shell p {
+      color: var(--muted);
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .privacy-shell ul {
+      margin: 0.5rem 0 0;
+      padding-left: 1.1rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .privacy-back-link {
+      display: inline-block;
+      margin-top: 1.25rem;
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .privacy-back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <main class="privacy-shell">
+    <h1>Privacy Notice</h1>
+    <p>
+      Continental ID uses cookies and local browser storage to keep you signed in and improve session reliability.
+      This page explains what is stored and why.
+    </p>
+
+    <section>
+      <h2>What We Store</h2>
+      <ul>
+        <li>Session and refresh-token cookies set by the authentication API.</li>
+        <li>Local storage keys for account session state (for example token and user ID).</li>
+        <li>Optional local settings such as API or login popup override URLs.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>How It Is Used</h2>
+      <ul>
+        <li>Authenticate requests to protected dashboard endpoints.</li>
+        <li>Maintain your signed-in session across page reloads.</li>
+        <li>Provide a stable login popup and account recovery flow.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Control</h2>
+      <p>
+        You can sign out anytime to clear active session state from this browser. Browser settings can also be used
+        to clear site data and cookies.
+      </p>
+    </section>
+
+    <a class="privacy-back-link" href="index.html">Return to Dashboard</a>
+  </main>
+</body>
+</html>

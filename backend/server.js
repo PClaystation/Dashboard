@@ -20,7 +20,10 @@ const config = {
   mongoUri: process.env.MONGO_URI,
   jwtSecret: process.env.JWT_SECRET,
   refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
-  allowedOrigins: String(process.env.ALLOWED_ORIGINS || 'https://pclaystation.github.io')
+  allowedOrigins: String(
+    process.env.ALLOWED_ORIGINS ||
+      'https://pclaystation.github.io,https://dashboard.continental-hub.com'
+  )
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean),

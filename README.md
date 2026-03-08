@@ -49,6 +49,13 @@ Optional runtime overrides:
 - `window.__API_BASE_URL__` or `localStorage.setItem('apiBaseUrl', 'http://localhost:5000')`
 - `window.__LOGIN_POPUP_URL__` or `localStorage.setItem('loginPopupUrl', '...')`
 
+## GitHub Pages Hosting
+
+- A deploy workflow is included at `.github/workflows/deploy-pages.yml`.
+- It publishes the `frontend/` folder to GitHub Pages and includes `CNAME`.
+- In your GitHub repo settings, set Pages to **GitHub Actions** as the source.
+- If your API is on a different origin, set backend `ALLOWED_ORIGINS` to include your Pages/custom domain.
+
 ## Key API Endpoints
 
 - `POST /api/auth/register`
