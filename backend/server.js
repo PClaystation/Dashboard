@@ -13,6 +13,17 @@ const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 
+const REQUIRED_ALLOWED_ORIGINS = [
+  'https://pclaystation.github.io',
+  'https://dashboard.continental-hub.com',
+  'https://login.continental-hub.com',
+];
+
+const allowedOriginsFromEnv = String(process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
 const config = {
   appName: process.env.APP_NAME || 'continental-id-auth',
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -20,13 +31,7 @@ const config = {
   mongoUri: process.env.MONGO_URI,
   jwtSecret: process.env.JWT_SECRET,
   refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
-  allowedOrigins: String(
-    process.env.ALLOWED_ORIGINS ||
-      'https://pclaystation.github.io,https://dashboard.continental-hub.com,https://login.continental-hub.com'
-  )
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean),
+  allowedOrigins: Array.from(new Set([...REQUIRED_ALLOWED_ORIGINS, ...allowedOriginsFromEnv])),
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX) || 180,
   httpsKeyPath:
@@ -72,16 +77,21 @@ app.use(cookieParser());
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;
 
+  const normalizedOrigin = String(origin).trim().replace(/\/+$/, '');
+
   try {
-    const url = new URL(origin);
+    const url = new URL(normalizedOrigin);
     if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      return true;
+    }
+    if (url.hostname === 'continental-hub.com' || url.hostname.endsWith('.continental-hub.com')) {
       return true;
     }
   } catch {
     return false;
   }
 
-  return allowedOriginsSet.has(origin);
+  return allowedOriginsSet.has(normalizedOrigin);
 };
 
 app.use(
@@ -90,6 +100,7 @@ app.use(
       if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
+      console.warn(`CORS denied origin: ${origin || 'unknown'}`);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
