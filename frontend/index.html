@@ -4,11 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Continental ID Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Syne:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Syne:wght@600;700&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" href="images/Continental-ID-nbg-w.png" type="image/x-icon">
+  <link rel="icon" href="images/Continental-ID-nbg-w.png" type="image/x-icon" />
 </head>
 <body>
   <div id="loading-screen" aria-live="polite">
@@ -18,15 +21,17 @@
 
   <div id="toast-region" aria-live="polite" aria-atomic="true"></div>
 
-  <div id="app-content" class="app-shell" style="display:none;">
+  <div id="app-content" class="app-shell" style="display: none">
     <header class="dashboard-header">
       <div class="header-meta">
         <span id="status" class="status-tag">Checking login...</span>
         <span id="connection-status" class="connection-tag">Online</span>
+        <span id="sync-status" class="connection-tag">Not synced yet</span>
       </div>
       <h1>Continental ID Dashboard</h1>
       <div class="header-actions">
         <button id="refresh-data-btn" class="secondary-btn" type="button">Refresh Data</button>
+        <button id="header-export-json-btn" class="secondary-btn" type="button">Export JSON</button>
         <button id="logout-btn" class="primary-btn" type="button">Logout</button>
       </div>
     </header>
@@ -48,28 +53,78 @@
         <p class="summary-label">Two-Factor</p>
         <p class="summary-value" id="summary-2fa">Disabled</p>
       </article>
+      <article class="summary-card">
+        <p class="summary-label">Active Sessions</p>
+        <p class="summary-value" id="summary-sessions">0</p>
+      </article>
+      <article class="summary-card">
+        <p class="summary-label">Profile Completion</p>
+        <p class="summary-value" id="summary-completion">0%</p>
+      </article>
+    </section>
+
+    <section class="insights-strip" aria-label="Recent activity insights">
+      <article class="insight-pill">
+        <span>Logins (7d)</span>
+        <strong id="insight-last7">0</strong>
+      </article>
+      <article class="insight-pill">
+        <span>Logins (30d)</span>
+        <strong id="insight-last30">0</strong>
+      </article>
+      <article class="insight-pill">
+        <span>Unique IPs</span>
+        <strong id="insight-ips">0</strong>
+      </article>
+      <article class="insight-pill">
+        <span>API Base</span>
+        <strong id="insight-api">-</strong>
+      </article>
     </section>
 
     <section class="quick-links" aria-label="Continental services">
-      <h2>Services</h2>
-      <ul class="card-list">
-        <li class="card">
-          <a href="https://site1.continental.com" target="_blank" rel="noopener noreferrer" style="--bg-image: url('images/Echo.png')">
+      <div class="quick-links-header">
+        <h2>Services</h2>
+        <input id="service-filter" type="search" placeholder="Filter services" />
+      </div>
+      <ul id="service-list" class="card-list">
+        <li class="card" data-title="The Echo Archives">
+          <a
+            href="https://site1.continental.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="--bg-image: url('images/Echo.png')"
+          >
             <span class="card-title">The Echo Archives</span>
           </a>
         </li>
-        <li class="card">
-          <a href="https://site2.continental.com" target="_blank" rel="noopener noreferrer" style="--bg-image: url('images/Continental.png')">
+        <li class="card" data-title="Continental Home">
+          <a
+            href="https://site2.continental.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="--bg-image: url('images/Continental.png')"
+          >
             <span class="card-title">Continental Home</span>
           </a>
         </li>
-        <li class="card">
-          <a href="https://site3.continental.com" target="_blank" rel="noopener noreferrer" style="--bg-image: url('images/StepCast2.png')">
+        <li class="card" data-title="StepCast">
+          <a
+            href="https://site3.continental.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="--bg-image: url('images/StepCast2.png')"
+          >
             <span class="card-title">StepCast</span>
           </a>
         </li>
-        <li class="card">
-          <a href="https://site4.continental.com" target="_blank" rel="noopener noreferrer" style="--bg-image: url('images/Minesweeper.png')">
+        <li class="card" data-title="Minesweeper">
+          <a
+            href="https://site4.continental.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="--bg-image: url('images/Minesweeper.png')"
+          >
             <span class="card-title">Minesweeper</span>
           </a>
         </li>
@@ -82,13 +137,24 @@
       <button class="tab-btn" data-tab="security" type="button">Security</button>
       <button class="tab-btn" data-tab="privacy" type="button">Privacy</button>
       <button class="tab-btn" data-tab="notifications" type="button">Notifications</button>
+      <button class="tab-btn" data-tab="appearance" type="button">Appearance</button>
+      <button class="tab-btn" data-tab="sessions" type="button">Sessions</button>
       <button class="tab-btn" data-tab="activity" type="button">Activity</button>
+      <button class="tab-btn" data-tab="tools" type="button">Tools</button>
       <button class="tab-btn danger-tab" data-tab="delete" type="button">Delete Account</button>
     </nav>
 
     <main class="tab-panels">
       <section id="profile" class="tab-content active">
         <h2>Profile</h2>
+        <div class="progress-row">
+          <span>Completion</span>
+          <div class="progress-track" aria-hidden="true">
+            <div id="profile-progress-bar" class="progress-fill"></div>
+          </div>
+          <span id="profile-progress-label">0%</span>
+        </div>
+
         <form id="profile-form" class="form-grid">
           <label>
             Display name
@@ -97,6 +163,26 @@
           <label>
             Email
             <input id="profile-email" name="email" type="email" required />
+          </label>
+          <label>
+            Location
+            <input id="profile-location" name="location" type="text" maxlength="120" placeholder="Stockholm, Sweden" />
+          </label>
+          <label>
+            Website
+            <input id="profile-website" name="website" type="url" maxlength="240" placeholder="https://example.com" />
+          </label>
+          <label>
+            Timezone
+            <input id="profile-timezone" name="timezone" type="text" maxlength="80" placeholder="Europe/Stockholm" />
+          </label>
+          <label>
+            Language
+            <input id="profile-language" name="language" type="text" maxlength="32" placeholder="en" />
+          </label>
+          <label class="wide-field">
+            Bio
+            <textarea id="profile-bio" name="bio" rows="3" maxlength="320" placeholder="Tell us about you"></textarea>
           </label>
           <label>
             Continental ID
@@ -129,6 +215,22 @@
             Twitter/X
             <input id="linked-twitter" name="twitter" type="text" placeholder="@handle" />
           </label>
+          <label>
+            LinkedIn
+            <input id="linked-linkedin" name="linkedin" type="text" placeholder="linkedin profile" />
+          </label>
+          <label>
+            Discord
+            <input id="linked-discord" name="discord" type="text" placeholder="username#1234" />
+          </label>
+          <label>
+            Apple
+            <input id="linked-apple" name="apple" type="text" placeholder="Apple ID" />
+          </label>
+          <label>
+            Microsoft
+            <input id="linked-microsoft" name="microsoft" type="text" placeholder="Outlook account" />
+          </label>
           <button id="linked-save-btn" class="primary-btn" type="submit">Save Linked Accounts</button>
         </form>
       </section>
@@ -148,7 +250,10 @@
             Confirm new password
             <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" required />
           </label>
-          <small id="password-hint">Use 8+ chars with uppercase, lowercase, and number.</small>
+          <div id="password-strength" class="strength-meter" aria-live="polite">
+            <div id="password-strength-fill" class="strength-fill"></div>
+          </div>
+          <small id="password-strength-text">Use 8+ chars with uppercase, lowercase, and number.</small>
           <button id="password-save-btn" class="primary-btn" type="submit">Update Password</button>
         </form>
 
@@ -157,8 +262,13 @@
             <input id="two-fa-toggle" type="checkbox" />
             Enable two-factor authentication
           </label>
+          <label class="toggle-label" for="login-alerts-toggle">
+            <input id="login-alerts-toggle" type="checkbox" />
+            Send alerts for suspicious sign-in activity
+          </label>
           <button id="security-save-btn" class="secondary-btn" type="submit">Save Security</button>
         </form>
+        <p id="session-limit-note" class="helper-line">Session limit: --</p>
       </section>
 
       <section id="privacy" class="tab-content">
@@ -191,8 +301,69 @@
             <input id="notify-push" type="checkbox" />
             Push notifications
           </label>
+          <label class="toggle-label" for="notify-weekly-digest">
+            <input id="notify-weekly-digest" type="checkbox" />
+            Weekly digest summary
+          </label>
+          <label class="toggle-label" for="notify-security">
+            <input id="notify-security" type="checkbox" />
+            Security event notifications
+          </label>
           <button id="notification-save-btn" class="primary-btn" type="submit">Save Notification Preferences</button>
         </form>
+      </section>
+
+      <section id="appearance" class="tab-content">
+        <h2>Appearance & Layout</h2>
+        <form id="appearance-form" class="form-grid">
+          <label>
+            Theme
+            <select id="appearance-theme" name="theme">
+              <option value="system">System</option>
+              <option value="dawn">Dawn</option>
+              <option value="night">Night</option>
+              <option value="ocean">Ocean</option>
+            </select>
+          </label>
+          <label>
+            Dashboard density
+            <select id="appearance-density" name="dashboardDensity">
+              <option value="comfortable">Comfortable</option>
+              <option value="compact">Compact</option>
+              <option value="spacious">Spacious</option>
+            </select>
+          </label>
+          <label class="toggle-label" for="appearance-compact-mode">
+            <input id="appearance-compact-mode" type="checkbox" />
+            Compact mode
+          </label>
+          <label class="toggle-label" for="appearance-reduced-motion">
+            <input id="appearance-reduced-motion" type="checkbox" />
+            Reduced motion
+          </label>
+          <label class="toggle-label" for="appearance-high-contrast">
+            <input id="appearance-high-contrast" type="checkbox" />
+            High contrast
+          </label>
+          <label class="toggle-label" for="dashboard-tips-toggle">
+            <input id="dashboard-tips-toggle" type="checkbox" />
+            Show helpful dashboard tips
+          </label>
+          <button id="appearance-save-btn" class="primary-btn" type="submit">Save Appearance</button>
+          <button id="appearance-reset-btn" class="secondary-btn" type="button">Reset to Defaults</button>
+        </form>
+      </section>
+
+      <section id="sessions" class="tab-content">
+        <h2>Sessions</h2>
+        <div class="activity-toolbar">
+          <button id="sessions-refresh-btn" class="secondary-btn" type="button">Refresh Sessions</button>
+          <button id="sessions-revoke-others-btn" class="secondary-btn" type="button">Revoke Other Sessions</button>
+          <button id="sessions-revoke-all-btn" class="danger-btn" type="button">Revoke All Sessions</button>
+        </div>
+        <ul id="sessions-list" class="activity-list">
+          <li>Loading sessions...</li>
+        </ul>
       </section>
 
       <section id="activity" class="tab-content">
@@ -202,9 +373,25 @@
           <button id="activity-refresh-btn" class="secondary-btn" type="button">Refresh Activity</button>
           <button id="activity-export-btn" class="secondary-btn" type="button">Export CSV</button>
         </div>
+        <div id="activity-bars" class="mini-bars" aria-hidden="true"></div>
         <ul id="activity-list" class="activity-list">
           <li>Loading recent activity...</li>
         </ul>
+      </section>
+
+      <section id="tools" class="tab-content">
+        <h2>Tools & Diagnostics</h2>
+        <p class="helper-line">
+          API endpoint: <code id="api-base-url">-</code>
+        </p>
+        <div class="tool-grid">
+          <button id="export-json-btn" class="secondary-btn" type="button">Export Account JSON</button>
+          <button id="copy-support-btn" class="secondary-btn" type="button">Copy Support Bundle</button>
+          <button id="health-check-btn" class="secondary-btn" type="button">Run Health Check</button>
+          <button id="clear-overrides-btn" class="secondary-btn" type="button">Clear API Overrides</button>
+          <button id="purge-local-btn" class="danger-btn" type="button">Clear Local Session Data</button>
+        </div>
+        <pre id="tools-output" class="tools-output" aria-live="polite"></pre>
       </section>
 
       <section id="delete" class="tab-content">
@@ -225,7 +412,10 @@
     </main>
 
     <div id="cookie-popup" class="cookie-popup hide">
-      <p>We use cookies for secure sign-in and session continuity. <a href="privacy.html" target="_blank" rel="noopener noreferrer">Learn more</a></p>
+      <p>
+        We use cookies for secure sign-in and session continuity.
+        <a href="privacy.html" target="_blank" rel="noopener noreferrer">Learn more</a>
+      </p>
       <button id="cookie-accept" type="button">Got it</button>
     </div>
 
@@ -236,7 +426,7 @@
       </div>
       <div class="center-content">
         <p>
-          © 2026 PClaystation |
+          &copy; 2026 PClaystation |
           <a href="https://github.com/PClaystation" target="_blank" rel="noopener noreferrer">GitHub</a> |
           <a href="mailto:continental.auth@gmail.com">Contact</a>
         </p>

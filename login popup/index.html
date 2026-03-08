@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Redirecting to login...</title>
+  <script>
+    const target = new URL('./popup.html', window.location.href);
+    target.search = window.location.search;
+    target.hash = window.location.hash;
+    window.location.replace(target.toString());
+  </script>
+</head>
+<body>
+  <p>Redirecting to login... <a id="fallback" href="popup.html">Continue</a></p>
+  <script>
+    const fallback = document.getElementById('fallback');
+    if (fallback) {
+      fallback.href = `popup.html${window.location.search}${window.location.hash}`;
+    }
+  </script>
+</body>
+</html>

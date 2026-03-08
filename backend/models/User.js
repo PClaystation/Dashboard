@@ -10,6 +10,18 @@ const loginEventSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const refreshSessionSchema = new mongoose.Schema(
+  {
+    sid: { type: String, required: true },
+    label: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now },
+    lastUsedAt: { type: Date, default: Date.now },
+    ip: { type: String, default: '' },
+    userAgent: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     email: {
@@ -28,6 +40,10 @@ const userSchema = new mongoose.Schema(
     },
     password: { type: String, required: true },
     refreshTokenVersion: { type: Number, default: 0 },
+    refreshSessions: {
+      type: [refreshSessionSchema],
+      default: [],
+    },
     isVerified: { type: Boolean, default: false },
     verificationToken: { type: String, default: '' },
     verificationTokenExpires: { type: Date, default: null },
@@ -37,11 +53,22 @@ const userSchema = new mongoose.Schema(
       type: [loginEventSchema],
       default: [],
     },
+    profile: {
+      bio: { type: String, default: '', maxlength: 320 },
+      location: { type: String, default: '', maxlength: 120 },
+      website: { type: String, default: '', maxlength: 240 },
+      timezone: { type: String, default: 'UTC', maxlength: 80 },
+      language: { type: String, default: 'en', maxlength: 32 },
+    },
     linkedAccounts: {
       google: { type: String, default: '' },
       facebook: { type: String, default: '' },
       github: { type: String, default: '' },
       twitter: { type: String, default: '' },
+      linkedin: { type: String, default: '' },
+      discord: { type: String, default: '' },
+      apple: { type: String, default: '' },
+      microsoft: { type: String, default: '' },
     },
     preferences: {
       profilePublic: { type: Boolean, default: true },
@@ -50,10 +77,28 @@ const userSchema = new mongoose.Schema(
         email: { type: Boolean, default: true },
         sms: { type: Boolean, default: false },
         push: { type: Boolean, default: true },
+        weeklyDigest: { type: Boolean, default: true },
+        security: { type: Boolean, default: true },
+      },
+      appearance: {
+        theme: {
+          type: String,
+          enum: ['system', 'dawn', 'night', 'ocean'],
+          default: 'system',
+        },
+        compactMode: { type: Boolean, default: false },
+        reducedMotion: { type: Boolean, default: false },
+        highContrast: { type: Boolean, default: false },
+        dashboardDensity: {
+          type: String,
+          enum: ['comfortable', 'compact', 'spacious'],
+          default: 'comfortable',
+        },
       },
     },
     security: {
       twoFactorEnabled: { type: Boolean, default: false },
+      loginAlerts: { type: Boolean, default: true },
       passwordChangedAt: { type: Date, default: null },
     },
   },

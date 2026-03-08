@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Email Verification</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #565656, #282828);
+      color: #fff;
+      padding: 1rem;
+    }
+
+    .container {
+      width: min(460px, 100%);
+      background: #222;
+      border-radius: 12px;
+      padding: 1.6rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+
+    .status {
+      margin-top: 1rem;
+      font-weight: 600;
+      min-height: 24px;
+    }
+
+    .links {
+      margin-top: 1rem;
+    }
+
+    .links a {
+      color: #8ad9ff;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .links a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Email Verification</h1>
+    <p id="description">Checking your verification token...</p>
+    <p id="status" class="status" aria-live="polite"></p>
+    <div class="links">
+      <a href="popup.html">Open Login</a>
+    </div>
+  </div>
+
+  <script>
+    const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
+    const params = new URLSearchParams(window.location.search);
+
+    const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
+
+    const getDefaultApiBaseUrl = () => {
+      if (LOCAL_HOSTS.has(window.location.hostname)) {
+        return 'http://localhost:5000';
+      }
+
+      if (window.location.hostname === 'mpmc.ddns.net' && window.location.port === '5000') {
+        return window.location.origin;
+      }
+
+      return 'https://mpmc.ddns.net:5000';
+    };
+
+    const API_BASE_URL = trimTrailingSlash(
+      params.get('apiBaseUrl') || window.__API_BASE_URL__ || localStorage.getItem('apiBaseUrl') || getDefaultApiBaseUrl()
+    );
+    const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
+
+    const descriptionEl = document.getElementById('description');
+    const statusEl = document.getElementById('status');
+
+    const token = params.get('token');
+
+    const setStatus = (message, color) => {
+      statusEl.textContent = message;
+      statusEl.style.color = color;
+    };
+
+    const verify = async () => {
+      if (!token) {
+        descriptionEl.textContent = 'No verification token was found in the URL.';
+        setStatus('Use the link from your verification email.', '#ff7f7f');
+        return;
+      }
+
+      try {
+        const verifyUrl = `${AUTH_API_BASE}/verify-email?token=${encodeURIComponent(token)}`;
+        const res = await fetch(verifyUrl, { method: 'GET', credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          descriptionEl.textContent = 'Verification failed.';
+          setStatus(data.message || 'Invalid or expired verification token.', '#ff7f7f');
+          return;
+        }
+
+        descriptionEl.textContent = 'Your email has been verified.';
+        setStatus('Verification successful. You can now log in.', '#8fffa6');
+      } catch (error) {
+        descriptionEl.textContent = 'Verification failed.';
+        setStatus(error.message || 'Network error while verifying email.', '#ff7f7f');
+      }
+    };
+
+    verify();
+  </script>
+</body>
+</html>

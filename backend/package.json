@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "check": "node --check server.js && node --check controllers/authController.js && node --check middleware/authMiddleware.js"
+    "check": "node --check server.js && node --check controllers/authController.js && node --check controllers/verifyEmailController.js && node --check middleware/authMiddleware.js && node --check routes/authRoutes.js && node --check models/User.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -18,6 +18,7 @@ module.exports = (req, res, next) => {
     req.user = {
       id: decoded.userId,
       tokenVersion: decoded.tokenVersion,
+      sid: decoded.sid || null,
     };
 
     return next();

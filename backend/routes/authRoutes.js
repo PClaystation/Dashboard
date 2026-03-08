@@ -26,6 +26,10 @@ router.get('/activity', auth, ctrl.getActivity);
 
 router.get('/security', auth, ctrl.getSecurity);
 router.patch('/security', auth, ctrl.updateSecurity);
+router.get('/sessions', auth, ctrl.getSessions);
+router.delete('/sessions/:sessionId', auth, ctrl.revokeSession);
+router.delete('/sessions', auth, ctrl.revokeAllSessions);
+router.get('/export', auth, ctrl.exportAccountData);
 
 router.delete('/account', auth, ctrl.deleteAccount);
 

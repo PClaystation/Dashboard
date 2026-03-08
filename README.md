@@ -8,20 +8,25 @@ A full-stack account dashboard with hardened auth/session handling, profile and 
   - request IDs
   - health endpoint (`/api/health`)
   - env-driven CORS and rate-limiting
+  - login brute-force throttling and temporary lockouts
   - graceful shutdown
-  - safer refresh-token lifecycle (`refreshTokenVersion` invalidation)
+  - safer refresh-token lifecycle (`refreshTokenVersion` invalidation + tracked refresh sessions)
 - Expanded account model and endpoints for:
-  - profile
+  - profile and rich profile fields (bio, location, website, timezone, language)
   - linked accounts
-  - privacy/notification preferences
+  - privacy/notification preferences and appearance settings
   - security settings
+  - active session management (list/revoke/revoke-all)
   - recent activity
+  - account JSON export
 - Safer email utility configuration (no hardcoded credentials)
 - Rebuilt frontend dashboard with:
   - fully wired forms for every tab
   - auto refresh-token retry on 401
-  - activity filtering and CSV export
-  - toasts, loading states, connection status, and popup fallback
+  - activity filtering, trend mini-bars, and CSV export
+  - toasts, loading states, sync status, connection status, and popup fallback
+  - account tools/diagnostics (health check, support bundle, local override/session controls)
+  - appearance themes, density controls, high-contrast/reduced-motion options
   - responsive layout and improved visual polish
 
 ## Backend Setup
@@ -70,11 +75,16 @@ Optional runtime overrides:
 - `GET/PATCH /api/auth/linked`
 - `GET /api/auth/activity`
 - `GET/PATCH /api/auth/security`
+- `GET /api/auth/sessions`
+- `DELETE /api/auth/sessions/:sessionId`
+- `DELETE /api/auth/sessions`
+- `GET /api/auth/export`
 - `DELETE /api/auth/account`
 - `GET /api/auth/verify-email?token=...`
 
 ## Notes
 
 - `ALLOWED_ORIGINS` is comma-separated and supports local development via `localhost`/`127.0.0.1` automatically.
+- Login anti-bruteforce guardrails are configurable via `LOGIN_RATE_WINDOW_MS`, `LOGIN_RATE_MAX_ATTEMPTS`, and `LOGIN_BLOCK_MS`.
 - Password updates invalidate existing refresh sessions and force re-login.
 - Logout invalidates refresh sessions and clears auth cookie.

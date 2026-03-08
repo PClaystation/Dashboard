@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Continental ID Login</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #565656, #282828);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #333;
+      padding: 1rem;
+    }
+
+    .login-container {
+      background: #fff;
+      padding: 2.2rem 2rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+      width: min(360px, 100%);
+      text-align: center;
+      position: relative;
+      min-height: 520px;
+      overflow: hidden;
+    }
+
+    .brand-logo {
+      display: block;
+      margin: 0 auto 0.6rem;
+      max-width: 180px;
+      height: auto;
+    }
+
+    .subtitle {
+      margin: 0.2rem 0 1rem;
+      font-size: 1.7rem;
+      color: #000;
+      letter-spacing: 0.5px;
+      font-weight: 700;
+    }
+
+    .toggle-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 1.1rem;
+    }
+
+    .toggle-btn {
+      cursor: pointer;
+      padding: 0.5rem 1.2rem;
+      border: none;
+      background: transparent;
+      font-size: 1rem;
+      font-weight: 500;
+      color: rgba(0, 0, 0, 0.58);
+      transition: all 0.2s ease;
+      border-bottom: 3px solid transparent;
+    }
+
+    .toggle-btn.selected {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: rgba(0, 0, 0, 0.9);
+      border-bottom-color: #474747;
+    }
+
+    form {
+      width: 100%;
+      transition: opacity 0.2s ease;
+      margin-top: 0.5rem;
+    }
+
+    form.hidden {
+      opacity: 0;
+      pointer-events: none;
+      height: 0;
+      overflow: hidden;
+      margin: 0;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      margin: 8px 0;
+      border: 1.8px solid #ccc;
+      border-radius: 6px;
+      font-size: 1rem;
+      transition: border-color 0.2s ease;
+    }
+
+    input:focus {
+      border-color: #474747;
+      outline: none;
+    }
+
+    .password-hint {
+      margin: 0.4rem 0 0;
+      font-size: 0.78rem;
+      color: #6a6a6a;
+      text-align: left;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 12px 0;
+      margin-top: 1rem;
+      background: #5a5a5a;
+      color: #fff;
+      font-weight: 600;
+      font-size: 1rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .submit-btn:hover {
+      background: #474747;
+    }
+
+    .submit-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.65;
+    }
+
+    #status {
+      margin-top: 1rem;
+      min-height: 20px;
+      font-weight: 600;
+      color: #d33;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <img src="C2.png" alt="Brand logo" class="brand-logo" />
+    <p class="subtitle">Continental ID</p>
+
+    <div class="toggle-buttons">
+      <button id="login-toggle" class="toggle-btn selected" type="button">Login</button>
+      <button id="register-toggle" class="toggle-btn" type="button">Register</button>
+    </div>
+
+    <form id="login-form" novalidate>
+      <input type="email" id="login-email" placeholder="Email" autocomplete="email" required />
+      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required />
+      <button type="submit" id="login-btn" class="submit-btn">Login</button>
+    </form>
+
+    <form id="register-form" class="hidden" novalidate>
+      <input type="text" id="register-display-name" placeholder="Display name (optional)" maxlength="60" autocomplete="nickname" />
+      <input type="email" id="register-email" placeholder="Email" autocomplete="email" required />
+      <input type="password" id="register-password" placeholder="Password" autocomplete="new-password" required />
+      <p class="password-hint">Use 8+ chars with uppercase, lowercase, and number.</p>
+      <button type="submit" id="register-btn" class="submit-btn">Register</button>
+    </form>
+
+    <div id="status" aria-live="polite"></div>
+  </div>
+
+  <script>
+    const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
+    const params = new URLSearchParams(window.location.search);
+
+    const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
+
+    const getDefaultApiBaseUrl = () => {
+      if (LOCAL_HOSTS.has(window.location.hostname)) {
+        return 'http://localhost:5000';
+      }
+
+      if (window.location.hostname === 'mpmc.ddns.net' && window.location.port === '5000') {
+        return window.location.origin;
+      }
+
+      return 'https://mpmc.ddns.net:5000';
+    };
+
+    const API_BASE_URL = trimTrailingSlash(
+      params.get('apiBaseUrl') || window.__API_BASE_URL__ || localStorage.getItem('apiBaseUrl') || getDefaultApiBaseUrl()
+    );
+    const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
+
+    const statusDiv = document.getElementById('status');
+    const loginToggle = document.getElementById('login-toggle');
+    const registerToggle = document.getElementById('register-toggle');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const loginBtn = document.getElementById('login-btn');
+    const registerBtn = document.getElementById('register-btn');
+
+    const targetOriginParam = params.get('origin');
+    let targetOrigin = '*';
+
+    if (targetOriginParam) {
+      try {
+        targetOrigin = new URL(targetOriginParam).origin;
+      } catch {
+        targetOrigin = '*';
+      }
+    } else if (document.referrer) {
+      try {
+        targetOrigin = new URL(document.referrer).origin;
+      } catch {
+        targetOrigin = '*';
+      }
+    }
+
+    const redirectUrl = params.get('redirect') || '/';
+
+    const setStatus = (message, color = '#d33') => {
+      statusDiv.textContent = message;
+      statusDiv.style.color = color;
+    };
+
+    const setBusy = (button, busy) => {
+      button.disabled = busy;
+    };
+
+    const switchToLogin = () => {
+      loginToggle.classList.add('selected');
+      registerToggle.classList.remove('selected');
+      loginForm.classList.remove('hidden');
+      registerForm.classList.add('hidden');
+      setStatus('', '#d33');
+    };
+
+    const switchToRegister = () => {
+      registerToggle.classList.add('selected');
+      loginToggle.classList.remove('selected');
+      registerForm.classList.remove('hidden');
+      loginForm.classList.add('hidden');
+      setStatus('', '#d33');
+    };
+
+    loginToggle.addEventListener('click', switchToLogin);
+    registerToggle.addEventListener('click', switchToRegister);
+
+    const buildRedirectUrl = (base, token, userId) => {
+      const url = new URL(base, window.location.origin);
+      url.searchParams.set('token', token);
+      if (userId) {
+        url.searchParams.set('userId', userId);
+      }
+      return url.toString();
+    };
+
+    const finishAuth = (payload) => {
+      const token = payload?.accessToken || payload?.token;
+      const userId = payload?.userId || payload?.continentalId;
+
+      if (!token) {
+        throw new Error('Login succeeded but token is missing from response.');
+      }
+
+      localStorage.setItem('token', token);
+      if (userId) {
+        localStorage.setItem('userId', userId);
+      }
+
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(
+          {
+            type: 'LOGIN_SUCCESS',
+            token,
+            accessToken: token,
+            userId,
+            continentalId: userId,
+          },
+          targetOrigin
+        );
+
+        window.close();
+        return;
+      }
+
+      window.location.href = buildRedirectUrl(redirectUrl, token, userId);
+    };
+
+    const parseJson = async (res) => {
+      const text = await res.text();
+      if (!text) return {};
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        return { message: text };
+      }
+    };
+
+    const requestAuth = async (endpoint, body, submitButton) => {
+      setBusy(submitButton, true);
+      setStatus('Working...', '#444');
+
+      try {
+        const res = await fetch(`${AUTH_API_BASE}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(body),
+        });
+
+        const data = await parseJson(res);
+
+        if (!res.ok) {
+          throw new Error(data.message || 'Authentication failed.');
+        }
+
+        setStatus('Success. Continuing...', 'green');
+        finishAuth(data);
+      } catch (error) {
+        setStatus(error.message || 'Authentication failed.', '#d33');
+      } finally {
+        setBusy(submitButton, false);
+      }
+    };
+
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      if (!email || !password) {
+        setStatus('Email and password are required.');
+        return;
+      }
+
+      await requestAuth('/login', { email, password }, loginBtn);
+    });
+
+    registerForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const displayName = document.getElementById('register-display-name').value.trim();
+      const email = document.getElementById('register-email').value.trim();
+      const password = document.getElementById('register-password').value;
+
+      if (!email || !password) {
+        setStatus('Email and password are required.');
+        return;
+      }
+
+      await requestAuth('/register', { displayName, email, password }, registerBtn);
+    });
+  </script>
+</body>
+</html>
