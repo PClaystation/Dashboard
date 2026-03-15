@@ -97,7 +97,6 @@ const userSchema = new mongoose.Schema(
       },
     },
     security: {
-      twoFactorEnabled: { type: Boolean, default: false },
       loginAlerts: { type: Boolean, default: true },
       passwordChangedAt: { type: Date, default: null },
     },

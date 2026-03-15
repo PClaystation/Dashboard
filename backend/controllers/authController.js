@@ -294,7 +294,10 @@ const signToken = (user, sid) =>
       sid: sanitizeText(sid, 120) || undefined,
     },
     process.env.JWT_SECRET,
-    { expiresIn: ACCESS_TOKEN_TTL }
+    {
+      algorithm: 'HS256',
+      expiresIn: ACCESS_TOKEN_TTL,
+    }
   );
 
 const signRefreshToken = (user, sid) =>
@@ -305,7 +308,10 @@ const signRefreshToken = (user, sid) =>
       sid: sanitizeText(sid, 120) || undefined,
     },
     process.env.REFRESH_TOKEN_SECRET,
-    { expiresIn: REFRESH_TOKEN_TTL }
+    {
+      algorithm: 'HS256',
+      expiresIn: REFRESH_TOKEN_TTL,
+    }
   );
 
 const appendRecentLogin = (user, req) => {
@@ -508,7 +514,6 @@ const buildUserPayload = (user) => {
       },
     },
     security: {
-      twoFactorEnabled: Boolean(user.security?.twoFactorEnabled),
       loginAlerts: Boolean(hasOwn(user.security || {}, 'loginAlerts') ? user.security?.loginAlerts : true),
       passwordChangedAt: user.security?.passwordChangedAt || null,
       activeSessions: Array.isArray(user.refreshSessions) ? user.refreshSessions.length : 0,
@@ -623,7 +628,9 @@ const refreshSessionFromCookie = async (req, res) => {
 
   let payload;
   try {
-    payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
+    payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET, {
+      algorithms: ['HS256'],
+    });
   } catch {
     clearRefreshCookie(res, req);
     return null;
@@ -702,7 +709,6 @@ exports.register = async (req, res) => {
     return sendUserResponse(res, 201, 'Registration successful.', user, {
       token: accessToken,
       accessToken,
-      currentSessionId: sid,
     });
   } catch (err) {
     console.error('Register error:', err);
@@ -755,7 +761,6 @@ exports.login = async (req, res) => {
     return sendUserResponse(res, 200, 'Login successful.', user, {
       token: accessToken,
       accessToken,
-      currentSessionId: sid,
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -818,7 +823,6 @@ exports.refreshToken = async (req, res) => {
       accessToken: newAccessToken,
       userId: toObjectIdString(session.user._id),
       continentalId: toObjectIdString(session.user._id),
-      currentSessionId: session.sid,
     });
   } catch (err) {
     console.error('Refresh token error:', err);
@@ -997,10 +1001,6 @@ exports.updateSecurity = async (req, res) => {
     const user = await getUserById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
-    }
-
-    if (typeof req.body?.twoFactorEnabled === 'boolean') {
-      user.security.twoFactorEnabled = req.body.twoFactorEnabled;
     }
 
     if (typeof req.body?.loginAlerts === 'boolean') {

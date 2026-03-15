@@ -13,7 +13,7 @@ A full-stack account dashboard with hardened auth/session handling, profile and 
   - safer refresh-token lifecycle (`refreshTokenVersion` invalidation + tracked refresh sessions)
 - Expanded account model and endpoints for:
   - profile and rich profile fields (bio, location, website, timezone, language)
-  - linked accounts
+  - external profile references
   - privacy/notification preferences and appearance settings
   - security settings
   - active session management (list/revoke/revoke-all)
@@ -25,7 +25,7 @@ A full-stack account dashboard with hardened auth/session handling, profile and 
   - auto refresh-token retry on 401
   - activity filtering, trend mini-bars, and CSV export
   - toasts, loading states, sync status, connection status, and popup fallback
-  - account tools/diagnostics (health check, support bundle, local override/session controls)
+  - in-memory access-token handling backed by secure refresh cookies
   - appearance themes, density controls, high-contrast/reduced-motion options
   - responsive layout and improved visual polish
 
@@ -49,10 +49,10 @@ A full-stack account dashboard with hardened auth/session handling, profile and 
 
 You can serve `frontend/` with any static server (for example Live Server or `python -m http.server`).
 
-Optional runtime overrides:
+Optional runtime globals:
 
-- `window.__API_BASE_URL__` or `localStorage.setItem('apiBaseUrl', 'http://localhost:5000')`
-- `window.__LOGIN_POPUP_URL__` or `localStorage.setItem('loginPopupUrl', '...')`
+- `window.__API_BASE_URL__`
+- `window.__LOGIN_POPUP_URL__`
 
 ## GitHub Pages Hosting
 
@@ -84,7 +84,7 @@ Optional runtime overrides:
 
 ## Notes
 
-- `ALLOWED_ORIGINS` is comma-separated and supports local development via `localhost`/`127.0.0.1` automatically.
+- `ALLOWED_ORIGINS` is comma-separated. `localhost`/`127.0.0.1` are allowed automatically only in development, or when `ALLOW_LOCALHOST_ORIGINS=true`.
 - Login anti-bruteforce guardrails are configurable via `LOGIN_RATE_WINDOW_MS`, `LOGIN_RATE_MAX_ATTEMPTS`, and `LOGIN_BLOCK_MS`.
 - Password updates invalidate existing refresh sessions and force re-login.
 - Logout invalidates refresh sessions and clears auth cookie.

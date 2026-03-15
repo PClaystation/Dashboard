@@ -171,6 +171,10 @@
 
   <script>
     const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
+    const TRUSTED_APP_ORIGINS = new Set([
+      'https://dashboard.continental-hub.com',
+      'https://pclaystation.github.io',
+    ]);
     const params = new URLSearchParams(window.location.search);
 
     const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
@@ -187,9 +191,7 @@
       return 'https://mpmc.ddns.net:5000';
     };
 
-    const API_BASE_URL = trimTrailingSlash(
-      params.get('apiBaseUrl') || window.__API_BASE_URL__ || localStorage.getItem('apiBaseUrl') || getDefaultApiBaseUrl()
-    );
+    const API_BASE_URL = trimTrailingSlash(window.__API_BASE_URL__ || getDefaultApiBaseUrl());
     const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
 
     const statusDiv = document.getElementById('status');
@@ -200,24 +202,52 @@
     const loginBtn = document.getElementById('login-btn');
     const registerBtn = document.getElementById('register-btn');
 
-    const targetOriginParam = params.get('origin');
-    let targetOrigin = '*';
+    const isTrustedAppOrigin = (origin) => {
+      if (!origin) return false;
 
-    if (targetOriginParam) {
       try {
-        targetOrigin = new URL(targetOriginParam).origin;
-      } catch {
-        targetOrigin = '*';
-      }
-    } else if (document.referrer) {
-      try {
-        targetOrigin = new URL(document.referrer).origin;
-      } catch {
-        targetOrigin = '*';
-      }
-    }
+        const parsed = new URL(origin);
+        if (LOCAL_HOSTS.has(parsed.hostname)) {
+          return true;
+        }
 
-    const redirectUrl = params.get('redirect') || '/';
+        return TRUSTED_APP_ORIGINS.has(parsed.origin);
+      } catch {
+        return false;
+      }
+    };
+
+    const resolveTrustedOrigin = (value) => {
+      if (!value) return '';
+
+      try {
+        const origin = new URL(value).origin;
+        return isTrustedAppOrigin(origin) ? origin : '';
+      } catch {
+        return '';
+      }
+    };
+
+    const targetOrigin =
+      resolveTrustedOrigin(params.get('origin')) || resolveTrustedOrigin(document.referrer) || '';
+
+    const resolveRedirectUrl = (value, fallbackOrigin) => {
+      const safeFallbackOrigin = isTrustedAppOrigin(fallbackOrigin)
+        ? fallbackOrigin
+        : 'https://dashboard.continental-hub.com';
+
+      try {
+        const resolved = new URL(value || '/', safeFallbackOrigin);
+        if (!isTrustedAppOrigin(resolved.origin)) {
+          return new URL('/', safeFallbackOrigin).toString();
+        }
+        return resolved.toString();
+      } catch {
+        return new URL('/', safeFallbackOrigin).toString();
+      }
+    };
+
+    const redirectUrl = resolveRedirectUrl(params.get('redirect'), targetOrigin);
 
     const setStatus = (message, color = '#d33') => {
       statusDiv.textContent = message;
@@ -247,36 +277,11 @@
     loginToggle.addEventListener('click', switchToLogin);
     registerToggle.addEventListener('click', switchToRegister);
 
-    const buildRedirectUrl = (base, token, userId) => {
-      const url = new URL(base, window.location.origin);
-      url.searchParams.set('token', token);
-      if (userId) {
-        url.searchParams.set('userId', userId);
-      }
-      return url.toString();
-    };
-
     const finishAuth = (payload) => {
-      const token = payload?.accessToken || payload?.token;
-      const userId = payload?.userId || payload?.continentalId;
-
-      if (!token) {
-        throw new Error('Login succeeded but token is missing from response.');
-      }
-
-      localStorage.setItem('token', token);
-      if (userId) {
-        localStorage.setItem('userId', userId);
-      }
-
-      if (window.opener && !window.opener.closed) {
+      if (window.opener && !window.opener.closed && targetOrigin) {
         window.opener.postMessage(
           {
             type: 'LOGIN_SUCCESS',
-            token,
-            accessToken: token,
-            userId,
-            continentalId: userId,
           },
           targetOrigin
         );
@@ -285,7 +290,7 @@
         return;
       }
 
-      window.location.href = buildRedirectUrl(redirectUrl, token, userId);
+      window.location.href = redirectUrl;
     };
 
     const parseJson = async (res) => {

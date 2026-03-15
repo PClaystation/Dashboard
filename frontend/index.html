@@ -50,8 +50,8 @@
         <p class="summary-value" id="summary-last-login">-</p>
       </article>
       <article class="summary-card">
-        <p class="summary-label">Two-Factor</p>
-        <p class="summary-value" id="summary-2fa">Disabled</p>
+        <p class="summary-label">Email Verified</p>
+        <p class="summary-value" id="summary-verified">Pending</p>
       </article>
       <article class="summary-card">
         <p class="summary-label">Active Sessions</p>
@@ -77,8 +77,8 @@
         <strong id="insight-ips">0</strong>
       </article>
       <article class="insight-pill">
-        <span>API Base</span>
-        <strong id="insight-api">-</strong>
+        <span>Email Status</span>
+        <strong id="insight-verified">Pending</strong>
       </article>
     </section>
 
@@ -133,14 +133,13 @@
 
     <nav class="tabs" aria-label="Dashboard sections">
       <button class="tab-btn active" data-tab="profile" type="button">Profile</button>
-      <button class="tab-btn" data-tab="linked" type="button">Linked Accounts</button>
+      <button class="tab-btn" data-tab="linked" type="button">External Profiles</button>
       <button class="tab-btn" data-tab="security" type="button">Security</button>
       <button class="tab-btn" data-tab="privacy" type="button">Privacy</button>
       <button class="tab-btn" data-tab="notifications" type="button">Notifications</button>
       <button class="tab-btn" data-tab="appearance" type="button">Appearance</button>
       <button class="tab-btn" data-tab="sessions" type="button">Sessions</button>
       <button class="tab-btn" data-tab="activity" type="button">Activity</button>
-      <button class="tab-btn" data-tab="tools" type="button">Tools</button>
       <button class="tab-btn danger-tab" data-tab="delete" type="button">Delete Account</button>
     </nav>
 
@@ -197,7 +196,8 @@
       </section>
 
       <section id="linked" class="tab-content">
-        <h2>Linked Accounts</h2>
+        <h2>External Profiles</h2>
+        <p class="helper-line">Stored as profile references only. These entries do not enable sign-in with those providers.</p>
         <form id="linked-form" class="form-grid">
           <label>
             Google
@@ -231,7 +231,7 @@
             Microsoft
             <input id="linked-microsoft" name="microsoft" type="text" placeholder="Outlook account" />
           </label>
-          <button id="linked-save-btn" class="primary-btn" type="submit">Save Linked Accounts</button>
+          <button id="linked-save-btn" class="primary-btn" type="submit">Save External Profiles</button>
         </form>
       </section>
 
@@ -258,10 +258,6 @@
         </form>
 
         <form id="security-form" class="inline-form">
-          <label class="toggle-label" for="two-fa-toggle">
-            <input id="two-fa-toggle" type="checkbox" />
-            Enable two-factor authentication
-          </label>
           <label class="toggle-label" for="login-alerts-toggle">
             <input id="login-alerts-toggle" type="checkbox" />
             Send alerts for suspicious sign-in activity
@@ -377,21 +373,6 @@
         <ul id="activity-list" class="activity-list">
           <li>Loading recent activity...</li>
         </ul>
-      </section>
-
-      <section id="tools" class="tab-content">
-        <h2>Tools & Diagnostics</h2>
-        <p class="helper-line">
-          API endpoint: <code id="api-base-url">-</code>
-        </p>
-        <div class="tool-grid">
-          <button id="export-json-btn" class="secondary-btn" type="button">Export Account JSON</button>
-          <button id="copy-support-btn" class="secondary-btn" type="button">Copy Support Bundle</button>
-          <button id="health-check-btn" class="secondary-btn" type="button">Run Health Check</button>
-          <button id="clear-overrides-btn" class="secondary-btn" type="button">Clear API Overrides</button>
-          <button id="purge-local-btn" class="danger-btn" type="button">Clear Local Session Data</button>
-        </div>
-        <pre id="tools-output" class="tools-output" aria-live="polite"></pre>
       </section>
 
       <section id="delete" class="tab-content">

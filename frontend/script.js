@@ -23,14 +23,14 @@ const dom = {
   summaryId: document.getElementById('summary-id'),
   summaryDisplayName: document.getElementById('summary-display-name'),
   summaryLastLogin: document.getElementById('summary-last-login'),
-  summary2fa: document.getElementById('summary-2fa'),
+  summaryVerified: document.getElementById('summary-verified'),
   summarySessions: document.getElementById('summary-sessions'),
   summaryCompletion: document.getElementById('summary-completion'),
 
   insightLast7: document.getElementById('insight-last7'),
   insightLast30: document.getElementById('insight-last30'),
   insightIps: document.getElementById('insight-ips'),
-  insightApi: document.getElementById('insight-api'),
+  insightVerified: document.getElementById('insight-verified'),
 
   profileForm: document.getElementById('profile-form'),
   profileSaveBtn: document.getElementById('profile-save-btn'),
@@ -67,7 +67,6 @@ const dom = {
 
   securityForm: document.getElementById('security-form'),
   securitySaveBtn: document.getElementById('security-save-btn'),
-  twoFaToggle: document.getElementById('two-fa-toggle'),
   loginAlertsToggle: document.getElementById('login-alerts-toggle'),
   sessionLimitNote: document.getElementById('session-limit-note'),
 
@@ -105,14 +104,6 @@ const dom = {
   activityExportBtn: document.getElementById('activity-export-btn'),
   activityBars: document.getElementById('activity-bars'),
 
-  toolsOutput: document.getElementById('tools-output'),
-  apiBaseUrl: document.getElementById('api-base-url'),
-  exportJsonBtn: document.getElementById('export-json-btn'),
-  copySupportBtn: document.getElementById('copy-support-btn'),
-  healthCheckBtn: document.getElementById('health-check-btn'),
-  clearOverridesBtn: document.getElementById('clear-overrides-btn'),
-  purgeLocalBtn: document.getElementById('purge-local-btn'),
-
   deleteForm: document.getElementById('delete-form'),
   deleteAccountBtn: document.getElementById('delete-account-btn'),
   deletePassword: document.getElementById('delete-password'),
@@ -141,7 +132,7 @@ const getDefaultApiBaseUrl = () => {
 };
 
 const API_BASE_URL = trimTrailingSlash(
-  window.__API_BASE_URL__ || localStorage.getItem('apiBaseUrl') || getDefaultApiBaseUrl()
+  window.__API_BASE_URL__ || getDefaultApiBaseUrl()
 );
 const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
 
@@ -154,8 +145,7 @@ const getDefaultLoginPopupUrl = () => {
 };
 
 const DEFAULT_LOGIN_POPUP_URL = getDefaultLoginPopupUrl();
-const LOGIN_POPUP_URL =
-  window.__LOGIN_POPUP_URL__ || localStorage.getItem('loginPopupUrl') || DEFAULT_LOGIN_POPUP_URL;
+const LOGIN_POPUP_URL = window.__LOGIN_POPUP_URL__ || DEFAULT_LOGIN_POPUP_URL;
 
 const loginPopupOrigin = (() => {
   try {
@@ -176,6 +166,7 @@ const state = {
   },
   sessions: [],
   sessionLimit: null,
+  accessToken: '',
   loginPopupWindow: null,
   appVisible: false,
   refreshTimer: null,
@@ -283,25 +274,13 @@ const setSyncStatus = (date = null) => {
   dom.syncStatus.textContent = `Synced ${formatDate(date)}`;
 };
 
-const updateToolsOutput = (value) => {
-  if (!dom.toolsOutput) return;
-  dom.toolsOutput.textContent = value;
-};
-
 const clearStoredAuth = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('userId');
-  localStorage.removeItem('currentSessionId');
+  state.accessToken = '';
 };
 
-const storeSession = (data) => {
+const storeSession = (data = {}) => {
   const token = data?.accessToken || data?.token;
-  const userId = data?.userId || data?.continentalId;
-  const currentSessionId = data?.currentSessionId;
-
-  if (token) localStorage.setItem('token', token);
-  if (userId) localStorage.setItem('userId', userId);
-  if (currentSessionId) localStorage.setItem('currentSessionId', currentSessionId);
+  state.accessToken = safeText(token);
 };
 
 const parseResponseBody = async (res) => {
@@ -337,7 +316,6 @@ const openLoginPopup = () => {
 
   const popupUrl = new URL(LOGIN_POPUP_URL, window.location.href);
   popupUrl.searchParams.set('origin', window.location.origin);
-  popupUrl.searchParams.set('apiBaseUrl', API_BASE_URL);
   popupUrl.searchParams.set('redirect', window.location.href);
 
   if (state.loginPopupWindow && !state.loginPopupWindow.closed) {
@@ -367,7 +345,7 @@ const isTrustedLoginOrigin = (origin) => {
 
   try {
     const parsed = new URL(origin);
-    return LOCAL_HOSTS.has(parsed.hostname);
+    return LOCAL_HOSTS.has(window.location.hostname) && LOCAL_HOSTS.has(parsed.hostname);
   } catch {
     return false;
   }
@@ -381,7 +359,7 @@ const clearDashboardUi = () => {
   if (dom.summaryId) dom.summaryId.textContent = '-';
   if (dom.summaryDisplayName) dom.summaryDisplayName.textContent = '-';
   if (dom.summaryLastLogin) dom.summaryLastLogin.textContent = '-';
-  if (dom.summary2fa) dom.summary2fa.textContent = 'Disabled';
+  if (dom.summaryVerified) dom.summaryVerified.textContent = 'Pending';
   if (dom.summarySessions) dom.summarySessions.textContent = '0';
   if (dom.summaryCompletion) dom.summaryCompletion.textContent = '0%';
 
@@ -411,6 +389,7 @@ const clearDashboardUi = () => {
   if (dom.insightLast7) dom.insightLast7.textContent = '0';
   if (dom.insightLast30) dom.insightLast30.textContent = '0';
   if (dom.insightIps) dom.insightIps.textContent = '0';
+  if (dom.insightVerified) dom.insightVerified.textContent = 'Pending';
 
   applyAppearance({
     theme: 'system',
@@ -463,14 +442,24 @@ const setLoggedOutUI = (openPopup = true) => {
 
 const extractParamsFromUrl = () => {
   const params = new URLSearchParams(window.location.search);
-  const token = params.get('token');
-  const userId = params.get('userId') || params.get('continentalId');
+  const token = safeText(params.get('token'));
+  const hadLegacyAuthParams =
+    params.has('token') || params.has('userId') || params.has('continentalId');
 
-  if (!token) return false;
+  if (token) {
+    storeSession({ token });
+  }
 
-  storeSession({ token, userId });
-  history.replaceState({}, '', `${window.location.origin}${window.location.pathname}`);
-  return true;
+  if (hadLegacyAuthParams) {
+    params.delete('token');
+    params.delete('userId');
+    params.delete('continentalId');
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
+    history.replaceState({}, '', nextUrl);
+  }
+
+  return Boolean(token);
 };
 
 const refreshSession = async () => {
@@ -513,7 +502,7 @@ const apiRequest = async (path, options = {}) => {
   }
 
   if (auth) {
-    const token = localStorage.getItem('token');
+    const token = state.accessToken;
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -638,14 +627,14 @@ const renderInsights = () => {
   if (dom.insightLast7) dom.insightLast7.textContent = String(state.activitySummary.last7Days || 0);
   if (dom.insightLast30) dom.insightLast30.textContent = String(state.activitySummary.last30Days || 0);
   if (dom.insightIps) dom.insightIps.textContent = String(state.activitySummary.uniqueIps || 0);
-  if (dom.insightApi) dom.insightApi.textContent = API_BASE_URL;
+  if (dom.insightVerified) dom.insightVerified.textContent = state.user?.isVerified ? 'Verified' : 'Pending';
 };
 
 const fillSummary = (user) => {
   if (dom.summaryId) dom.summaryId.textContent = user.continentalId || user.userId || '-';
   if (dom.summaryDisplayName) dom.summaryDisplayName.textContent = user.displayName || '-';
   if (dom.summaryLastLogin) dom.summaryLastLogin.textContent = formatDate(user.lastLoginAt);
-  if (dom.summary2fa) dom.summary2fa.textContent = user.security?.twoFactorEnabled ? 'Enabled' : 'Disabled';
+  if (dom.summaryVerified) dom.summaryVerified.textContent = user.isVerified ? 'Verified' : 'Pending';
   if (dom.summarySessions) {
     dom.summarySessions.textContent = String(user.security?.activeSessions ?? state.sessions.length ?? 0);
   }
@@ -709,7 +698,6 @@ const fillPreferences = (user) => {
 };
 
 const fillSecurity = (user) => {
-  if (dom.twoFaToggle) dom.twoFaToggle.checked = Boolean(user.security?.twoFactorEnabled);
   if (dom.loginAlertsToggle) dom.loginAlertsToggle.checked = Boolean(user.security?.loginAlerts);
 };
 
@@ -867,6 +855,7 @@ const syncUiWithUser = (user) => {
   fillLinkedAccounts(user);
   fillPreferences(user);
   fillSecurity(user);
+  renderInsights();
 
   const statusText = `Logged in as: ${user.email || user.displayName || user.userId}`;
   setStatus(statusText, { clickable: false });
@@ -879,10 +868,6 @@ const syncUiWithUser = (user) => {
 const loadCurrentUser = async () => {
   const payload = await apiRequest('/me', { method: 'GET', auth: true });
   const user = normalizeUserPayload(payload);
-
-  if (user?.userId) {
-    localStorage.setItem('userId', user.userId);
-  }
 
   syncUiWithUser(user);
   return user;
@@ -1004,8 +989,7 @@ const showApp = () => {
 const initializeSession = async () => {
   extractParamsFromUrl();
 
-  const hasToken = Boolean(localStorage.getItem('token'));
-  if (!hasToken) {
+  if (!state.accessToken) {
     const refreshed = await refreshSession();
     if (!refreshed) return false;
   }
@@ -1089,71 +1073,7 @@ const exportAccountJson = async () => {
   const data = await apiRequest('/export', { method: 'GET', auth: true });
   const fileName = `continental-account-export-${new Date().toISOString().slice(0, 10)}.json`;
   downloadJsonFile(fileName, data);
-  updateToolsOutput(JSON.stringify(data, null, 2));
   showToast('Account export downloaded.', 'success');
-};
-
-const copySupportBundle = async () => {
-  const bundle = {
-    generatedAt: new Date().toISOString(),
-    appUrl: window.location.href,
-    apiBaseUrl: API_BASE_URL,
-    userId: state.user?.userId || state.user?.continentalId || localStorage.getItem('userId') || null,
-    connection: navigator.onLine ? 'online' : 'offline',
-    sessionCount: state.sessions.length,
-    activitySummary: state.activitySummary,
-    lastSyncAt: state.lastSyncAt ? new Date(state.lastSyncAt).toISOString() : null,
-  };
-
-  const text = JSON.stringify(bundle, null, 2);
-
-  try {
-    await navigator.clipboard.writeText(text);
-    updateToolsOutput(text);
-    showToast('Support bundle copied to clipboard.', 'success');
-  } catch {
-    updateToolsOutput(text);
-    showToast('Clipboard access failed. Bundle shown in Tools output.', 'warn');
-  }
-};
-
-const runHealthCheck = async () => {
-  try {
-    const res = await fetchWithTimeout(`${API_BASE_URL}/api/health`, {
-      method: 'GET',
-      credentials: 'include',
-    });
-    const data = await parseResponseBody(res);
-
-    if (!res.ok) {
-      throw new Error(data.message || `Health check failed (${res.status})`);
-    }
-
-    updateToolsOutput(JSON.stringify(data, null, 2));
-    showToast(`Health check: ${safeText(data.status || 'ok')}.`, 'success');
-  } catch (err) {
-    const finalError = toApiError(err);
-    updateToolsOutput(finalError.message);
-    showToast(finalError.message, 'error');
-  }
-};
-
-const clearOverrides = () => {
-  localStorage.removeItem('apiBaseUrl');
-  localStorage.removeItem('loginPopupUrl');
-  updateToolsOutput('API and popup URL overrides cleared. Reload to apply defaults.');
-  showToast('Overrides cleared.', 'success');
-};
-
-const purgeLocalSessionData = () => {
-  clearStoredAuth();
-  if (state.refreshTimer) {
-    clearInterval(state.refreshTimer);
-    state.refreshTimer = null;
-  }
-  setLoggedOutUI(true);
-  updateToolsOutput('Local session data cleared. Re-authentication required.');
-  showToast('Local session data cleared.', 'warn');
 };
 
 const handleProfileSave = async (event) => {
@@ -1231,7 +1151,7 @@ const handleLinkedSave = async (event) => {
 
     syncUiWithUser(normalizeUserPayload(data));
     markFormClean(dom.linkedForm);
-    showToast('Linked accounts updated.', 'success');
+    showToast('External profiles updated.', 'success');
     setSyncStatus(new Date());
   } catch (err) {
     showToast(err.message, 'error');
@@ -1288,7 +1208,6 @@ const handleSecuritySave = async (event) => {
     const data = await apiRequest('/security', {
       method: 'PATCH',
       body: {
-        twoFactorEnabled: Boolean(dom.twoFaToggle?.checked),
         loginAlerts: Boolean(dom.loginAlertsToggle?.checked),
       },
     });
@@ -1642,52 +1561,6 @@ const setupEventHandlers = () => {
     });
   }
 
-  if (dom.exportJsonBtn) {
-    dom.exportJsonBtn.addEventListener('click', async () => {
-      setButtonBusy(dom.exportJsonBtn, true, 'Exporting...');
-      try {
-        await exportAccountJson();
-      } catch (err) {
-        showToast(err.message, 'error');
-      } finally {
-        setButtonBusy(dom.exportJsonBtn, false);
-      }
-    });
-  }
-
-  if (dom.copySupportBtn) {
-    dom.copySupportBtn.addEventListener('click', async () => {
-      setButtonBusy(dom.copySupportBtn, true, 'Copying...');
-      try {
-        await copySupportBundle();
-      } finally {
-        setButtonBusy(dom.copySupportBtn, false);
-      }
-    });
-  }
-
-  if (dom.healthCheckBtn) {
-    dom.healthCheckBtn.addEventListener('click', async () => {
-      setButtonBusy(dom.healthCheckBtn, true, 'Checking...');
-      try {
-        await runHealthCheck();
-      } finally {
-        setButtonBusy(dom.healthCheckBtn, false);
-      }
-    });
-  }
-
-  if (dom.clearOverridesBtn) {
-    dom.clearOverridesBtn.addEventListener('click', clearOverrides);
-  }
-
-  if (dom.purgeLocalBtn) {
-    dom.purgeLocalBtn.addEventListener('click', () => {
-      if (!window.confirm('Clear local session data and open sign-in again?')) return;
-      purgeLocalSessionData();
-    });
-  }
-
   if (dom.deleteForm) dom.deleteForm.addEventListener('submit', handleDeleteAccount);
 
   window.addEventListener('online', () => {
@@ -1708,9 +1581,17 @@ const setupEventHandlers = () => {
 
   window.addEventListener('message', async (event) => {
     if (!isTrustedLoginOrigin(event.origin)) return;
-    if (!event.data || event.data.type !== 'LOGIN_SUCCESS' || !event.data.token) return;
+    if (!event.data || event.data.type !== 'LOGIN_SUCCESS') return;
 
-    storeSession(event.data);
+    if (event.data.token || event.data.accessToken) {
+      storeSession(event.data);
+    } else {
+      const refreshed = await refreshSession();
+      if (!refreshed) {
+        showToast('Signed in, but the session could not be established.', 'error');
+        return;
+      }
+    }
 
     try {
       await loadDashboardData({ silent: true });
@@ -1755,8 +1636,7 @@ const startSessionAutoRefresh = () => {
       return;
     }
 
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!state.accessToken) {
       clearInterval(state.refreshTimer);
       state.refreshTimer = null;
       return;
@@ -1767,9 +1647,6 @@ const startSessionAutoRefresh = () => {
 window.addEventListener('load', async () => {
   setConnectionStatus();
   setSyncStatus(null);
-
-  if (dom.insightApi) dom.insightApi.textContent = API_BASE_URL;
-  if (dom.apiBaseUrl) dom.apiBaseUrl.textContent = API_BASE_URL;
 
   setupEventHandlers();
   updatePasswordStrengthUi();

@@ -39,6 +39,9 @@ const config = {
   httpsCertPath:
     process.env.HTTPS_CERT_PATH || '/etc/letsencrypt/live/mpmc.ddns.net/fullchain.pem',
 };
+const isProduction = config.nodeEnv === 'production';
+const allowLocalDevOrigins =
+  !isProduction || String(process.env.ALLOW_LOCALHOST_ORIGINS || 'false') === 'true';
 
 const requiredEnv = ['MONGO_URI', 'JWT_SECRET', 'REFRESH_TOKEN_SECRET'];
 const missingEnv = requiredEnv.filter((key) => !process.env[key]);
@@ -47,8 +50,32 @@ if (missingEnv.length > 0) {
   process.exit(1);
 }
 
+const hasStrongSecret = (value) => {
+  const secret = String(value || '').trim();
+  if (secret.length < 32) return false;
+  if (secret.includes('replace-with-a-long-random-secret')) return false;
+  if (secret.includes('replace-with-a-second-long-random-secret')) return false;
+  return true;
+};
+
 const allowedOriginsSet = new Set(config.allowedOrigins);
 
+if (isProduction) {
+  if (!hasStrongSecret(config.jwtSecret)) {
+    console.error('JWT_SECRET must be set to a strong random value in production.');
+    process.exit(1);
+  }
+
+  if (!hasStrongSecret(config.refreshTokenSecret)) {
+    console.error('REFRESH_TOKEN_SECRET must be set to a strong random value in production.');
+    process.exit(1);
+  }
+
+  if (allowedOriginsSet.size === 0) {
+    console.error('ALLOWED_ORIGINS must include at least one trusted frontend origin in production.');
+    process.exit(1);
+  }
+}
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 
@@ -64,6 +91,8 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
   if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
@@ -71,7 +100,7 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '25kb' }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 app.use(cookieParser());
 
 const isAllowedOrigin = (origin) => {
@@ -81,10 +110,10 @@ const isAllowedOrigin = (origin) => {
 
   try {
     const url = new URL(normalizedOrigin);
-    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-      return true;
-    }
-    if (url.hostname === 'continental-hub.com' || url.hostname.endsWith('.continental-hub.com')) {
+    if (
+      allowLocalDevOrigins &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+    ) {
       return true;
     }
   } catch {
@@ -170,9 +199,7 @@ app.get('/api/health', (req, res) => {
 
   return res.status(status).json({
     service: config.appName,
-    environment: config.nodeEnv,
     status: dbConnected ? 'ok' : 'degraded',
-    db: dbConnected ? 'connected' : 'disconnected',
     timestamp: new Date().toISOString(),
   });
 });
