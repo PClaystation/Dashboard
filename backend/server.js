@@ -16,6 +16,7 @@ const app = express();
 const REQUIRED_ALLOWED_ORIGINS = [
   'https://pclaystation.github.io',
   'https://dashboard.continental-hub.com',
+  'https://grimoire.continental-hub.com',
   'https://login.continental-hub.com',
 ];
 
