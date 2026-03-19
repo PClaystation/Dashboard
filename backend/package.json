@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "check": "node --check server.js && node --check controllers/authController.js && node --check controllers/verifyEmailController.js && node --check middleware/authMiddleware.js && node --check routes/authRoutes.js && node --check models/User.js"
+    "check": "node --check server.js && node --check controllers/authController.js && node --check controllers/grimoireDeckController.js && node --check controllers/verifyEmailController.js && node --check middleware/authMiddleware.js && node --check routes/authRoutes.js && node --check routes/grimoireRoutes.js && node --check models/User.js && node --check models/GrimoireDeck.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

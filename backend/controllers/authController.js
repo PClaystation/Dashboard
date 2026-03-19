@@ -808,7 +808,8 @@ exports.refreshToken = async (req, res) => {
   try {
     const session = await refreshSessionFromCookie(req, res);
     if (!session?.user) {
-      return res.status(401).json({ message: 'No valid refresh session.' });
+      clearRefreshCookie(res, req);
+      return res.status(200).json({ authenticated: false, message: 'No active refresh session.' });
     }
 
     await session.user.save();
@@ -827,7 +828,7 @@ exports.refreshToken = async (req, res) => {
   } catch (err) {
     console.error('Refresh token error:', err);
     clearRefreshCookie(res, req);
-    return res.status(403).json({ message: 'Invalid refresh session.' });
+    return res.status(200).json({ authenticated: false, message: 'Invalid refresh session.' });
   }
 };
 

@@ -10,6 +10,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 
 const authRoutes = require('./routes/authRoutes');
+const grimoireRoutes = require('./routes/grimoireRoutes');
 
 const app = express();
 
@@ -100,8 +101,8 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '25kb' }));
-app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: false, limit: '200kb' }));
 app.use(cookieParser());
 
 const isAllowedOrigin = (origin) => {
@@ -223,6 +224,7 @@ app.use((req, res, next) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/grimoire', grimoireRoutes);
 
 app.use('/api', (req, res) => {
   return res.status(404).json({
