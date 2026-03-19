@@ -30,6 +30,7 @@ const allowedOriginsFromEnv = String(process.env.ALLOWED_ORIGINS || '')
 const config = {
   appName: process.env.APP_NAME || 'continental-id-auth',
   nodeEnv: process.env.NODE_ENV || 'development',
+  host: process.env.HOST || '127.0.0.1',
   port: Number(process.env.PORT) || 5000,
   mongoUri: process.env.MONGO_URI,
   jwtSecret: process.env.JWT_SECRET,
@@ -266,15 +267,15 @@ const startServer = async () => {
     const privateKey = fs.readFileSync(config.httpsKeyPath, 'utf8');
     const certificate = fs.readFileSync(config.httpsCertPath, 'utf8');
     server = https.createServer({ key: privateKey, cert: certificate }, app);
-    server.listen(config.port, () => {
-      console.log(`Auth service HTTPS running on port ${config.port}`);
+    server.listen(config.port, config.host, () => {
+      console.log(`Auth service HTTPS running on https://${config.host}:${config.port}`);
     });
     return;
   }
 
   server = http.createServer(app);
-  server.listen(config.port, () => {
-    console.log(`Auth service HTTP running on port ${config.port}`);
+  server.listen(config.port, config.host, () => {
+    console.log(`Auth service HTTP running on http://${config.host}:${config.port}`);
   });
 };
 
