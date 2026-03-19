@@ -54,12 +54,15 @@ Optional runtime globals:
 - `window.__API_BASE_URL__`
 - `window.__LOGIN_POPUP_URL__`
 
+Default behavior now assumes the frontend and `/api/*` are available on the same HTTPS origin. That is the preferred deployment because it avoids exposing `:5000` to browsers and reduces cross-site cookie failures on restrictive networks.
+
 ## GitHub Pages Hosting
 
 - A deploy workflow is included at `.github/workflows/deploy-pages.yml`.
 - It publishes the `frontend/` folder to GitHub Pages and includes `CNAME`.
 - In your GitHub repo settings, set Pages to **GitHub Actions** as the source.
 - If your API is on a different origin, set backend `ALLOWED_ORIGINS` to include your Pages/custom domain.
+- If you proxy the API through the same public host on `443`, leave the frontend on its default same-origin `/api/*` setup instead of pointing browsers at `:5000`.
 
 ## Key API Endpoints
 
@@ -85,6 +88,8 @@ Optional runtime globals:
 ## Notes
 
 - `ALLOWED_ORIGINS` is comma-separated. `localhost`/`127.0.0.1` are allowed automatically only in development, or when `ALLOW_LOCALHOST_ORIGINS=true`.
+- `https://mpmc.ddns.net` is trusted by default for production CORS and popup handshakes.
 - Login anti-bruteforce guardrails are configurable via `LOGIN_RATE_WINDOW_MS`, `LOGIN_RATE_MAX_ATTEMPTS`, and `LOGIN_BLOCK_MS`.
 - Password updates invalidate existing refresh sessions and force re-login.
 - Logout invalidates refresh sessions and clears auth cookie.
+- Refresh cookies now use `SameSite=Lax` for same-origin HTTPS requests and only fall back to `SameSite=None` when the request is truly cross-site.

@@ -19,6 +19,7 @@ const REQUIRED_ALLOWED_ORIGINS = [
   'https://dashboard.continental-hub.com',
   'https://grimoire.continental-hub.com',
   'https://login.continental-hub.com',
+  'https://mpmc.ddns.net',
 ];
 
 const allowedOriginsFromEnv = String(process.env.ALLOWED_ORIGINS || '')

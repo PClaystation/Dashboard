@@ -99,6 +99,35 @@ const parseClientIp = (req) => {
 
 const parseUserAgent = (req) => sanitizeText(req.headers['user-agent'] || 'Unknown browser/device', 300);
 
+const getRequestOrigin = (req) => {
+  const forwardedProto = sanitizeText(req.headers['x-forwarded-proto'], 20).toLowerCase();
+  const protocol = forwardedProto || (req.secure ? 'https' : 'http');
+  const host = sanitizeText(req.headers['x-forwarded-host'] || req.headers.host, 200);
+
+  if (!host) return '';
+
+  try {
+    return new URL(`${protocol}://${host}`).origin;
+  } catch {
+    return '';
+  }
+};
+
+const isCrossSiteRequest = (req) => {
+  const requestOrigin = getRequestOrigin(req);
+  const originHeader = sanitizeText(req.headers.origin, 240);
+
+  if (!requestOrigin || !originHeader) {
+    return false;
+  }
+
+  try {
+    return new URL(originHeader).origin !== requestOrigin;
+  } catch {
+    return false;
+  }
+};
+
 const buildSessionLabel = (requestedLabel, userAgent = '') => {
   const explicit = sanitizeText(requestedLabel, 60);
   if (explicit) return explicit;
@@ -266,11 +295,12 @@ const normalizePreferences = (incoming = {}, current = {}) => {
 
 const buildCookieOptions = (req) => {
   const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  const crossSite = isCrossSiteRequest(req);
 
   return {
     httpOnly: true,
     secure: isSecure,
-    sameSite: isSecure ? 'None' : 'Lax',
+    sameSite: isSecure && crossSite ? 'None' : 'Lax',
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   };

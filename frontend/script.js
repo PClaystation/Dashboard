@@ -124,11 +124,7 @@ const getDefaultApiBaseUrl = () => {
     return 'http://localhost:5000';
   }
 
-  if (window.location.hostname === 'mpmc.ddns.net' && window.location.port === '5000') {
-    return window.location.origin;
-  }
-
-  return 'https://mpmc.ddns.net:5000';
+  return window.location.origin;
 };
 
 const API_BASE_URL = trimTrailingSlash(
