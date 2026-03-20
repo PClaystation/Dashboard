@@ -144,7 +144,7 @@ const getDefaultLoginPopupUrl = () => {
     return new URL('../login popup/popup.html', window.location.href).toString();
   }
 
-  return 'https://login.continental-hub.com/popup.html';
+  return 'https://grimoire.continental-hub.com/login/popup.html';
 };
 
 const DEFAULT_LOGIN_POPUP_URL = getDefaultLoginPopupUrl();
