@@ -68,6 +68,13 @@
         return 'http://localhost:5000';
       }
 
+      if (
+        window.location.hostname === 'dashboard.continental-hub.com' ||
+        window.location.hostname === 'login.continental-hub.com'
+      ) {
+        return 'https://grimoire.continental-hub.com';
+      }
+
       return window.location.origin;
     };
 

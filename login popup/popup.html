@@ -186,10 +186,19 @@
         return 'http://localhost:5000';
       }
 
+      if (
+        window.location.hostname === 'dashboard.continental-hub.com' ||
+        window.location.hostname === 'login.continental-hub.com'
+      ) {
+        return 'https://grimoire.continental-hub.com';
+      }
+
       return window.location.origin;
     };
 
-    const API_BASE_URL = trimTrailingSlash(window.__API_BASE_URL__ || getDefaultApiBaseUrl());
+    const API_BASE_URL = trimTrailingSlash(
+      params.get('apiBaseUrl') || window.__API_BASE_URL__ || getDefaultApiBaseUrl()
+    );
     const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
 
     const statusDiv = document.getElementById('status');
