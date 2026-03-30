@@ -2,6 +2,9 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const ACTIVE_TAB_STORAGE_KEY = 'dashboard.activeTab';
+const SERVICE_FAVORITES_STORAGE_KEY = 'dashboard.serviceFavorites';
+const FAVORITE_SERVICES_ONLY_STORAGE_KEY = 'dashboard.favoriteServicesOnly';
+const OVERVIEW_ACTIVITY_LIMIT = 4;
 
 const dom = {
   loadingScreen: document.getElementById('loading-screen'),
@@ -19,6 +22,20 @@ const dom = {
 
   tabButtons: Array.from(document.querySelectorAll('.tab-btn')),
   tabContents: Array.from(document.querySelectorAll('.tab-content')),
+
+  heroInitials: document.getElementById('hero-initials'),
+  heroDisplayName: document.getElementById('hero-display-name'),
+  heroEmail: document.getElementById('hero-email'),
+  heroGreeting: document.getElementById('hero-greeting'),
+  heroStatusNote: document.getElementById('hero-status-note'),
+  healthScoreValue: document.getElementById('health-score-value'),
+  healthScoreLabel: document.getElementById('health-score-label'),
+  actionCenter: document.getElementById('action-center'),
+  overviewActivityList: document.getElementById('overview-activity-list'),
+  overviewJumpProfileBtn: document.getElementById('overview-jump-profile-btn'),
+  overviewJumpSecurityBtn: document.getElementById('overview-jump-security-btn'),
+  overviewJumpActivityBtn: document.getElementById('overview-jump-activity-btn'),
+  profileChecklist: document.getElementById('profile-checklist'),
 
   summaryId: document.getElementById('summary-id'),
   summaryDisplayName: document.getElementById('summary-display-name'),
@@ -45,6 +62,7 @@ const dom = {
   profileId: document.getElementById('profile-id'),
   profileCreated: document.getElementById('profile-created'),
   profileProgressBar: document.getElementById('profile-progress-bar'),
+  profileProgressBars: Array.from(document.querySelectorAll('.profile-progress-fill')),
   profileProgressLabel: document.getElementById('profile-progress-label'),
   verificationPanel: document.getElementById('verification-panel'),
   verificationHelper: document.getElementById('verification-helper'),
@@ -114,7 +132,11 @@ const dom = {
   deleteConfirmText: document.getElementById('delete-confirm-text'),
 
   serviceFilter: document.getElementById('service-filter'),
+  serviceList: document.getElementById('service-list'),
   serviceCards: Array.from(document.querySelectorAll('#service-list .card')),
+  serviceResultsCount: document.getElementById('service-results-count'),
+  serviceEmptyState: document.getElementById('service-empty-state'),
+  favoriteFilterBtn: document.getElementById('favorite-filter-btn'),
 
   cookiePopup: document.getElementById('cookie-popup'),
   cookieAcceptBtn: document.getElementById('cookie-accept'),
@@ -122,6 +144,19 @@ const dom = {
 
 const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
 const safeText = (value) => String(value || '').trim();
+const readStoredArray = (key) => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeStoredArray = (key, values) => {
+  localStorage.setItem(key, JSON.stringify(values));
+};
+
 const normalizeActivitySummary = (summary = {}) => ({
   last7Days: Number(summary?.last7Days || 0),
   last30Days: Number(summary?.last30Days || 0),
@@ -186,6 +221,8 @@ const state = {
   refreshTimer: null,
   refreshPromise: null,
   lastSyncAt: null,
+  favoriteServices: new Set(readStoredArray(SERVICE_FAVORITES_STORAGE_KEY)),
+  favoriteServicesOnly: localStorage.getItem(FAVORITE_SERVICES_ONLY_STORAGE_KEY) === 'true',
 };
 
 const trackedForms = [
@@ -204,6 +241,98 @@ const formatDate = (value) => {
 };
 
 const isDashboardTipsEnabled = () => localStorage.getItem('dashboardTipsEnabled') !== 'false';
+const persistServicePreferences = () => {
+  writeStoredArray(SERVICE_FAVORITES_STORAGE_KEY, Array.from(state.favoriteServices).sort());
+  localStorage.setItem(
+    FAVORITE_SERVICES_ONLY_STORAGE_KEY,
+    state.favoriteServicesOnly ? 'true' : 'false'
+  );
+};
+
+const getActiveSessionCount = () =>
+  Number(state.user?.security?.activeSessions ?? state.sessions.length ?? 0);
+
+const getIdentityName = (user = state.user) =>
+  safeText(user?.displayName || user?.email || user?.continentalId || user?.userId || 'Continental User');
+
+const getIdentityInitials = (user = state.user) => {
+  const source = getIdentityName(user);
+  const parts = source
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (!parts.length) return 'CI';
+  return parts.map((part) => part[0].toUpperCase()).join('');
+};
+
+const getFirstName = (user = state.user) => {
+  const source = safeText(user?.displayName || user?.email || 'there');
+  return source.split(/[\s@._-]+/).filter(Boolean)[0] || 'there';
+};
+
+const setProfileProgress = (completion) => {
+  const percentage = `${Number(completion || 0)}%`;
+
+  for (const bar of dom.profileProgressBars) {
+    if (bar) bar.style.width = percentage;
+  }
+
+  if (dom.profileProgressLabel) dom.profileProgressLabel.textContent = percentage;
+  if (dom.summaryCompletion) dom.summaryCompletion.textContent = percentage;
+};
+
+const computeAccountHealth = (user = state.user) => {
+  if (!user) {
+    return {
+      score: 0,
+      label: 'Signed out',
+      description: 'Sign in to load account health.',
+    };
+  }
+
+  const completion = Number(user.profile?.completion || 0);
+  const activeSessions = Math.max(1, getActiveSessionCount());
+  let score = Math.min(45, Math.round(completion * 0.45));
+
+  if (user.isVerified) score += 20;
+  if (user.security?.loginAlerts) score += 15;
+  if (safeText(user.profile?.timezone)) score += 8;
+  if (safeText(user.profile?.website)) score += 5;
+  score += activeSessions <= 1 ? 10 : Math.max(0, 10 - (activeSessions - 1) * 3);
+
+  const boundedScore = Math.max(0, Math.min(100, score));
+
+  if (boundedScore >= 85) {
+    return {
+      score: boundedScore,
+      label: 'Strong',
+      description: 'Profile and security settings look well maintained.',
+    };
+  }
+
+  if (boundedScore >= 65) {
+    return {
+      score: boundedScore,
+      label: 'Healthy',
+      description: 'A few details could still be tightened up.',
+    };
+  }
+
+  if (boundedScore >= 45) {
+    return {
+      score: boundedScore,
+      label: 'Needs review',
+      description: 'There are a couple of obvious cleanup items.',
+    };
+  }
+
+  return {
+    score: boundedScore,
+    label: 'At risk',
+    description: 'Important setup steps are still missing.',
+  };
+};
 
 const setButtonBusy = (button, busy, busyLabel) => {
   if (!button) return;
@@ -407,10 +536,9 @@ const clearDashboardUi = () => {
   if (dom.summaryLastLogin) dom.summaryLastLogin.textContent = '-';
   if (dom.summaryVerified) dom.summaryVerified.textContent = 'Pending';
   if (dom.summarySessions) dom.summarySessions.textContent = '0';
-  if (dom.summaryCompletion) dom.summaryCompletion.textContent = '0%';
-
-  if (dom.profileProgressBar) dom.profileProgressBar.style.width = '0%';
-  if (dom.profileProgressLabel) dom.profileProgressLabel.textContent = '0%';
+  setProfileProgress(0);
+  renderHero(null);
+  renderAccountHealth(null);
 
   if (dom.profileForm) dom.profileForm.reset();
   if (dom.linkedForm) dom.linkedForm.reset();
@@ -428,14 +556,20 @@ const clearDashboardUi = () => {
   if (dom.profileCreated) dom.profileCreated.value = '';
 
   if (dom.activityFilter) dom.activityFilter.value = '';
+  if (dom.serviceFilter) dom.serviceFilter.value = '';
   if (dom.activityList) dom.activityList.innerHTML = '<li>No recent login activity found.</li>';
+  if (dom.overviewActivityList) dom.overviewActivityList.innerHTML = '<li>Recent login activity will appear here.</li>';
   if (dom.sessionsList) dom.sessionsList.innerHTML = '<li>No active sessions found.</li>';
   if (dom.activityBars) dom.activityBars.innerHTML = '';
 
   if (dom.insightLast7) dom.insightLast7.textContent = '0';
   if (dom.insightLast30) dom.insightLast30.textContent = '0';
   if (dom.insightIps) dom.insightIps.textContent = '0';
+  if (dom.sessionLimitNote) dom.sessionLimitNote.textContent = 'Session limit: --';
   renderVerificationState();
+  renderActionCenter(null);
+  renderProfileChecklist(null);
+  renderServices();
 
   applyAppearance({
     theme: 'system',
@@ -712,6 +846,34 @@ const applyAppearance = (appearance = {}) => {
   document.documentElement.dataset.highContrast = highContrast ? 'true' : 'false';
 };
 
+const renderHero = (user = state.user) => {
+  if (dom.heroInitials) dom.heroInitials.textContent = getIdentityInitials(user);
+  if (dom.heroDisplayName) dom.heroDisplayName.textContent = getIdentityName(user);
+  if (dom.heroEmail) dom.heroEmail.textContent = safeText(user?.email) || 'Signed-out session';
+  if (dom.heroGreeting) {
+    dom.heroGreeting.textContent = user ? `Welcome back, ${getFirstName(user)}` : 'Welcome back';
+  }
+
+  if (dom.heroStatusNote) {
+    if (!user) {
+      dom.heroStatusNote.textContent = 'Finish your setup to keep your account in good shape.';
+      return;
+    }
+
+    const completion = Number(user.profile?.completion || 0);
+    const sessionCount = Math.max(0, getActiveSessionCount());
+    dom.heroStatusNote.textContent = `${completion}% complete, ${
+      user.isVerified ? 'email verified' : 'verification pending'
+    }, ${sessionCount} active ${sessionCount === 1 ? 'session' : 'sessions'}.`;
+  }
+};
+
+const renderAccountHealth = (user = state.user) => {
+  const health = computeAccountHealth(user);
+  if (dom.healthScoreValue) dom.healthScoreValue.textContent = String(health.score);
+  if (dom.healthScoreLabel) dom.healthScoreLabel.textContent = `${health.label}. ${health.description}`;
+};
+
 const renderInsights = () => {
   if (dom.insightLast7) dom.insightLast7.textContent = String(state.activitySummary.last7Days || 0);
   if (dom.insightLast30) dom.insightLast30.textContent = String(state.activitySummary.last30Days || 0);
@@ -747,6 +909,171 @@ const renderVerificationState = (user = state.user) => {
   }
 };
 
+const renderProfileChecklist = (user = state.user) => {
+  if (!dom.profileChecklist) return;
+
+  dom.profileChecklist.innerHTML = '';
+
+  if (!isDashboardTipsEnabled()) {
+    const li = document.createElement('li');
+    li.textContent = 'Helpful dashboard tips are hidden in Appearance settings.';
+    dom.profileChecklist.appendChild(li);
+    return;
+  }
+
+  if (!user) {
+    const li = document.createElement('li');
+    li.textContent = 'Sign in to load checklist items.';
+    dom.profileChecklist.appendChild(li);
+    return;
+  }
+
+  const items = [
+    {
+      title: 'Display name added',
+      detail: safeText(user.displayName) ? 'Looks good.' : 'Add a readable public name.',
+      complete: Boolean(safeText(user.displayName)),
+    },
+    {
+      title: 'Email verified',
+      detail: user.isVerified ? 'Verification complete.' : 'Verify to reduce lockout risk.',
+      complete: Boolean(user.isVerified),
+    },
+    {
+      title: 'Location added',
+      detail: safeText(user.profile?.location) ? 'Location is on file.' : 'Add a location for context.',
+      complete: Boolean(safeText(user.profile?.location)),
+    },
+    {
+      title: 'Timezone added',
+      detail: safeText(user.profile?.timezone) ? 'Timezone is set.' : 'Set a timezone for accurate scheduling.',
+      complete: Boolean(safeText(user.profile?.timezone)),
+    },
+    {
+      title: 'Security alerts enabled',
+      detail: user.security?.loginAlerts ? 'Login alerts are active.' : 'Turn on suspicious sign-in alerts.',
+      complete: Boolean(user.security?.loginAlerts),
+    },
+  ];
+
+  for (const item of items) {
+    const li = document.createElement('li');
+    li.className = item.complete ? 'complete' : 'incomplete';
+
+    const title = document.createElement('strong');
+    title.textContent = item.complete ? `${item.title} - done` : item.title;
+
+    const detail = document.createElement('span');
+    detail.textContent = item.detail;
+
+    li.appendChild(title);
+    li.appendChild(detail);
+    dom.profileChecklist.appendChild(li);
+  }
+};
+
+const createActionItem = ({ tone = 'neutral', title, detail, actionLabel, onAction }) => {
+  const item = document.createElement('article');
+  item.className = 'action-item';
+  item.dataset.tone = tone;
+
+  const content = document.createElement('div');
+  const heading = document.createElement('strong');
+  heading.textContent = title;
+  const body = document.createElement('p');
+  body.textContent = detail;
+
+  content.appendChild(heading);
+  content.appendChild(body);
+  item.appendChild(content);
+
+  if (actionLabel && typeof onAction === 'function') {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = tone === 'danger' ? 'danger-btn' : 'secondary-btn';
+    button.textContent = actionLabel;
+    button.addEventListener('click', onAction);
+    item.appendChild(button);
+  }
+
+  return item;
+};
+
+const renderActionCenter = (user = state.user) => {
+  if (!dom.actionCenter) return;
+
+  dom.actionCenter.innerHTML = '';
+
+  if (!user) {
+    dom.actionCenter.appendChild(
+      createActionItem({
+        tone: 'warn',
+        title: 'Sign in required',
+        detail: 'Your personalized suggestions will appear once the dashboard loads account data.',
+      })
+    );
+    return;
+  }
+
+  const actions = [];
+  const completion = Number(user.profile?.completion || 0);
+  const activeSessions = Math.max(0, getActiveSessionCount());
+
+  if (!user.isVerified) {
+    actions.push({
+      tone: 'warn',
+      title: 'Verify your email',
+      detail: 'Verification is still pending, so recovery and trust signals are weaker than they should be.',
+      actionLabel: 'Resend email',
+      onAction: () => handleResendVerification(),
+    });
+  }
+
+  if (completion < 80) {
+    actions.push({
+      tone: 'neutral',
+      title: 'Finish your profile',
+      detail: `Your profile is only ${completion}% complete. Fill the remaining details so the account is easier to manage.`,
+      actionLabel: 'Open profile',
+      onAction: () => switchTab('profile'),
+    });
+  }
+
+  if (!user.security?.loginAlerts) {
+    actions.push({
+      tone: 'neutral',
+      title: 'Enable login alerts',
+      detail: 'Get a heads-up when suspicious sign-in activity is detected.',
+      actionLabel: 'Open security',
+      onAction: () => switchTab('security'),
+    });
+  }
+
+  if (activeSessions > 1) {
+    actions.push({
+      tone: 'neutral',
+      title: 'Review open sessions',
+      detail: `${activeSessions} sessions are active right now. Revoke the ones you no longer recognize or need.`,
+      actionLabel: 'Review sessions',
+      onAction: () => switchTab('security'),
+    });
+  }
+
+  if (!actions.length) {
+    actions.push({
+      tone: 'success',
+      title: 'Everything looks tidy',
+      detail: 'Profile, verification, and session controls are all in a healthy state.',
+      actionLabel: 'View activity',
+      onAction: () => switchTab('activity'),
+    });
+  }
+
+  for (const action of actions.slice(0, 4)) {
+    dom.actionCenter.appendChild(createActionItem(action));
+  }
+};
+
 const fillSummary = (user) => {
   if (dom.summaryId) dom.summaryId.textContent = user.continentalId || user.userId || '-';
   if (dom.summaryDisplayName) dom.summaryDisplayName.textContent = user.displayName || '-';
@@ -756,9 +1083,11 @@ const fillSummary = (user) => {
   }
 
   const completion = Number(user.profile?.completion || 0);
-  if (dom.summaryCompletion) dom.summaryCompletion.textContent = `${completion}%`;
-  if (dom.profileProgressBar) dom.profileProgressBar.style.width = `${completion}%`;
-  if (dom.profileProgressLabel) dom.profileProgressLabel.textContent = `${completion}%`;
+  setProfileProgress(completion);
+  renderHero(user);
+  renderAccountHealth(user);
+  renderActionCenter(user);
+  renderProfileChecklist(user);
 };
 
 const fillProfile = (user) => {
@@ -774,8 +1103,7 @@ const fillProfile = (user) => {
   if (dom.profileCreated) dom.profileCreated.value = formatDate(user.createdAt);
 
   const completion = Number(user.profile?.completion || 0);
-  if (dom.profileProgressBar) dom.profileProgressBar.style.width = `${completion}%`;
-  if (dom.profileProgressLabel) dom.profileProgressLabel.textContent = `${completion}%`;
+  setProfileProgress(completion);
 };
 
 const fillLinkedAccounts = (user) => {
@@ -816,6 +1144,9 @@ const fillPreferences = (user) => {
 
 const fillSecurity = (user) => {
   if (dom.loginAlertsToggle) dom.loginAlertsToggle.checked = Boolean(user.security?.loginAlerts);
+  renderAccountHealth(user);
+  renderActionCenter(user);
+  renderProfileChecklist(user);
 };
 
 const formatActivityLine = (entry) => {
@@ -823,6 +1154,32 @@ const formatActivityLine = (entry) => {
   const ip = safeText(entry.ip) || 'Unknown IP';
   const ua = safeText(entry.userAgent) || 'Unknown browser/device';
   return `${at} - Login from ${ip} (${ua})`;
+};
+
+const createActivityListItem = (entry) => {
+  const li = document.createElement('li');
+  li.className = 'activity-item';
+
+  const head = document.createElement('div');
+  head.className = 'activity-head';
+
+  const title = document.createElement('p');
+  title.className = 'activity-title';
+  title.textContent = `Login from ${safeText(entry.ip) || 'Unknown IP'}`;
+
+  const chip = document.createElement('span');
+  chip.className = 'inline-chip';
+  chip.textContent = formatDate(entry.at);
+
+  const meta = document.createElement('div');
+  meta.className = 'activity-meta';
+  meta.textContent = safeText(entry.userAgent) || 'Unknown browser or device';
+
+  head.appendChild(title);
+  head.appendChild(chip);
+  li.appendChild(head);
+  li.appendChild(meta);
+  return li;
 };
 
 const renderActivityBars = () => {
@@ -854,6 +1211,24 @@ const renderActivityBars = () => {
   }
 };
 
+const renderOverviewActivity = () => {
+  if (!dom.overviewActivityList) return;
+
+  dom.overviewActivityList.innerHTML = '';
+
+  const previewItems = state.activity.slice(0, OVERVIEW_ACTIVITY_LIMIT);
+  if (!previewItems.length) {
+    const li = document.createElement('li');
+    li.textContent = 'Recent login activity will appear here.';
+    dom.overviewActivityList.appendChild(li);
+    return;
+  }
+
+  for (const entry of previewItems) {
+    dom.overviewActivityList.appendChild(createActivityListItem(entry));
+  }
+};
+
 const renderActivity = () => {
   if (!dom.activityList) return;
 
@@ -873,9 +1248,7 @@ const renderActivity = () => {
   }
 
   for (const entry of filtered) {
-    const li = document.createElement('li');
-    li.textContent = formatActivityLine(entry);
-    dom.activityList.appendChild(li);
+    dom.activityList.appendChild(createActivityListItem(entry));
   }
 };
 
@@ -899,7 +1272,9 @@ const renderSessions = () => {
     head.className = 'session-head';
 
     const left = document.createElement('div');
-    left.textContent = safeText(session.label) || 'Browser session';
+    const label = document.createElement('strong');
+    label.textContent = safeText(session.label) || 'Browser session';
+    left.appendChild(label);
 
     const right = document.createElement('div');
     right.className = 'session-actions';
@@ -951,11 +1326,77 @@ const renderSessions = () => {
 
     const meta = document.createElement('div');
     meta.className = 'session-meta';
-    meta.textContent = `Last used: ${formatDate(session.lastUsedAt)} | Created: ${formatDate(session.createdAt)} | IP: ${safeText(session.ip) || 'Unknown'} | ${safeText(session.userAgent) || 'Unknown device'}`;
+    meta.textContent = `Last used: ${formatDate(session.lastUsedAt)} | Created: ${formatDate(session.createdAt)}`;
+
+    const details = document.createElement('div');
+    details.className = 'session-meta';
+    details.textContent = `IP: ${safeText(session.ip) || 'Unknown'} | ${safeText(session.userAgent) || 'Unknown device'}`;
 
     li.appendChild(head);
     li.appendChild(meta);
+    li.appendChild(details);
     dom.sessionsList.appendChild(li);
+  }
+};
+
+const renderServices = () => {
+  if (!dom.serviceList || !dom.serviceCards.length) return;
+
+  const query = safeText(dom.serviceFilter?.value).toLowerCase();
+  const sortedCards = [...dom.serviceCards].sort((leftCard, rightCard) => {
+    const leftKey = safeText(leftCard.dataset.key).toLowerCase();
+    const rightKey = safeText(rightCard.dataset.key).toLowerCase();
+    const leftPinned = state.favoriteServices.has(leftKey);
+    const rightPinned = state.favoriteServices.has(rightKey);
+
+    if (leftPinned !== rightPinned) {
+      return leftPinned ? -1 : 1;
+    }
+
+    return safeText(leftCard.dataset.title).localeCompare(safeText(rightCard.dataset.title));
+  });
+
+  let visibleCount = 0;
+
+  for (const card of sortedCards) {
+    const key = safeText(card.dataset.key).toLowerCase();
+    const searchText = [
+      card.dataset.title,
+      card.dataset.category,
+      card.dataset.description,
+    ]
+      .map((value) => safeText(value).toLowerCase())
+      .join(' ');
+    const pinned = state.favoriteServices.has(key);
+    const matchesQuery = !query || searchText.includes(query);
+    const visible = matchesQuery && (!state.favoriteServicesOnly || pinned);
+
+    card.classList.toggle('hidden', !visible);
+    card.classList.toggle('pinned', pinned);
+
+    const pinButton = card.querySelector('.service-pin-btn');
+    if (pinButton) {
+      pinButton.textContent = pinned ? 'Pinned' : 'Pin';
+      pinButton.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+    }
+
+    dom.serviceList.appendChild(card);
+
+    if (visible) visibleCount += 1;
+  }
+
+  if (dom.favoriteFilterBtn) {
+    dom.favoriteFilterBtn.classList.toggle('active', state.favoriteServicesOnly);
+    dom.favoriteFilterBtn.textContent = state.favoriteServicesOnly ? 'Show all' : 'Pinned only';
+  }
+
+  if (dom.serviceResultsCount) {
+    const suffix = state.favoriteServicesOnly ? ' pinned view' : ' available';
+    dom.serviceResultsCount.textContent = `${visibleCount} service${visibleCount === 1 ? '' : 's'}${suffix}`;
+  }
+
+  if (dom.serviceEmptyState) {
+    dom.serviceEmptyState.hidden = visibleCount !== 0;
   }
 };
 
@@ -972,9 +1413,11 @@ const syncUiWithUser = (user) => {
   fillPreferences(user);
   fillSecurity(user);
   renderActivity();
+  renderOverviewActivity();
   renderActivityBars();
   renderInsights();
   renderVerificationState(user);
+  renderServices();
 
   const statusText = `Logged in as: ${user.email || user.displayName || user.userId}`;
   setStatus(statusText, { clickable: false });
@@ -998,6 +1441,7 @@ const loadActivity = async () => {
   state.activitySummary = normalizeActivitySummary(data.summary);
 
   renderActivity();
+  renderOverviewActivity();
   renderActivityBars();
   renderInsights();
 };
@@ -1040,6 +1484,10 @@ const loadSessions = async () => {
 
   if (dom.summarySessions) {
     dom.summarySessions.textContent = String(state.sessions.length);
+  }
+
+  if (state.user) {
+    fillSummary(state.user);
   }
 
   renderSessions();
@@ -1410,6 +1858,7 @@ const savePreferences = async (button, successMessage = 'Preferences saved.') =>
 
 const setDashboardTipsEnabled = (enabled) => {
   localStorage.setItem('dashboardTipsEnabled', enabled ? 'true' : 'false');
+  renderProfileChecklist(state.user);
 };
 
 const handleAppearanceReset = async () => {
@@ -1496,20 +1945,50 @@ const setupTabs = () => {
   const savedTab = safeText(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY));
   if (savedTab && document.getElementById(savedTab)) {
     switchTab(savedTab);
+    return;
   }
+
+  switchTab('overview');
 };
 
 const setupServiceFiltering = () => {
-  if (!dom.serviceFilter) return;
+  if (dom.serviceFilter) {
+    dom.serviceFilter.addEventListener('input', () => {
+      renderServices();
+    });
+  }
 
-  dom.serviceFilter.addEventListener('input', () => {
-    const query = safeText(dom.serviceFilter.value).toLowerCase();
+  if (dom.favoriteFilterBtn) {
+    dom.favoriteFilterBtn.addEventListener('click', () => {
+      state.favoriteServicesOnly = !state.favoriteServicesOnly;
+      persistServicePreferences();
+      renderServices();
+    });
+  }
 
-    for (const card of dom.serviceCards) {
-      const title = safeText(card.dataset.title).toLowerCase();
-      card.classList.toggle('hidden', Boolean(query) && !title.includes(query));
-    }
-  });
+  for (const card of dom.serviceCards) {
+    const pinButton = card.querySelector('.service-pin-btn');
+    if (!pinButton) continue;
+
+    pinButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const key = safeText(card.dataset.key).toLowerCase();
+      if (!key) return;
+
+      if (state.favoriteServices.has(key)) {
+        state.favoriteServices.delete(key);
+      } else {
+        state.favoriteServices.add(key);
+      }
+
+      persistServicePreferences();
+      renderServices();
+    });
+  }
+
+  renderServices();
 };
 
 const isEditableTarget = (target) => {
@@ -1577,6 +2056,27 @@ const setupEventHandlers = () => {
       } finally {
         setButtonBusy(dom.headerExportJsonBtn, false);
       }
+    });
+  }
+
+  if (dom.overviewJumpProfileBtn) {
+    dom.overviewJumpProfileBtn.addEventListener('click', () => {
+      switchTab('profile');
+      dom.profileDisplayName?.focus();
+    });
+  }
+
+  if (dom.overviewJumpSecurityBtn) {
+    dom.overviewJumpSecurityBtn.addEventListener('click', () => {
+      switchTab('security');
+      dom.currentPassword?.focus();
+    });
+  }
+
+  if (dom.overviewJumpActivityBtn) {
+    dom.overviewJumpActivityBtn.addEventListener('click', () => {
+      switchTab('activity');
+      dom.activityFilter?.focus();
     });
   }
 

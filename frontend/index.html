@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Syne:wght@600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap"
     rel="stylesheet"
   />
   <link rel="stylesheet" href="style.css" />
@@ -23,393 +23,673 @@
 
   <div id="app-content" class="app-shell" style="display: none">
     <header class="dashboard-header">
+      <div class="brand-lockup">
+        <div class="brand-mark">
+          <img src="images/Continental-ID-nbg-w.png" alt="Continental ID logo" />
+        </div>
+        <div>
+          <p class="eyebrow">Identity workspace</p>
+          <h1>Continental ID Dashboard</h1>
+        </div>
+      </div>
+
       <div class="header-meta">
-        <span id="status" class="status-tag">Checking login...</span>
         <span id="connection-status" class="connection-tag">Online</span>
         <span id="sync-status" class="connection-tag">Not synced yet</span>
+        <span id="status" class="status-tag">Checking login...</span>
       </div>
-      <h1>Continental ID Dashboard</h1>
+
       <div class="header-actions">
-        <button id="refresh-data-btn" class="secondary-btn" type="button">Refresh Data</button>
+        <button id="refresh-data-btn" class="secondary-btn" type="button">Refresh</button>
         <button id="header-export-json-btn" class="secondary-btn" type="button">Export JSON</button>
         <button id="logout-btn" class="primary-btn" type="button">Logout</button>
       </div>
     </header>
 
-    <section class="summary-grid" aria-label="Account summary">
-      <article class="summary-card">
-        <p class="summary-label">Continental ID</p>
-        <p class="summary-value" id="summary-id">-</p>
-      </article>
-      <article class="summary-card">
-        <p class="summary-label">Display Name</p>
-        <p class="summary-value" id="summary-display-name">-</p>
-      </article>
-      <article class="summary-card">
-        <p class="summary-label">Last Login</p>
-        <p class="summary-value" id="summary-last-login">-</p>
-      </article>
-      <article class="summary-card">
-        <p class="summary-label">Email Verified</p>
-        <p class="summary-value" id="summary-verified">Pending</p>
-      </article>
-      <article class="summary-card">
-        <p class="summary-label">Active Sessions</p>
-        <p class="summary-value" id="summary-sessions">0</p>
-      </article>
-      <article class="summary-card">
-        <p class="summary-label">Profile Completion</p>
-        <p class="summary-value" id="summary-completion">0%</p>
-      </article>
-    </section>
-
-    <section class="insights-strip" aria-label="Recent activity insights">
-      <article class="insight-pill">
-        <span>Logins (7d)</span>
-        <strong id="insight-last7">0</strong>
-      </article>
-      <article class="insight-pill">
-        <span>Logins (30d)</span>
-        <strong id="insight-last30">0</strong>
-      </article>
-      <article class="insight-pill">
-        <span>Unique IPs</span>
-        <strong id="insight-ips">0</strong>
-      </article>
-      <article class="insight-pill">
-        <span>Email Status</span>
-        <strong id="insight-verified">Pending</strong>
-      </article>
-    </section>
-
-    <section class="quick-links" aria-label="Continental services">
-      <div class="quick-links-header">
-        <h2>Services</h2>
-        <input id="service-filter" type="search" placeholder="Filter services" />
-      </div>
-      <ul id="service-list" class="card-list">
-        <li class="card" data-title="The Echo Archives">
-          <a
-            href="https://site1.continental.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            style="--bg-image: url('images/Echo.png')"
-          >
-            <span class="card-title">The Echo Archives</span>
-          </a>
-        </li>
-        <li class="card" data-title="Continental Home">
-          <a
-            href="https://site2.continental.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            style="--bg-image: url('images/Continental.png')"
-          >
-            <span class="card-title">Continental Home</span>
-          </a>
-        </li>
-        <li class="card" data-title="StepCast">
-          <a
-            href="https://site3.continental.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            style="--bg-image: url('images/StepCast2.png')"
-          >
-            <span class="card-title">StepCast</span>
-          </a>
-        </li>
-        <li class="card" data-title="Minesweeper">
-          <a
-            href="https://site4.continental.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            style="--bg-image: url('images/Minesweeper.png')"
-          >
-            <span class="card-title">Minesweeper</span>
-          </a>
-        </li>
-      </ul>
-    </section>
-
-    <nav class="tabs" aria-label="Dashboard sections">
-      <button class="tab-btn active" data-tab="profile" type="button">Profile</button>
-      <button class="tab-btn" data-tab="linked" type="button">External Profiles</button>
-      <button class="tab-btn" data-tab="security" type="button">Security</button>
-      <button class="tab-btn" data-tab="privacy" type="button">Privacy</button>
-      <button class="tab-btn" data-tab="notifications" type="button">Notifications</button>
-      <button class="tab-btn" data-tab="appearance" type="button">Appearance</button>
-      <button class="tab-btn" data-tab="sessions" type="button">Sessions</button>
-      <button class="tab-btn" data-tab="activity" type="button">Activity</button>
-      <button class="tab-btn danger-tab" data-tab="delete" type="button">Delete Account</button>
-    </nav>
-
-    <main class="tab-panels">
-      <section id="profile" class="tab-content active">
-        <h2>Profile</h2>
-        <div class="progress-row">
-          <span>Completion</span>
-          <div class="progress-track" aria-hidden="true">
-            <div id="profile-progress-bar" class="progress-fill"></div>
+    <div class="dashboard-layout">
+      <aside class="dashboard-sidebar">
+        <section class="profile-rail">
+          <div class="profile-identity">
+            <div id="hero-initials" class="identity-badge" aria-hidden="true">CI</div>
+            <div>
+              <p id="hero-display-name" class="identity-name">Continental User</p>
+              <p id="hero-email" class="identity-email">Signed-out session</p>
+            </div>
           </div>
-          <span id="profile-progress-label">0%</span>
-        </div>
 
-        <div id="verification-panel" class="verification-panel" hidden>
-          <p id="verification-helper" class="helper-line">
-            Your email address is still pending verification.
-          </p>
-          <button id="verification-resend-btn" class="secondary-btn" type="button">
-            Resend Verification Email
-          </button>
-        </div>
+          <div class="profile-progress-card">
+            <div class="profile-progress-head">
+              <div>
+                <p class="mini-label">Profile completion</p>
+                <strong id="summary-completion" class="progress-value">0%</strong>
+              </div>
+              <span id="summary-verified" class="inline-chip">Pending</span>
+            </div>
 
-        <form id="profile-form" class="form-grid">
-          <label>
-            Display name
-            <input id="profile-display-name" name="displayName" type="text" minlength="2" maxlength="60" required />
-          </label>
-          <label>
-            Email
-            <input id="profile-email" name="email" type="email" required />
-          </label>
-          <label>
-            Current password
-            <input
-              id="profile-email-current-password"
-              name="emailCurrentPassword"
-              type="password"
-              autocomplete="current-password"
-              placeholder="Required only when changing email"
-            />
-          </label>
-          <label>
-            Location
-            <input id="profile-location" name="location" type="text" maxlength="120" placeholder="Stockholm, Sweden" />
-          </label>
-          <label>
-            Website
-            <input id="profile-website" name="website" type="url" maxlength="240" placeholder="https://example.com" />
-          </label>
-          <label>
-            Timezone
-            <input id="profile-timezone" name="timezone" type="text" maxlength="80" placeholder="Europe/Stockholm" />
-          </label>
-          <label>
-            Language
-            <input id="profile-language" name="language" type="text" maxlength="32" placeholder="en" />
-          </label>
-          <label class="wide-field">
-            Bio
-            <textarea id="profile-bio" name="bio" rows="3" maxlength="320" placeholder="Tell us about you"></textarea>
-          </label>
-          <label>
-            Continental ID
-            <input id="profile-id" type="text" disabled />
-          </label>
-          <label>
-            Created
-            <input id="profile-created" type="text" disabled />
-          </label>
-          <button id="profile-save-btn" class="primary-btn" type="submit">Save Profile</button>
-        </form>
-      </section>
+            <div class="progress-track" aria-hidden="true">
+              <div id="profile-progress-bar" class="progress-fill profile-progress-fill"></div>
+            </div>
 
-      <section id="linked" class="tab-content">
-        <h2>External Profiles</h2>
-        <p class="helper-line">Stored as profile references only. These entries do not enable sign-in with those providers.</p>
-        <form id="linked-form" class="form-grid">
-          <label>
-            Google
-            <input id="linked-google" name="google" type="text" placeholder="name@gmail.com" />
-          </label>
-          <label>
-            Facebook
-            <input id="linked-facebook" name="facebook" type="text" placeholder="facebook username" />
-          </label>
-          <label>
-            GitHub
-            <input id="linked-github" name="github" type="text" placeholder="github handle" />
-          </label>
-          <label>
-            Twitter/X
-            <input id="linked-twitter" name="twitter" type="text" placeholder="@handle" />
-          </label>
-          <label>
-            LinkedIn
-            <input id="linked-linkedin" name="linkedin" type="text" placeholder="linkedin profile" />
-          </label>
-          <label>
-            Discord
-            <input id="linked-discord" name="discord" type="text" placeholder="username#1234" />
-          </label>
-          <label>
-            Apple
-            <input id="linked-apple" name="apple" type="text" placeholder="Apple ID" />
-          </label>
-          <label>
-            Microsoft
-            <input id="linked-microsoft" name="microsoft" type="text" placeholder="Outlook account" />
-          </label>
-          <button id="linked-save-btn" class="primary-btn" type="submit">Save External Profiles</button>
-        </form>
-      </section>
-
-      <section id="security" class="tab-content">
-        <h2>Security</h2>
-        <form id="password-form" class="form-grid">
-          <label>
-            Current password
-            <input id="current-password" name="currentPassword" type="password" autocomplete="current-password" required />
-          </label>
-          <label>
-            New password
-            <input id="new-password" name="newPassword" type="password" autocomplete="new-password" required />
-          </label>
-          <label>
-            Confirm new password
-            <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" required />
-          </label>
-          <div id="password-strength" class="strength-meter" aria-live="polite">
-            <div id="password-strength-fill" class="strength-fill"></div>
+            <p id="hero-status-note" class="helper-line">
+              Finish your setup to keep your account in good shape.
+            </p>
           </div>
-          <small id="password-strength-text">Use 8+ chars with uppercase, lowercase, and number.</small>
-          <button id="password-save-btn" class="primary-btn" type="submit">Update Password</button>
-        </form>
+        </section>
 
-        <form id="security-form" class="inline-form">
-          <label class="toggle-label" for="login-alerts-toggle">
-            <input id="login-alerts-toggle" type="checkbox" />
-            Send alerts for suspicious sign-in activity
-          </label>
-          <button id="security-save-btn" class="secondary-btn" type="submit">Save Security</button>
-        </form>
-        <p id="session-limit-note" class="helper-line">Session limit: --</p>
-      </section>
+        <nav class="tabs" aria-label="Dashboard sections">
+          <button class="tab-btn active" data-tab="overview" type="button">Overview</button>
+          <button class="tab-btn" data-tab="profile" type="button">Profile</button>
+          <button class="tab-btn" data-tab="linked" type="button">External Profiles</button>
+          <button class="tab-btn" data-tab="preferences" type="button">Preferences</button>
+          <button class="tab-btn" data-tab="security" type="button">Security</button>
+          <button class="tab-btn" data-tab="activity" type="button">Activity</button>
+          <button class="tab-btn danger-tab" data-tab="delete" type="button">Delete Account</button>
+        </nav>
 
-      <section id="privacy" class="tab-content">
-        <h2>Privacy</h2>
-        <form id="privacy-form" class="form-grid compact-form">
-          <label class="toggle-label" for="privacy-public">
-            <input id="privacy-public" type="checkbox" />
-            Make my profile public
-          </label>
-          <label class="toggle-label" for="privacy-searchable">
-            <input id="privacy-searchable" type="checkbox" />
-            Allow account discovery in search
-          </label>
-          <button id="privacy-save-btn" class="primary-btn" type="submit">Save Privacy Settings</button>
-        </form>
-      </section>
+        <section id="profile-checklist-card" class="sidebar-card">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">Service search</p>
+              <h2>Quick access</h2>
+            </div>
+            <button id="favorite-filter-btn" class="ghost-btn" type="button">Pinned only</button>
+          </div>
 
-      <section id="notifications" class="tab-content">
-        <h2>Notifications</h2>
-        <form id="notification-form" class="form-grid compact-form">
-          <label class="toggle-label" for="notify-email">
-            <input id="notify-email" type="checkbox" />
-            Email notifications
+          <label class="search-field">
+            <span class="sr-only">Filter services</span>
+            <input id="service-filter" type="search" placeholder="Search services or press Cmd/Ctrl+K" />
           </label>
-          <label class="toggle-label" for="notify-sms">
-            <input id="notify-sms" type="checkbox" />
-            SMS notifications
-          </label>
-          <label class="toggle-label" for="notify-push">
-            <input id="notify-push" type="checkbox" />
-            Push notifications
-          </label>
-          <label class="toggle-label" for="notify-weekly-digest">
-            <input id="notify-weekly-digest" type="checkbox" />
-            Weekly digest summary
-          </label>
-          <label class="toggle-label" for="notify-security">
-            <input id="notify-security" type="checkbox" />
-            Security event notifications
-          </label>
-          <button id="notification-save-btn" class="primary-btn" type="submit">Save Notification Preferences</button>
-        </form>
-      </section>
+          <p id="service-results-count" class="helper-line">4 services available</p>
+        </section>
 
-      <section id="appearance" class="tab-content">
-        <h2>Appearance & Layout</h2>
-        <form id="appearance-form" class="form-grid">
-          <label>
-            Theme
-            <select id="appearance-theme" name="theme">
-              <option value="system">System</option>
-              <option value="dawn">Dawn</option>
-              <option value="night">Night</option>
-              <option value="ocean">Ocean</option>
-            </select>
-          </label>
-          <label>
-            Dashboard density
-            <select id="appearance-density" name="dashboardDensity">
-              <option value="comfortable">Comfortable</option>
-              <option value="compact">Compact</option>
-              <option value="spacious">Spacious</option>
-            </select>
-          </label>
-          <label class="toggle-label" for="appearance-compact-mode">
-            <input id="appearance-compact-mode" type="checkbox" />
-            Compact mode
-          </label>
-          <label class="toggle-label" for="appearance-reduced-motion">
-            <input id="appearance-reduced-motion" type="checkbox" />
-            Reduced motion
-          </label>
-          <label class="toggle-label" for="appearance-high-contrast">
-            <input id="appearance-high-contrast" type="checkbox" />
-            High contrast
-          </label>
-          <label class="toggle-label" for="dashboard-tips-toggle">
-            <input id="dashboard-tips-toggle" type="checkbox" />
-            Show helpful dashboard tips
-          </label>
-          <button id="appearance-save-btn" class="primary-btn" type="submit">Save Appearance</button>
-          <button id="appearance-reset-btn" class="secondary-btn" type="button">Reset to Defaults</button>
-        </form>
-      </section>
+        <section class="sidebar-card">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">Recommended</p>
+              <h2>Profile checklist</h2>
+            </div>
+          </div>
+          <ul id="profile-checklist" class="feature-list">
+            <li>Loading checklist...</li>
+          </ul>
+        </section>
+      </aside>
 
-      <section id="sessions" class="tab-content">
-        <h2>Sessions</h2>
-        <div class="activity-toolbar">
-          <button id="sessions-refresh-btn" class="secondary-btn" type="button">Refresh Sessions</button>
-          <button id="sessions-revoke-others-btn" class="secondary-btn" type="button">Revoke Other Sessions</button>
-          <button id="sessions-revoke-all-btn" class="danger-btn" type="button">Revoke All Sessions</button>
-        </div>
-        <ul id="sessions-list" class="activity-list">
-          <li>Loading sessions...</li>
-        </ul>
-      </section>
+      <main class="dashboard-main tab-panels">
+        <section id="overview" class="tab-content active">
+          <div class="hero-panel">
+            <div>
+              <p class="eyebrow">At a glance</p>
+              <h2 id="hero-greeting">Welcome back</h2>
+              <p class="hero-copy">
+                Keep your identity settings tidy, review security posture, and jump into your services without the usual dashboard clutter.
+              </p>
+            </div>
+            <div class="hero-actions">
+              <button id="overview-jump-profile-btn" class="secondary-btn" type="button">Edit profile</button>
+              <button id="overview-jump-security-btn" class="secondary-btn" type="button">Review security</button>
+              <button id="overview-jump-activity-btn" class="primary-btn" type="button">Open activity</button>
+            </div>
+          </div>
 
-      <section id="activity" class="tab-content">
-        <h2>Recent Activity</h2>
-        <div class="activity-toolbar">
-          <input id="activity-filter" type="search" placeholder="Filter by IP, browser, or date" />
-          <button id="activity-refresh-btn" class="secondary-btn" type="button">Refresh Activity</button>
-          <button id="activity-export-btn" class="secondary-btn" type="button">Export CSV</button>
-        </div>
-        <div id="activity-bars" class="mini-bars" aria-hidden="true"></div>
-        <ul id="activity-list" class="activity-list">
-          <li>Loading recent activity...</li>
-        </ul>
-      </section>
+          <section class="metrics-grid" aria-label="Account summary">
+            <article class="metric-card">
+              <p class="metric-label">Continental ID</p>
+              <p class="metric-value" id="summary-id">-</p>
+              <p class="metric-note">Your permanent identity handle.</p>
+            </article>
 
-      <section id="delete" class="tab-content">
-        <h2>Delete Account</h2>
-        <p class="danger-note">This action is permanent and cannot be undone.</p>
-        <form id="delete-form" class="form-grid">
-          <label>
-            Confirm password
-            <input id="delete-password" name="currentPassword" type="password" autocomplete="current-password" required />
-          </label>
-          <label>
-            Type DELETE to confirm
-            <input id="delete-confirm-text" name="confirmText" type="text" pattern="DELETE" required />
-          </label>
-          <button id="delete-account-btn" class="danger-btn" type="submit">Delete My Account</button>
-        </form>
-      </section>
-    </main>
+            <article class="metric-card">
+              <p class="metric-label">Last login</p>
+              <p class="metric-value" id="summary-last-login">-</p>
+              <p class="metric-note">Most recent successful account access.</p>
+            </article>
+
+            <article class="metric-card">
+              <p class="metric-label">Account health</p>
+              <p class="metric-value" id="health-score-value">0</p>
+              <p class="metric-note" id="health-score-label">Waiting for account data</p>
+            </article>
+
+            <article class="metric-card">
+              <p class="metric-label">Active sessions</p>
+              <p class="metric-value" id="summary-sessions">0</p>
+              <p class="metric-note" id="session-limit-note">Session limit: --</p>
+            </article>
+          </section>
+
+          <div class="overview-grid">
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Next steps</p>
+                  <h3>Action center</h3>
+                </div>
+              </div>
+              <div id="action-center" class="action-list"></div>
+            </article>
+
+            <article class="section-card overview-glance">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Snapshot</p>
+                  <h3>Profile glance</h3>
+                </div>
+              </div>
+
+              <dl class="glance-list">
+                <div>
+                  <dt>Display name</dt>
+                  <dd id="summary-display-name">-</dd>
+                </div>
+                <div>
+                  <dt>Email status</dt>
+                  <dd id="insight-verified">Pending</dd>
+                </div>
+                <div>
+                  <dt>Logins in 7 days</dt>
+                  <dd id="insight-last7">0</dd>
+                </div>
+                <div>
+                  <dt>Logins in 30 days</dt>
+                  <dd id="insight-last30">0</dd>
+                </div>
+                <div>
+                  <dt>Unique IPs</dt>
+                  <dd id="insight-ips">0</dd>
+                </div>
+              </dl>
+            </article>
+          </div>
+
+          <div class="overview-grid wide-layout">
+            <article class="section-card service-panel">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Services</p>
+                  <h3>Launch your tools</h3>
+                </div>
+                <p class="helper-line">Pin the ones you use most and they will stay at the top.</p>
+              </div>
+
+              <ul id="service-list" class="card-list">
+                <li
+                  class="card service-card"
+                  data-key="echo"
+                  data-title="The Echo Archives"
+                  data-category="Research"
+                  data-description="Research archive, continuity references, and world-building notes."
+                >
+                  <button class="service-pin-btn" type="button" aria-label="Pin The Echo Archives">Pin</button>
+                  <a
+                    class="service-link"
+                    href="https://site1.continental.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style="--bg-image: url('images/Echo.png')"
+                  >
+                    <span class="service-kicker">Research</span>
+                    <span class="card-title">The Echo Archives</span>
+                    <span class="service-description">
+                      Research archive, continuity references, and world-building notes.
+                    </span>
+                  </a>
+                </li>
+
+                <li
+                  class="card service-card"
+                  data-key="home"
+                  data-title="Continental Home"
+                  data-category="Portal"
+                  data-description="Your main launch point for account tools and central resources."
+                >
+                  <button class="service-pin-btn" type="button" aria-label="Pin Continental Home">Pin</button>
+                  <a
+                    class="service-link"
+                    href="https://site2.continental.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style="--bg-image: url('images/Continental.png')"
+                  >
+                    <span class="service-kicker">Portal</span>
+                    <span class="card-title">Continental Home</span>
+                    <span class="service-description">
+                      Your main launch point for account tools and central resources.
+                    </span>
+                  </a>
+                </li>
+
+                <li
+                  class="card service-card"
+                  data-key="stepcast"
+                  data-title="StepCast"
+                  data-category="Broadcast"
+                  data-description="Streaming, broadcast controls, and publishing workflows."
+                >
+                  <button class="service-pin-btn" type="button" aria-label="Pin StepCast">Pin</button>
+                  <a
+                    class="service-link"
+                    href="https://site3.continental.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style="--bg-image: url('images/StepCast2.png')"
+                  >
+                    <span class="service-kicker">Broadcast</span>
+                    <span class="card-title">StepCast</span>
+                    <span class="service-description">
+                      Streaming, broadcast controls, and publishing workflows.
+                    </span>
+                  </a>
+                </li>
+
+                <li
+                  class="card service-card"
+                  data-key="minesweeper"
+                  data-title="Minesweeper"
+                  data-category="Play"
+                  data-description="A fast break when you want something lighter than settings."
+                >
+                  <button class="service-pin-btn" type="button" aria-label="Pin Minesweeper">Pin</button>
+                  <a
+                    class="service-link"
+                    href="https://site4.continental.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style="--bg-image: url('images/Minesweeper.png')"
+                  >
+                    <span class="service-kicker">Play</span>
+                    <span class="card-title">Minesweeper</span>
+                    <span class="service-description">
+                      A fast break when you want something lighter than settings.
+                    </span>
+                  </a>
+                </li>
+              </ul>
+
+              <p id="service-empty-state" class="empty-state" hidden>No services match your current filter.</p>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Recent logins</p>
+                  <h3>Activity preview</h3>
+                </div>
+              </div>
+
+              <div id="activity-bars" class="mini-bars" aria-hidden="true"></div>
+              <ul id="overview-activity-list" class="activity-list activity-list-compact">
+                <li>Recent login activity will appear here.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section id="profile" class="tab-content">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Personal details</p>
+              <h2>Profile</h2>
+            </div>
+            <p class="helper-line">Keep the essentials accurate and complete so your account stays easy to manage.</p>
+          </div>
+
+          <div class="stack-grid">
+            <article class="section-card">
+              <div id="verification-panel" class="verification-panel" hidden>
+                <p id="verification-helper" class="helper-line">
+                  Your email address is still pending verification.
+                </p>
+                <button id="verification-resend-btn" class="secondary-btn" type="button">
+                  Resend Verification Email
+                </button>
+              </div>
+
+              <div class="progress-row">
+                <span>Completion</span>
+                <div class="progress-track" aria-hidden="true">
+                  <div id="profile-progress-bar-secondary" class="progress-fill profile-progress-fill"></div>
+                </div>
+                <span id="profile-progress-label">0%</span>
+              </div>
+
+              <form id="profile-form" class="form-grid">
+                <label>
+                  Display name
+                  <input id="profile-display-name" name="displayName" type="text" minlength="2" maxlength="60" required />
+                </label>
+                <label>
+                  Email
+                  <input id="profile-email" name="email" type="email" required />
+                </label>
+                <label>
+                  Current password
+                  <input
+                    id="profile-email-current-password"
+                    name="emailCurrentPassword"
+                    type="password"
+                    autocomplete="current-password"
+                    placeholder="Required only when changing email"
+                  />
+                </label>
+                <label>
+                  Location
+                  <input id="profile-location" name="location" type="text" maxlength="120" placeholder="Stockholm, Sweden" />
+                </label>
+                <label>
+                  Website
+                  <input id="profile-website" name="website" type="url" maxlength="240" placeholder="https://example.com" />
+                </label>
+                <label>
+                  Timezone
+                  <input id="profile-timezone" name="timezone" type="text" maxlength="80" placeholder="Europe/Stockholm" />
+                </label>
+                <label>
+                  Language
+                  <input id="profile-language" name="language" type="text" maxlength="32" placeholder="en" />
+                </label>
+                <label class="wide-field">
+                  Bio
+                  <textarea id="profile-bio" name="bio" rows="4" maxlength="320" placeholder="Tell us about you"></textarea>
+                </label>
+                <label>
+                  Continental ID
+                  <input id="profile-id" type="text" disabled />
+                </label>
+                <label>
+                  Created
+                  <input id="profile-created" type="text" disabled />
+                </label>
+                <button id="profile-save-btn" class="primary-btn" type="submit">Save Profile</button>
+              </form>
+            </article>
+          </div>
+        </section>
+
+        <section id="linked" class="tab-content">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Connections</p>
+              <h2>External Profiles</h2>
+            </div>
+            <p class="helper-line">Keep reference links to your external identities without turning them into login providers.</p>
+          </div>
+
+          <article class="section-card">
+            <form id="linked-form" class="form-grid">
+              <label>
+                Google
+                <input id="linked-google" name="google" type="text" placeholder="name@gmail.com" />
+              </label>
+              <label>
+                Facebook
+                <input id="linked-facebook" name="facebook" type="text" placeholder="facebook username" />
+              </label>
+              <label>
+                GitHub
+                <input id="linked-github" name="github" type="text" placeholder="github handle" />
+              </label>
+              <label>
+                Twitter/X
+                <input id="linked-twitter" name="twitter" type="text" placeholder="@handle" />
+              </label>
+              <label>
+                LinkedIn
+                <input id="linked-linkedin" name="linkedin" type="text" placeholder="linkedin profile" />
+              </label>
+              <label>
+                Discord
+                <input id="linked-discord" name="discord" type="text" placeholder="username#1234" />
+              </label>
+              <label>
+                Apple
+                <input id="linked-apple" name="apple" type="text" placeholder="Apple ID" />
+              </label>
+              <label>
+                Microsoft
+                <input id="linked-microsoft" name="microsoft" type="text" placeholder="Outlook account" />
+              </label>
+              <button id="linked-save-btn" class="primary-btn" type="submit">Save External Profiles</button>
+            </form>
+          </article>
+        </section>
+
+        <section id="preferences" class="tab-content">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Control center</p>
+              <h2>Preferences</h2>
+            </div>
+            <p class="helper-line">Privacy, notifications, and appearance now live together so you can tune the dashboard in one place.</p>
+          </div>
+
+          <div class="stack-grid">
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Visibility</p>
+                  <h3>Privacy</h3>
+                </div>
+              </div>
+
+              <form id="privacy-form" class="form-grid compact-form">
+                <label class="toggle-label" for="privacy-public">
+                  <input id="privacy-public" type="checkbox" />
+                  Make my profile public
+                </label>
+                <label class="toggle-label" for="privacy-searchable">
+                  <input id="privacy-searchable" type="checkbox" />
+                  Allow account discovery in search
+                </label>
+                <button id="privacy-save-btn" class="primary-btn" type="submit">Save Privacy Settings</button>
+              </form>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Delivery</p>
+                  <h3>Notifications</h3>
+                </div>
+              </div>
+
+              <form id="notification-form" class="form-grid compact-form">
+                <label class="toggle-label" for="notify-email">
+                  <input id="notify-email" type="checkbox" />
+                  Email notifications
+                </label>
+                <label class="toggle-label" for="notify-sms">
+                  <input id="notify-sms" type="checkbox" />
+                  SMS notifications
+                </label>
+                <label class="toggle-label" for="notify-push">
+                  <input id="notify-push" type="checkbox" />
+                  Push notifications
+                </label>
+                <label class="toggle-label" for="notify-weekly-digest">
+                  <input id="notify-weekly-digest" type="checkbox" />
+                  Weekly digest summary
+                </label>
+                <label class="toggle-label" for="notify-security">
+                  <input id="notify-security" type="checkbox" />
+                  Security event notifications
+                </label>
+                <button id="notification-save-btn" class="primary-btn" type="submit">Save Notification Preferences</button>
+              </form>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Environment</p>
+                  <h3>Appearance & Layout</h3>
+                </div>
+              </div>
+
+              <form id="appearance-form" class="form-grid">
+                <label>
+                  Theme
+                  <select id="appearance-theme" name="theme">
+                    <option value="system">System</option>
+                    <option value="dawn">Dawn</option>
+                    <option value="night">Night</option>
+                    <option value="ocean">Ocean</option>
+                  </select>
+                </label>
+                <label>
+                  Dashboard density
+                  <select id="appearance-density" name="dashboardDensity">
+                    <option value="comfortable">Comfortable</option>
+                    <option value="compact">Compact</option>
+                    <option value="spacious">Spacious</option>
+                  </select>
+                </label>
+                <label class="toggle-label" for="appearance-compact-mode">
+                  <input id="appearance-compact-mode" type="checkbox" />
+                  Compact mode
+                </label>
+                <label class="toggle-label" for="appearance-reduced-motion">
+                  <input id="appearance-reduced-motion" type="checkbox" />
+                  Reduced motion
+                </label>
+                <label class="toggle-label" for="appearance-high-contrast">
+                  <input id="appearance-high-contrast" type="checkbox" />
+                  High contrast
+                </label>
+                <label class="toggle-label" for="dashboard-tips-toggle">
+                  <input id="dashboard-tips-toggle" type="checkbox" />
+                  Show helpful dashboard tips
+                </label>
+                <button id="appearance-save-btn" class="primary-btn" type="submit">Save Appearance</button>
+                <button id="appearance-reset-btn" class="secondary-btn" type="button">Reset to Defaults</button>
+              </form>
+            </article>
+          </div>
+        </section>
+
+        <section id="security" class="tab-content">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Protection</p>
+              <h2>Security</h2>
+            </div>
+            <p class="helper-line">Review password strength, session behavior, and active devices in one place.</p>
+          </div>
+
+          <div class="stack-grid">
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Credentials</p>
+                  <h3>Password</h3>
+                </div>
+              </div>
+
+              <form id="password-form" class="form-grid">
+                <label>
+                  Current password
+                  <input id="current-password" name="currentPassword" type="password" autocomplete="current-password" required />
+                </label>
+                <label>
+                  New password
+                  <input id="new-password" name="newPassword" type="password" autocomplete="new-password" required />
+                </label>
+                <label>
+                  Confirm new password
+                  <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" required />
+                </label>
+                <div id="password-strength" class="strength-meter" aria-live="polite">
+                  <div id="password-strength-fill" class="strength-fill"></div>
+                </div>
+                <small id="password-strength-text">Use 8+ chars with uppercase, lowercase, and number.</small>
+                <button id="password-save-btn" class="primary-btn" type="submit">Update Password</button>
+              </form>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Monitoring</p>
+                  <h3>Security settings</h3>
+                </div>
+              </div>
+
+              <form id="security-form" class="inline-form">
+                <label class="toggle-label" for="login-alerts-toggle">
+                  <input id="login-alerts-toggle" type="checkbox" />
+                  Send alerts for suspicious sign-in activity
+                </label>
+                <button id="security-save-btn" class="secondary-btn" type="submit">Save Security</button>
+              </form>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Devices</p>
+                  <h3>Sessions</h3>
+                </div>
+                <div class="activity-toolbar">
+                  <button id="sessions-refresh-btn" class="secondary-btn" type="button">Refresh Sessions</button>
+                  <button id="sessions-revoke-others-btn" class="secondary-btn" type="button">Revoke Other Sessions</button>
+                  <button id="sessions-revoke-all-btn" class="danger-btn" type="button">Revoke All Sessions</button>
+                </div>
+              </div>
+
+              <ul id="sessions-list" class="activity-list">
+                <li>Loading sessions...</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section id="activity" class="tab-content">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Timeline</p>
+              <h2>Recent Activity</h2>
+            </div>
+            <p class="helper-line">Filter by IP, browser, or date and export the full login log when needed.</p>
+          </div>
+
+          <article class="section-card">
+            <div class="activity-toolbar">
+              <input id="activity-filter" type="search" placeholder="Filter by IP, browser, or date" />
+              <button id="activity-refresh-btn" class="secondary-btn" type="button">Refresh Activity</button>
+              <button id="activity-export-btn" class="secondary-btn" type="button">Export CSV</button>
+            </div>
+            <ul id="activity-list" class="activity-list">
+              <li>Loading recent activity...</li>
+            </ul>
+          </article>
+        </section>
+
+        <section id="delete" class="tab-content">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Permanent action</p>
+              <h2>Delete Account</h2>
+            </div>
+            <p class="helper-line">This removes your account and cannot be undone.</p>
+          </div>
+
+          <article class="section-card danger-card">
+            <p class="danger-note">This action is permanent and cannot be undone.</p>
+            <form id="delete-form" class="form-grid">
+              <label>
+                Confirm password
+                <input id="delete-password" name="currentPassword" type="password" autocomplete="current-password" required />
+              </label>
+              <label>
+                Type DELETE to confirm
+                <input id="delete-confirm-text" name="confirmText" type="text" pattern="DELETE" required />
+              </label>
+              <button id="delete-account-btn" class="danger-btn" type="submit">Delete My Account</button>
+            </form>
+          </article>
+        </section>
+      </main>
+    </div>
 
     <div id="cookie-popup" class="cookie-popup hide">
       <p>
