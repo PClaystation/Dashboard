@@ -10,6 +10,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "stop": "bash ./restart-backend.sh stop",
+    "status": "bash ./restart-backend.sh status",
+    "restart": "bash ./restart-backend.sh restart",
     "check": "node --check server.js && node --check controllers/authController.js && node --check controllers/grimoireDeckController.js && node --check controllers/verifyEmailController.js && node --check middleware/authMiddleware.js && node --check routes/authRoutes.js && node --check routes/grimoireRoutes.js && node --check models/User.js && node --check models/GrimoireDeck.js && node --check models/ApiRateLimitBucket.js && node --check models/LoginThrottle.js && node --check utils/email.js && node --check utils/emailVerification.js"
   },
   "dependencies": {
