@@ -154,6 +154,15 @@
           <span id="profile-progress-label">0%</span>
         </div>
 
+        <div id="verification-panel" class="verification-panel" hidden>
+          <p id="verification-helper" class="helper-line">
+            Your email address is still pending verification.
+          </p>
+          <button id="verification-resend-btn" class="secondary-btn" type="button">
+            Resend Verification Email
+          </button>
+        </div>
+
         <form id="profile-form" class="form-grid">
           <label>
             Display name
@@ -162,6 +171,16 @@
           <label>
             Email
             <input id="profile-email" name="email" type="email" required />
+          </label>
+          <label>
+            Current password
+            <input
+              id="profile-email-current-password"
+              name="emailCurrentPassword"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Required only when changing email"
+            />
           </label>
           <label>
             Location

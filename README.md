@@ -36,11 +36,20 @@ A full-stack account dashboard with hardened auth/session handling, profile and 
    cd backend
    npm install
    ```
+   Use Node 20+ for the backend so the Resend SDK installs cleanly.
 2. Create env file:
    ```bash
    cp .env.example .env
    ```
-3. Start backend:
+3. Configure Resend for verification emails:
+   ```env
+   RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxx
+   EMAIL_FROM=no-reply@your-domain.com
+   EMAIL_FROM_NAME=Continental ID
+   EMAIL_REPLY_TO=support@your-domain.com
+   EMAIL_VERIFY_URL=https://auth.example.com/login/verify.html
+   ```
+4. Start backend:
    ```bash
    npm run start
    ```
@@ -70,6 +79,7 @@ Default behavior now assumes the frontend and `/api/*` are available on the same
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
 - `POST /api/auth/refresh_token`
+- `POST /api/auth/resend-verification`
 - `GET /api/auth/me`
 - `PATCH /api/auth/profile`
 - `PATCH /api/auth/email`
@@ -84,6 +94,13 @@ Default behavior now assumes the frontend and `/api/*` are available on the same
 - `GET /api/auth/export`
 - `DELETE /api/auth/account`
 - `GET /api/auth/verify-email?token=...`
+
+## Resend Verification Flow
+
+- New registrations now create a verification token and send a verification email through Resend.
+- Changing an account email resets `isVerified`, issues a new token, and sends a fresh verification email.
+- Signed-in users can request a new verification email with `POST /api/auth/resend-verification`.
+- Set `EMAIL_VERIFY_URL` to the public URL of the verification page, for example `/login/verify.html`, that loads the token and calls `/api/auth/verify-email`.
 
 ## Notes
 

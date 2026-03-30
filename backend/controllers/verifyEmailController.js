@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { hashEmailVerificationToken } = require('../utils/emailVerification');
 
 exports.verifyEmail = async (req, res) => {
   const token = String(req.query.token || '').trim();
@@ -8,20 +9,19 @@ exports.verifyEmail = async (req, res) => {
   }
 
   try {
-    // Find user with valid, unexpired verification token
+    const hashedToken = hashEmailVerificationToken(token);
     const user = await User.findOne({
-      verificationToken: token,
-      verificationTokenExpires: { $gt: Date.now() }
+      verificationToken: hashedToken,
+      verificationTokenExpires: { $gt: Date.now() },
     });
 
     if (!user) {
       return res.status(400).json({ message: 'Invalid or expired verification link.' });
     }
 
-    // Mark user as verified and remove the token fields
     user.isVerified = true;
-    user.verificationToken = undefined;
-    user.verificationTokenExpires = undefined;
+    user.verificationToken = '';
+    user.verificationTokenExpires = null;
 
     await user.save();
 

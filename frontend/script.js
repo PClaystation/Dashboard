@@ -36,6 +36,7 @@ const dom = {
   profileSaveBtn: document.getElementById('profile-save-btn'),
   profileDisplayName: document.getElementById('profile-display-name'),
   profileEmail: document.getElementById('profile-email'),
+  profileEmailCurrentPassword: document.getElementById('profile-email-current-password'),
   profileLocation: document.getElementById('profile-location'),
   profileWebsite: document.getElementById('profile-website'),
   profileTimezone: document.getElementById('profile-timezone'),
@@ -45,6 +46,9 @@ const dom = {
   profileCreated: document.getElementById('profile-created'),
   profileProgressBar: document.getElementById('profile-progress-bar'),
   profileProgressLabel: document.getElementById('profile-progress-label'),
+  verificationPanel: document.getElementById('verification-panel'),
+  verificationHelper: document.getElementById('verification-helper'),
+  verificationResendBtn: document.getElementById('verification-resend-btn'),
 
   linkedForm: document.getElementById('linked-form'),
   linkedSaveBtn: document.getElementById('linked-save-btn'),
@@ -118,6 +122,12 @@ const dom = {
 
 const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
 const safeText = (value) => String(value || '').trim();
+const normalizeActivitySummary = (summary = {}) => ({
+  last7Days: Number(summary?.last7Days || 0),
+  last30Days: Number(summary?.last30Days || 0),
+  uniqueIps: Number(summary?.uniqueIps || 0),
+  recentDays: Array.isArray(summary?.recentDays) ? summary.recentDays : [],
+});
 
 const getDefaultApiBaseUrl = () => {
   if (LOCAL_HOSTS.has(window.location.hostname)) {
@@ -170,9 +180,11 @@ const state = {
   sessions: [],
   sessionLimit: null,
   accessToken: '',
+  authEpoch: 0,
   loginPopupWindow: null,
   appVisible: false,
   refreshTimer: null,
+  refreshPromise: null,
   lastSyncAt: null,
 };
 
@@ -279,6 +291,34 @@ const setSyncStatus = (date = null) => {
 
 const clearStoredAuth = () => {
   state.accessToken = '';
+  state.authEpoch += 1;
+};
+
+const stopSessionAutoRefresh = () => {
+  if (!state.refreshTimer) return;
+  clearInterval(state.refreshTimer);
+  state.refreshTimer = null;
+};
+
+const handleUnauthenticatedState = ({
+  openPopup = true,
+  message = 'Your session expired. Please sign in again.',
+  notify = true,
+} = {}) => {
+  const shouldResetUi = Boolean(state.appVisible || state.user || state.accessToken);
+
+  stopSessionAutoRefresh();
+  clearStoredAuth();
+
+  if (!shouldResetUi) {
+    return;
+  }
+
+  setLoggedOutUI(openPopup);
+
+  if (notify && message && state.appVisible) {
+    showToast(message, 'warn', 4200);
+  }
 };
 
 const storeSession = (data = {}) => {
@@ -358,7 +398,9 @@ const isTrustedLoginOrigin = (origin) => {
 const clearDashboardUi = () => {
   state.user = null;
   state.activity = [];
+  state.activitySummary = normalizeActivitySummary();
   state.sessions = [];
+  state.sessionLimit = null;
 
   if (dom.summaryId) dom.summaryId.textContent = '-';
   if (dom.summaryDisplayName) dom.summaryDisplayName.textContent = '-';
@@ -393,7 +435,7 @@ const clearDashboardUi = () => {
   if (dom.insightLast7) dom.insightLast7.textContent = '0';
   if (dom.insightLast30) dom.insightLast30.textContent = '0';
   if (dom.insightIps) dom.insightIps.textContent = '0';
-  if (dom.insightVerified) dom.insightVerified.textContent = 'Pending';
+  renderVerificationState();
 
   applyAppearance({
     theme: 'system',
@@ -405,6 +447,7 @@ const clearDashboardUi = () => {
 };
 
 const setLoggedOutUI = (openPopup = true) => {
+  stopSessionAutoRefresh();
   clearStoredAuth();
   clearDashboardUi();
 
@@ -444,15 +487,10 @@ const setLoggedOutUI = (openPopup = true) => {
   }
 };
 
-const extractParamsFromUrl = () => {
+const stripLegacyAuthParamsFromUrl = () => {
   const params = new URLSearchParams(window.location.search);
-  const token = safeText(params.get('token'));
   const hadLegacyAuthParams =
     params.has('token') || params.has('userId') || params.has('continentalId');
-
-  if (token) {
-    storeSession({ token });
-  }
 
   if (hadLegacyAuthParams) {
     params.delete('token');
@@ -462,27 +500,62 @@ const extractParamsFromUrl = () => {
     const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
     history.replaceState({}, '', nextUrl);
   }
-
-  return Boolean(token);
 };
 
 const refreshSession = async () => {
-  try {
-    const res = await fetchWithTimeout(`${AUTH_API_BASE}/refresh_token`, {
-      method: 'POST',
-      credentials: 'include',
-    });
-
-    const data = await parseResponseBody(res);
-    if (!res.ok || !(data.accessToken || data.token)) {
-      return null;
-    }
-
-    storeSession(data);
-    return data;
-  } catch {
-    return null;
+  if (state.refreshPromise) {
+    return state.refreshPromise;
   }
+
+  state.refreshPromise = (async () => {
+    const authEpoch = state.authEpoch;
+
+    try {
+      const res = await fetchWithTimeout(`${AUTH_API_BASE}/refresh_token`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      const data = await parseResponseBody(res);
+      if (!res.ok) {
+        return {
+          ok: false,
+          reason: res.status === 401 ? 'unauthenticated' : 'error',
+          message: data.message || 'Session refresh failed.',
+        };
+      }
+
+      if (!(data.accessToken || data.token)) {
+        return {
+          ok: false,
+          reason: data.authenticated === false ? 'unauthenticated' : 'error',
+          message: data.message || 'Session refresh failed.',
+        };
+      }
+
+      if (state.authEpoch !== authEpoch) {
+        return { ok: false, reason: 'stale', message: '' };
+      }
+
+      storeSession(data);
+      return { ok: true, data };
+    } catch (error) {
+      return {
+        ok: false,
+        reason:
+          error?.name === 'AbortError'
+            ? 'timeout'
+            : error instanceof TypeError
+              ? 'network'
+              : 'error',
+        message: '',
+      };
+    } finally {
+      state.refreshPromise = null;
+    }
+  })();
+
+  return state.refreshPromise;
 };
 
 const toApiError = (err) => {
@@ -526,14 +599,26 @@ const apiRequest = async (path, options = {}) => {
 
   if (response.status === 401 && auth && retryOn401) {
     const refreshed = await refreshSession();
-    if (refreshed) {
+    if (refreshed.ok) {
       return apiRequest(path, { method, body, auth, retryOn401: false });
+    }
+
+    if (refreshed.reason === 'unauthenticated') {
+      handleUnauthenticatedState({
+        message: refreshed.message || 'Your session expired. Please sign in again.',
+      });
+      throw new Error(refreshed.message || 'Your session expired. Please sign in again.');
     }
   }
 
   const payload = await parseResponseBody(response);
 
   if (!response.ok) {
+    if (response.status === 401 && auth) {
+      handleUnauthenticatedState({
+        message: payload.message || 'Your session expired. Please sign in again.',
+      });
+    }
     throw new Error(payload.message || `Request failed (${response.status})`);
   }
 
@@ -634,11 +719,38 @@ const renderInsights = () => {
   if (dom.insightVerified) dom.insightVerified.textContent = state.user?.isVerified ? 'Verified' : 'Pending';
 };
 
+const renderVerificationState = (user = state.user) => {
+  if (!user) {
+    if (dom.summaryVerified) dom.summaryVerified.textContent = 'Pending';
+    if (dom.insightVerified) dom.insightVerified.textContent = 'Pending';
+    if (dom.verificationPanel) dom.verificationPanel.hidden = true;
+    if (dom.verificationHelper) {
+      dom.verificationHelper.textContent = 'Your email address is still pending verification.';
+    }
+    return;
+  }
+
+  const isVerified = Boolean(user?.isVerified);
+
+  if (dom.summaryVerified) dom.summaryVerified.textContent = isVerified ? 'Verified' : 'Pending';
+  if (dom.insightVerified) dom.insightVerified.textContent = isVerified ? 'Verified' : 'Pending';
+
+  if (dom.verificationPanel) {
+    dom.verificationPanel.hidden = isVerified;
+  }
+
+  if (dom.verificationHelper) {
+    const email = safeText(user?.email);
+    dom.verificationHelper.textContent = isVerified
+      ? 'Your email address is verified.'
+      : `Your email address${email ? ` (${email})` : ''} is still pending verification.`;
+  }
+};
+
 const fillSummary = (user) => {
   if (dom.summaryId) dom.summaryId.textContent = user.continentalId || user.userId || '-';
   if (dom.summaryDisplayName) dom.summaryDisplayName.textContent = user.displayName || '-';
   if (dom.summaryLastLogin) dom.summaryLastLogin.textContent = formatDate(user.lastLoginAt);
-  if (dom.summaryVerified) dom.summaryVerified.textContent = user.isVerified ? 'Verified' : 'Pending';
   if (dom.summarySessions) {
     dom.summarySessions.textContent = String(user.security?.activeSessions ?? state.sessions.length ?? 0);
   }
@@ -652,6 +764,7 @@ const fillSummary = (user) => {
 const fillProfile = (user) => {
   if (dom.profileDisplayName) dom.profileDisplayName.value = user.displayName || '';
   if (dom.profileEmail) dom.profileEmail.value = user.email || '';
+  if (dom.profileEmailCurrentPassword) dom.profileEmailCurrentPassword.value = '';
   if (dom.profileLocation) dom.profileLocation.value = user.profile?.location || '';
   if (dom.profileWebsite) dom.profileWebsite.value = user.profile?.website || '';
   if (dom.profileTimezone) dom.profileTimezone.value = user.profile?.timezone || '';
@@ -819,10 +932,7 @@ const renderSessions = () => {
 
         if (data.forceRelogin) {
           clearStoredAuth();
-          if (state.refreshTimer) {
-            clearInterval(state.refreshTimer);
-            state.refreshTimer = null;
-          }
+          stopSessionAutoRefresh();
           setLoggedOutUI(true);
           return;
         }
@@ -853,13 +963,18 @@ const syncUiWithUser = (user) => {
   if (!user) return;
 
   state.user = user;
+  state.activity = Array.isArray(user.recentLogins) ? user.recentLogins : [];
+  state.activitySummary = normalizeActivitySummary(user.activitySummary);
 
   fillSummary(user);
   fillProfile(user);
   fillLinkedAccounts(user);
   fillPreferences(user);
   fillSecurity(user);
+  renderActivity();
+  renderActivityBars();
   renderInsights();
+  renderVerificationState(user);
 
   const statusText = `Logged in as: ${user.email || user.displayName || user.userId}`;
   setStatus(statusText, { clickable: false });
@@ -880,13 +995,7 @@ const loadCurrentUser = async () => {
 const loadActivity = async () => {
   const data = await apiRequest('/activity', { method: 'GET', auth: true });
   state.activity = Array.isArray(data.recentLogins) ? data.recentLogins : [];
-
-  state.activitySummary = {
-    last7Days: Number(data.summary?.last7Days || 0),
-    last30Days: Number(data.summary?.last30Days || 0),
-    uniqueIps: Number(data.summary?.uniqueIps || 0),
-    recentDays: Array.isArray(data.summary?.recentDays) ? data.summary.recentDays : [],
-  };
+  state.activitySummary = normalizeActivitySummary(data.summary);
 
   renderActivity();
   renderActivityBars();
@@ -947,21 +1056,29 @@ const loadDashboardData = async ({ silent = false } = {}) => {
   }
 
   const user = await loadCurrentUser();
+  let sessionsError = null;
 
-  await Promise.all([
-    loadActivity(),
-    loadPreferences(),
-    loadLinkedAccounts(),
-    loadSecurity(),
-    loadSessions(),
-  ]);
+  try {
+    await loadSessions();
+  } catch (error) {
+    sessionsError = error;
+  }
 
-  syncUiWithUser(user);
+  if (sessionsError && !state.user) {
+    throw sessionsError;
+  }
+
   for (const form of trackedForms) {
     markFormClean(form);
   }
   state.lastSyncAt = new Date();
   setSyncStatus(state.lastSyncAt);
+
+  if (sessionsError && state.appVisible) {
+    showToast('Account loaded, but active sessions could not be refreshed.', 'warn', 3600);
+  }
+
+  return user;
 };
 
 const showApp = () => {
@@ -991,19 +1108,17 @@ const showApp = () => {
 };
 
 const initializeSession = async () => {
-  extractParamsFromUrl();
+  stripLegacyAuthParamsFromUrl();
 
-  if (!state.accessToken) {
-    const refreshed = await refreshSession();
-    if (!refreshed) return false;
-  }
+  const refreshed = await refreshSession();
+  if (!refreshed.ok) return false;
 
   try {
     await loadDashboardData();
     return true;
   } catch {
-    const refreshed = await refreshSession();
-    if (!refreshed) return false;
+    const retry = await refreshSession();
+    if (!retry.ok) return false;
 
     await loadDashboardData();
     return true;
@@ -1018,11 +1133,7 @@ const doLogout = async () => {
   }
 
   clearStoredAuth();
-  if (state.refreshTimer) {
-    clearInterval(state.refreshTimer);
-    state.refreshTimer = null;
-  }
-
+  stopSessionAutoRefresh();
   setLoggedOutUI(true);
   showToast('Logged out successfully.', 'success');
 };
@@ -1086,6 +1197,9 @@ const handleProfileSave = async (event) => {
   const displayName = safeText(dom.profileDisplayName?.value);
   const email = safeText(dom.profileEmail?.value).toLowerCase();
   const website = normalizeWebsiteInput(dom.profileWebsite?.value);
+  const currentEmail = safeText(state.user?.email).toLowerCase();
+  const emailChanged = email !== currentEmail;
+  const currentPassword = dom.profileEmailCurrentPassword?.value || '';
 
   if (displayName.length < 2) {
     showToast('Display name must be at least 2 characters.', 'error');
@@ -1097,11 +1211,18 @@ const handleProfileSave = async (event) => {
     return;
   }
 
+  if (emailChanged && !currentPassword) {
+    showToast('Current password is required to change your email.', 'error');
+    return;
+  }
+
   setButtonBusy(dom.profileSaveBtn, true, 'Saving...');
 
   try {
     const profilePayload = {
       displayName,
+      email,
+      currentPassword,
       location: safeText(dom.profileLocation?.value),
       website,
       timezone: safeText(dom.profileTimezone?.value),
@@ -1115,21 +1236,42 @@ const handleProfileSave = async (event) => {
     });
     syncUiWithUser(normalizeUserPayload(profileResult));
 
-    if (state.user?.email !== email) {
-      const emailResult = await apiRequest('/email', {
-        method: 'PATCH',
-        body: { email },
-      });
-      syncUiWithUser(normalizeUserPayload(emailResult));
-    }
-
+    if (dom.profileEmailCurrentPassword) dom.profileEmailCurrentPassword.value = '';
     markFormClean(dom.profileForm);
-    showToast('Profile updated.', 'success');
+    showToast(
+      profileResult.message || 'Profile updated.',
+      profileResult.verificationEmail?.sent === false ? 'warn' : 'success'
+    );
     setSyncStatus(new Date());
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
     setButtonBusy(dom.profileSaveBtn, false);
+  }
+};
+
+const handleResendVerification = async () => {
+  if (!state.user || state.user.isVerified) {
+    return;
+  }
+
+  setButtonBusy(dom.verificationResendBtn, true, 'Sending...');
+
+  try {
+    const result = await apiRequest('/resend-verification', {
+      method: 'POST',
+    });
+
+    syncUiWithUser(normalizeUserPayload(result));
+    showToast(
+      result.message || 'Verification email sent.',
+      result.verificationEmail?.sent ? 'success' : 'warn'
+    );
+    setSyncStatus(new Date());
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    setButtonBusy(dom.verificationResendBtn, false);
   }
 };
 
@@ -1190,10 +1332,7 @@ const handlePasswordSave = async (event) => {
 
     if (result.forceRelogin) {
       clearStoredAuth();
-      if (state.refreshTimer) {
-        clearInterval(state.refreshTimer);
-        state.refreshTimer = null;
-      }
+      stopSessionAutoRefresh();
       setTimeout(() => setLoggedOutUI(true), 450);
     }
   } catch (err) {
@@ -1309,11 +1448,7 @@ const handleDeleteAccount = async (event) => {
 
     if (dom.deleteForm) dom.deleteForm.reset();
     clearStoredAuth();
-    if (state.refreshTimer) {
-      clearInterval(state.refreshTimer);
-      state.refreshTimer = null;
-    }
-
+    stopSessionAutoRefresh();
     setLoggedOutUI(false);
     showToast('Account deleted.', 'success');
     openLoginPopup();
@@ -1446,6 +1581,9 @@ const setupEventHandlers = () => {
   }
 
   if (dom.profileForm) dom.profileForm.addEventListener('submit', handleProfileSave);
+  if (dom.verificationResendBtn) {
+    dom.verificationResendBtn.addEventListener('click', handleResendVerification);
+  }
   if (dom.linkedForm) dom.linkedForm.addEventListener('submit', handleLinkedSave);
   if (dom.passwordForm) dom.passwordForm.addEventListener('submit', handlePasswordSave);
   if (dom.securityForm) dom.securityForm.addEventListener('submit', handleSecuritySave);
@@ -1548,10 +1686,7 @@ const setupEventHandlers = () => {
 
         if (data.forceRelogin) {
           clearStoredAuth();
-          if (state.refreshTimer) {
-            clearInterval(state.refreshTimer);
-            state.refreshTimer = null;
-          }
+          stopSessionAutoRefresh();
           setLoggedOutUI(true);
           return;
         }
@@ -1587,20 +1722,17 @@ const setupEventHandlers = () => {
     if (!isTrustedLoginOrigin(event.origin)) return;
     if (!event.data || event.data.type !== 'LOGIN_SUCCESS') return;
 
-    if (event.data.token || event.data.accessToken) {
-      storeSession(event.data);
-    } else {
-      const refreshed = await refreshSession();
-      if (!refreshed) {
-        showToast('Signed in, but the session could not be established.', 'error');
-        return;
-      }
+    const refreshed = await refreshSession();
+    if (!refreshed.ok) {
+      showToast('Signed in, but the session could not be established.', 'error');
+      return;
     }
 
     try {
       await loadDashboardData({ silent: true });
       closeLoginPopup();
       showApp();
+      startSessionAutoRefresh();
       showToast('Signed in successfully.', 'success');
     } catch (err) {
       showToast(err.message || 'Could not load account data.', 'error');
@@ -1625,24 +1757,27 @@ const setupEventHandlers = () => {
 };
 
 const startSessionAutoRefresh = () => {
-  if (state.refreshTimer) {
-    clearInterval(state.refreshTimer);
-  }
+  stopSessionAutoRefresh();
 
   state.refreshTimer = setInterval(async () => {
     const refreshed = await refreshSession();
-    if (refreshed) {
-      storeSession(refreshed);
+    if (refreshed.ok) {
       return;
     }
 
-    if (!navigator.onLine) {
+    if (refreshed.reason === 'unauthenticated') {
+      handleUnauthenticatedState({
+        message: refreshed.message || 'Your session expired. Please sign in again.',
+      });
+      return;
+    }
+
+    if (!navigator.onLine || refreshed.reason === 'network' || refreshed.reason === 'timeout') {
       return;
     }
 
     if (!state.accessToken) {
-      clearInterval(state.refreshTimer);
-      state.refreshTimer = null;
+      stopSessionAutoRefresh();
       return;
     }
   }, REFRESH_INTERVAL_MS);

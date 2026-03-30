@@ -9,6 +9,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 
+const ApiRateLimitBucket = require('./models/ApiRateLimitBucket');
 const authRoutes = require('./routes/authRoutes');
 const grimoireRoutes = require('./routes/grimoireRoutes');
 
@@ -47,6 +48,24 @@ const isProduction = config.nodeEnv === 'production';
 const allowLocalDevOrigins =
   !isProduction || String(process.env.ALLOW_LOCALHOST_ORIGINS || 'false') === 'true';
 
+const parseTrustProxy = (value, fallback = false) => {
+  if (value === undefined) return fallback;
+
+  const normalized = String(value).trim();
+  if (!normalized) return fallback;
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+
+  const numeric = Number(normalized);
+  if (Number.isInteger(numeric) && numeric >= 0) {
+    return numeric;
+  }
+
+  return normalized;
+};
+
+const isDuplicateKeyError = (err) => err?.code === 11000;
+
 const requiredEnv = ['MONGO_URI', 'JWT_SECRET', 'REFRESH_TOKEN_SECRET'];
 const missingEnv = requiredEnv.filter((key) => !process.env[key]);
 if (missingEnv.length > 0) {
@@ -81,7 +100,7 @@ if (isProduction) {
   }
 }
 app.disable('x-powered-by');
-app.set('trust proxy', 1);
+app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY, isProduction ? 1 : false));
 
 app.use((req, res, next) => {
   const requestId = crypto.randomUUID();
@@ -107,10 +126,12 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: false, limit: '200kb' }));
 app.use(cookieParser());
 
+const normalizeOrigin = (origin) => String(origin || '').trim().replace(/\/+$/, '');
+
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;
 
-  const normalizedOrigin = String(origin).trim().replace(/\/+$/, '');
+  const normalizedOrigin = normalizeOrigin(origin);
 
   try {
     const url = new URL(normalizedOrigin);
@@ -125,6 +146,40 @@ const isAllowedOrigin = (origin) => {
   }
 
   return allowedOriginsSet.has(normalizedOrigin);
+};
+
+const getClientKey = (req) => String(req.ip || 'unknown').trim().slice(0, 80) || 'unknown';
+
+const extractBrowserOrigin = (req) => {
+  const headerOrigin = normalizeOrigin(req.headers.origin);
+  if (headerOrigin) return headerOrigin;
+
+  const referer = String(req.headers.referer || '').trim();
+  if (!referer) return '';
+
+  try {
+    return normalizeOrigin(new URL(referer).origin);
+  } catch {
+    return '';
+  }
+};
+
+const browserProtectedAuthRoutes = new Set(['/login', '/register', '/logout', '/refresh_token']);
+
+const requireTrustedBrowserOrigin = (req, res, next) => {
+  if (req.method === 'OPTIONS' || !browserProtectedAuthRoutes.has(req.path)) {
+    return next();
+  }
+
+  const origin = extractBrowserOrigin(req);
+  if (origin && isAllowedOrigin(origin)) {
+    return next();
+  }
+
+  return res.status(403).json({
+    message: 'Trusted browser origin required.',
+    requestId: req.requestId,
+  });
 };
 
 app.use(
@@ -142,47 +197,68 @@ app.use(
   })
 );
 
-const rateLimitStore = new Map();
+const consumeApiRateLimit = async (key) => {
+  const now = Date.now();
+  const windowStartMs = Math.floor(now / config.rateLimitWindowMs) * config.rateLimitWindowMs;
+  const windowStart = new Date(windowStartMs);
+  const expiresAt = new Date(windowStartMs + config.rateLimitWindowMs * 2);
+  let bucket;
 
-const getClientKey = (req) => {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    return String(forwarded).split(',')[0].trim();
+  try {
+    bucket = await ApiRateLimitBucket.findOneAndUpdate(
+      { key, windowStart },
+      {
+        $inc: { count: 1 },
+        $setOnInsert: { expiresAt },
+      },
+      {
+        new: true,
+        upsert: true,
+        setDefaultsOnInsert: true,
+      }
+    );
+  } catch (err) {
+    if (!isDuplicateKeyError(err)) {
+      throw err;
+    }
+
+    bucket = await ApiRateLimitBucket.findOneAndUpdate(
+      { key, windowStart },
+      {
+        $inc: { count: 1 },
+      },
+      {
+        new: true,
+      }
+    );
   }
-  return req.ip || 'unknown';
+
+  return {
+    allowed: bucket.count <= config.rateLimitMax,
+    retryAfterSec: Math.max(1, Math.ceil((windowStartMs + config.rateLimitWindowMs - now) / 1000)),
+  };
 };
 
-const apiRateLimiter = (req, res, next) => {
-  const now = Date.now();
-  const key = getClientKey(req);
-  const entry = rateLimitStore.get(key);
-
-  if (!entry || now - entry.start > config.rateLimitWindowMs) {
-    rateLimitStore.set(key, { start: now, count: 1 });
+const apiRateLimiter = async (req, res, next) => {
+  if (req.path === '/health') {
     return next();
   }
 
-  if (entry.count >= config.rateLimitMax) {
-    return res.status(429).json({
-      message: 'Too many requests. Please try again later.',
-      requestId: req.requestId,
-    });
-  }
-
-  entry.count += 1;
-  return next();
-};
-
-const staleBucketCleanupInterval = setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rateLimitStore.entries()) {
-    if (now - entry.start > config.rateLimitWindowMs) {
-      rateLimitStore.delete(key);
+  try {
+    const result = await consumeApiRateLimit(`api:${getClientKey(req)}`);
+    if (!result.allowed) {
+      return res.status(429).json({
+        message: 'Too many requests. Please try again later.',
+        retryAfterSec: result.retryAfterSec,
+        requestId: req.requestId,
+      });
     }
-  }
-}, Math.max(30_000, Math.floor(config.rateLimitWindowMs / 2)));
 
-staleBucketCleanupInterval.unref();
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+};
 
 mongoose.set('bufferCommands', false);
 
@@ -208,8 +284,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.use('/api', apiRateLimiter);
-
 app.use((req, res, next) => {
   if (req.path === '/api/health') {
     return next();
@@ -225,7 +299,9 @@ app.use((req, res, next) => {
   return next();
 });
 
-app.use('/api/auth', authRoutes);
+app.use('/api', apiRateLimiter);
+
+app.use('/api/auth', requireTrustedBrowserOrigin, authRoutes);
 app.use('/api/grimoire', grimoireRoutes);
 
 app.use('/api', (req, res) => {
@@ -281,8 +357,6 @@ const startServer = async () => {
 
 const shutdown = async (signal) => {
   console.log(`Received ${signal}. Shutting down gracefully...`);
-
-  clearInterval(staleBucketCleanupInterval);
 
   try {
     if (server) {

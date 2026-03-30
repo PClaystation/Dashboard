@@ -12,6 +12,7 @@ router.post('/refresh_token', ctrl.refreshToken);
 router.get('/verify-email', verifyEmailCtrl.verifyEmail);
 
 router.get('/me', auth, ctrl.me);
+router.post('/resend-verification', auth, ctrl.resendVerificationEmail);
 router.patch('/profile', auth, ctrl.updateProfile);
 router.patch('/email', auth, ctrl.updateEmail);
 router.patch('/password', auth, ctrl.updatePassword);

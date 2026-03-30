@@ -10,6 +10,14 @@ const loginEventSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const loginDayCountSchema = new mongoose.Schema(
+  {
+    day: { type: String, required: true, trim: true, maxlength: 10 },
+    count: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false }
+);
+
 const refreshSessionSchema = new mongoose.Schema(
   {
     sid: { type: String, required: true },
@@ -18,6 +26,9 @@ const refreshSessionSchema = new mongoose.Schema(
     lastUsedAt: { type: Date, default: Date.now },
     ip: { type: String, default: '' },
     userAgent: { type: String, default: '' },
+    currentRefreshTokenId: { type: String, default: '' },
+    previousRefreshTokenId: { type: String, default: '' },
+    previousRefreshTokenGraceUntil: { type: Date, default: null },
   },
   { _id: false }
 );
@@ -51,6 +62,10 @@ const userSchema = new mongoose.Schema(
     lastLoginIp: { type: String, default: '' },
     recentLogins: {
       type: [loginEventSchema],
+      default: [],
+    },
+    loginDayCounts: {
+      type: [loginDayCountSchema],
       default: [],
     },
     profile: {

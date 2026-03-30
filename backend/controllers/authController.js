@@ -1,15 +1,23 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const LoginThrottle = require('../models/LoginThrottle');
 const User = require('../models/User');
+const sendEmail = require('../utils/email');
+const { createEmailVerificationToken } = require('../utils/emailVerification');
 
 const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || '1h';
 const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
 
-const MAX_RECENT_LOGINS = 20;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_RECENT_LOGIN_EVENTS = 50;
+const RECENT_LOGIN_RESPONSE_LIMIT = 20;
 const MAX_ACTIVE_SESSIONS = 12;
 const LOGIN_RATE_WINDOW_MS = Number(process.env.LOGIN_RATE_WINDOW_MS) || 10 * 60 * 1000;
 const LOGIN_RATE_MAX_ATTEMPTS = Number(process.env.LOGIN_RATE_MAX_ATTEMPTS) || 8;
 const LOGIN_BLOCK_MS = Number(process.env.LOGIN_BLOCK_MS) || 15 * 60 * 1000;
+const REFRESH_TOKEN_REPLAY_GRACE_MS =
+  Number(process.env.REFRESH_TOKEN_REPLAY_GRACE_MS) || 15_000;
+const LOGIN_ACTIVITY_RETENTION_DAYS = 45;
 
 const LINKED_PROVIDERS = [
   'google',
@@ -41,26 +49,8 @@ const DEFAULT_APPEARANCE = {
   dashboardDensity: 'comfortable',
 };
 
-const LOGIN_FAILURE_STORE = new Map();
-
-const cleanupLoginFailureStore = () => {
-  const now = Date.now();
-  for (const [key, value] of LOGIN_FAILURE_STORE.entries()) {
-    const expiredWindow = now - value.windowStart > LOGIN_RATE_WINDOW_MS;
-    const expiredBlock = !value.blockedUntil || value.blockedUntil <= now;
-    if (expiredWindow && expiredBlock) {
-      LOGIN_FAILURE_STORE.delete(key);
-    }
-  }
-};
-
-const loginFailureCleanupInterval = setInterval(
-  cleanupLoginFailureStore,
-  Math.max(60_000, Math.floor(LOGIN_RATE_WINDOW_MS / 2))
-);
-if (typeof loginFailureCleanupInterval.unref === 'function') {
-  loginFailureCleanupInterval.unref();
-}
+const DEFAULT_EMAIL_VERIFY_PATH = '/login/verify.html';
+const EMAIL_VERIFICATION_SUBJECT = 'Verify your Continental ID email';
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
 
@@ -90,14 +80,32 @@ const isStrongPassword = (password) => {
 };
 
 const parseClientIp = (req) => {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    return sanitizeText(String(forwarded).split(',')[0], 80);
-  }
-  return sanitizeText(req.ip || 'unknown', 80);
+  return sanitizeText(req.ip || req.socket?.remoteAddress || 'unknown', 80);
 };
 
 const parseUserAgent = (req) => sanitizeText(req.headers['user-agent'] || 'Unknown browser/device', 300);
+
+const buildLoginThrottleExpiry = (now = Date.now()) =>
+  new Date(now + Math.max(LOGIN_RATE_WINDOW_MS, LOGIN_BLOCK_MS) + 60_000);
+
+const isDuplicateKeyError = (err) => err?.code === 11000;
+const createHttpError = (statusCode, message) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const buildActivityDay = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+};
+
+const parseActivityDayStart = (value) => {
+  const day = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return Number.NaN;
+  return Date.parse(`${day}T00:00:00.000Z`);
+};
 
 const getRequestOrigin = (req) => {
   const forwardedProto = sanitizeText(req.headers['x-forwarded-proto'], 20).toLowerCase();
@@ -110,6 +118,150 @@ const getRequestOrigin = (req) => {
     return new URL(`${protocol}://${host}`).origin;
   } catch {
     return '';
+  }
+};
+
+const resolveAbsoluteUrl = (value) => {
+  const raw = sanitizeText(value, 2000);
+  if (!raw) return '';
+
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return '';
+  }
+};
+
+const escapeHtml = (value) =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const resolveEmailVerificationPageUrl = (req) => {
+  const explicitVerifyUrl = resolveAbsoluteUrl(process.env.EMAIL_VERIFY_URL);
+  if (explicitVerifyUrl) {
+    return explicitVerifyUrl;
+  }
+
+  const loginPopupUrl = resolveAbsoluteUrl(
+    process.env.LOGIN_POPUP_URL || process.env.PUBLIC_LOGIN_POPUP_URL || process.env.PUBLIC_LOGIN_URL
+  );
+  if (loginPopupUrl) {
+    return new URL('verify.html', loginPopupUrl).toString();
+  }
+
+  const appBaseUrl = resolveAbsoluteUrl(
+    process.env.APP_BASE_URL || process.env.PUBLIC_APP_URL || process.env.PUBLIC_BASE_URL
+  );
+  if (appBaseUrl) {
+    return new URL(DEFAULT_EMAIL_VERIFY_PATH, appBaseUrl).toString();
+  }
+
+  if ((process.env.NODE_ENV || 'development') !== 'production') {
+    const requestOrigin = getRequestOrigin(req);
+    if (requestOrigin) {
+      return new URL(DEFAULT_EMAIL_VERIFY_PATH, requestOrigin).toString();
+    }
+  }
+
+  return '';
+};
+
+const buildEmailVerificationUrl = (req, token) => {
+  const baseUrl = resolveEmailVerificationPageUrl(req);
+  if (!baseUrl || !token) return '';
+
+  const url = new URL(baseUrl);
+  url.searchParams.set('token', token);
+  return url.toString();
+};
+
+const prepareEmailVerification = (user) => {
+  const verification = createEmailVerificationToken();
+
+  user.isVerified = false;
+  user.verificationToken = verification.hashedToken;
+  user.verificationTokenExpires = verification.expiresAt;
+
+  return verification;
+};
+
+const buildVerificationEmailContent = (user, verificationUrl, expiresAt) => {
+  const displayName = sanitizeText(user?.displayName || user?.email, 60) || 'there';
+  const expiresLabel = new Date(expiresAt).toUTCString();
+  const safeDisplayName = escapeHtml(displayName);
+  const safeVerificationUrl = escapeHtml(verificationUrl);
+  const safeExpiresLabel = escapeHtml(expiresLabel);
+
+  return {
+    subject: EMAIL_VERIFICATION_SUBJECT,
+    text: [
+      `Hi ${displayName},`,
+      '',
+      'Verify your Continental ID email address by opening this link:',
+      verificationUrl,
+      '',
+      `This link expires on ${expiresLabel}.`,
+    ].join('\n'),
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;">
+        <h1 style="margin-bottom:16px;">Verify your email</h1>
+        <p>Hi ${safeDisplayName},</p>
+        <p>Confirm your Continental ID email address to finish setting up your account.</p>
+        <p>
+          <a
+            href="${safeVerificationUrl}"
+            style="display:inline-block;padding:12px 18px;border-radius:8px;background:#111827;color:#ffffff;text-decoration:none;font-weight:700;"
+          >
+            Verify email
+          </a>
+        </p>
+        <p>If the button does not work, copy and paste this link into your browser:</p>
+        <p><a href="${safeVerificationUrl}">${safeVerificationUrl}</a></p>
+        <p>This link expires on ${safeExpiresLabel}.</p>
+      </div>
+    `,
+  };
+};
+
+const serializeVerificationDelivery = (delivery) => ({
+  sent: Boolean(delivery?.sent),
+});
+
+const getVerificationDeliveryMessage = (successMessage, failureMessage, delivery) => {
+  return delivery?.sent ? successMessage : failureMessage;
+};
+
+const sendVerificationEmail = async (user, req, verification) => {
+  if (!user?.email || !verification?.token) {
+    return { sent: false };
+  }
+
+  const verificationUrl = buildEmailVerificationUrl(req, verification.token);
+  if (!verificationUrl) {
+    console.warn('Verification email URL is not configured; skipping verification email.');
+    return { sent: false };
+  }
+
+  try {
+    const emailContent = buildVerificationEmailContent(user, verificationUrl, verification.expiresAt);
+    const response = await sendEmail({
+      to: user.email,
+      subject: emailContent.subject,
+      text: emailContent.text,
+      html: emailContent.html,
+    });
+
+    return {
+      sent: !response?.skipped,
+      id: sanitizeText(response?.id, 120),
+    };
+  } catch (err) {
+    console.error('Verification email delivery error:', err);
+    return { sent: false };
   }
 };
 
@@ -300,7 +452,7 @@ const buildCookieOptions = (req) => {
   return {
     httpOnly: true,
     secure: isSecure,
-    sameSite: isSecure && crossSite ? 'None' : 'Lax',
+    sameSite: isSecure ? (crossSite ? 'None' : 'Strict') : 'Lax',
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   };
@@ -330,12 +482,13 @@ const signToken = (user, sid) =>
     }
   );
 
-const signRefreshToken = (user, sid) =>
+const signRefreshToken = (user, sid, refreshTokenId) =>
   jwt.sign(
     {
       userId: toObjectIdString(user._id),
       tokenVersion: user.refreshTokenVersion,
       sid: sanitizeText(sid, 120) || undefined,
+      jti: sanitizeText(refreshTokenId, 120) || undefined,
     },
     process.env.REFRESH_TOKEN_SECRET,
     {
@@ -350,30 +503,73 @@ const appendRecentLogin = (user, req) => {
     ip: parseClientIp(req),
     userAgent: parseUserAgent(req),
   };
+  const cutoffMs = Date.now() - LOGIN_ACTIVITY_RETENTION_DAYS * DAY_MS;
+  const day = buildActivityDay(entry.at);
 
   user.lastLoginAt = entry.at;
   user.lastLoginIp = entry.ip;
 
-  const list = Array.isArray(user.recentLogins) ? [...user.recentLogins] : [];
+  const list = Array.isArray(user.recentLogins)
+    ? user.recentLogins.filter((item) => {
+        const timestamp = new Date(item?.at || '').getTime();
+        return !Number.isNaN(timestamp) && timestamp >= cutoffMs;
+      })
+    : [];
   list.push(entry);
 
-  user.recentLogins = list.slice(-MAX_RECENT_LOGINS);
+  user.recentLogins = list.slice(-MAX_RECENT_LOGIN_EVENTS);
+
+  const loginDayCounts = Array.isArray(user.loginDayCounts)
+    ? user.loginDayCounts
+        .map((item) => ({
+          day: buildActivityDay(item?.day),
+          count: Math.max(0, Math.trunc(Number(item?.count || 0))),
+        }))
+        .filter((item) => {
+          const dayStart = parseActivityDayStart(item.day);
+          return item.day && item.count > 0 && !Number.isNaN(dayStart) && dayStart >= cutoffMs;
+        })
+    : [];
+
+  const existingDayIndex = loginDayCounts.findIndex((item) => item.day === day);
+  if (existingDayIndex >= 0) {
+    loginDayCounts[existingDayIndex].count += 1;
+  } else if (day) {
+    loginDayCounts.push({ day, count: 1 });
+  }
+
+  loginDayCounts.sort((a, b) => a.day.localeCompare(b.day));
+  user.loginDayCounts = loginDayCounts;
 };
 
-const upsertRefreshSession = (user, req, sid = '', requestedLabel = '') => {
+const createSessionId = () => crypto.randomUUID();
+const createRefreshTokenId = () => crypto.randomUUID();
+
+const upsertRefreshSession = (user, req, sid = '', requestedLabel = '', options = {}) => {
   const sessions = Array.isArray(user.refreshSessions) ? [...user.refreshSessions] : [];
-  const sessionId = sanitizeText(sid, 120) || crypto.randomUUID();
+  const sessionId = sanitizeText(sid, 120) || createSessionId();
   const now = new Date();
   const ip = parseClientIp(req);
   const userAgent = parseUserAgent(req);
   const label = buildSessionLabel(requestedLabel, userAgent);
+  const currentRefreshTokenId = sanitizeText(options.currentRefreshTokenId, 120);
+  const previousRefreshTokenId = sanitizeText(options.previousRefreshTokenId, 120);
+  const hasCurrentRefreshTokenId = hasOwn(options, 'currentRefreshTokenId');
+  const hasPreviousRefreshTokenId = hasOwn(options, 'previousRefreshTokenId');
+  const hasPreviousRefreshTokenGraceUntil = hasOwn(options, 'previousRefreshTokenGraceUntil');
+  const previousRefreshTokenGraceUntil =
+    options.previousRefreshTokenGraceUntil instanceof Date
+      ? options.previousRefreshTokenGraceUntil
+      : options.previousRefreshTokenGraceUntil
+        ? new Date(options.previousRefreshTokenGraceUntil)
+        : null;
 
   const existingIndex = sessions.findIndex(
     (session) => sanitizeText(session.sid, 120) === sessionId
   );
 
   if (existingIndex >= 0) {
-    sessions[existingIndex] = {
+    const nextSession = {
       ...sessions[existingIndex],
       sid: sessionId,
       label: label || sessions[existingIndex].label || 'Browser session',
@@ -382,6 +578,18 @@ const upsertRefreshSession = (user, req, sid = '', requestedLabel = '') => {
       ip,
       userAgent,
     };
+
+    if (hasCurrentRefreshTokenId) {
+      nextSession.currentRefreshTokenId = currentRefreshTokenId;
+    }
+    if (hasPreviousRefreshTokenId) {
+      nextSession.previousRefreshTokenId = previousRefreshTokenId;
+    }
+    if (hasPreviousRefreshTokenGraceUntil) {
+      nextSession.previousRefreshTokenGraceUntil = previousRefreshTokenGraceUntil;
+    }
+
+    sessions[existingIndex] = nextSession;
   } else {
     sessions.push({
       sid: sessionId,
@@ -390,6 +598,9 @@ const upsertRefreshSession = (user, req, sid = '', requestedLabel = '') => {
       lastUsedAt: now,
       ip,
       userAgent,
+      currentRefreshTokenId,
+      previousRefreshTokenId,
+      previousRefreshTokenGraceUntil,
     });
   }
 
@@ -405,6 +616,68 @@ const upsertRefreshSession = (user, req, sid = '', requestedLabel = '') => {
 
   user.refreshSessions = sessions;
   return sessionId;
+};
+
+const findRefreshSession = (user, sid) => {
+  const sessionId = sanitizeText(sid, 120);
+  if (!sessionId) return null;
+
+  const sessions = Array.isArray(user.refreshSessions) ? user.refreshSessions : [];
+  return (
+    sessions.find((session) => sanitizeText(session?.sid, 120) === sessionId) || null
+  );
+};
+
+const buildTokenPair = (user, sid, refreshTokenId) => {
+  const accessToken = signToken(user, sid);
+  const refreshToken = signRefreshToken(user, sid, refreshTokenId);
+
+  return {
+    accessToken,
+    refreshToken,
+    refreshTokenId: sanitizeText(refreshTokenId, 120),
+  };
+};
+
+const createTrackedRefreshSession = (user, req, requestedLabel = '') => {
+  const sid = createSessionId();
+  const refreshTokenId = createRefreshTokenId();
+  upsertRefreshSession(user, req, sid, requestedLabel, {
+    currentRefreshTokenId: refreshTokenId,
+    previousRefreshTokenId: '',
+    previousRefreshTokenGraceUntil: null,
+  });
+
+  return {
+    sid,
+    ...buildTokenPair(user, sid, refreshTokenId),
+  };
+};
+
+const rotateRefreshSessionToken = (user, req, sid, session, requestedLabel = '') => {
+  const nextRefreshTokenId = createRefreshTokenId();
+  const currentRefreshTokenId = sanitizeText(session?.currentRefreshTokenId, 120);
+
+  upsertRefreshSession(user, req, sid, requestedLabel, {
+    currentRefreshTokenId: nextRefreshTokenId,
+    previousRefreshTokenId: currentRefreshTokenId,
+    previousRefreshTokenGraceUntil: currentRefreshTokenId
+      ? new Date(Date.now() + REFRESH_TOKEN_REPLAY_GRACE_MS)
+      : null,
+  });
+
+  return buildTokenPair(user, sid, nextRefreshTokenId);
+};
+
+const reissueCurrentRefreshSession = (user, req, sid, session, requestedLabel = '') => {
+  const currentRefreshTokenId =
+    sanitizeText(session?.currentRefreshTokenId, 120) || createRefreshTokenId();
+
+  upsertRefreshSession(user, req, sid, requestedLabel, {
+    currentRefreshTokenId,
+  });
+
+  return buildTokenPair(user, sid, currentRefreshTokenId);
 };
 
 const removeRefreshSession = (user, sid) => {
@@ -468,6 +741,10 @@ const buildUserPayload = (user) => {
   for (const provider of LINKED_PROVIDERS) {
     linkedAccounts[provider] = sanitizeText(user.linkedAccounts?.[provider] || '', 120);
   }
+  const activitySummary = buildActivitySummary(
+    Array.isArray(user.recentLogins) ? user.recentLogins : [],
+    Array.isArray(user.loginDayCounts) ? user.loginDayCounts : []
+  );
 
   return {
     userId: toObjectIdString(user._id),
@@ -479,7 +756,10 @@ const buildUserPayload = (user) => {
     updatedAt: user.updatedAt || null,
     lastLoginAt: user.lastLoginAt || null,
     lastLoginIp: user.lastLoginIp || null,
-    recentLogins: Array.isArray(user.recentLogins) ? user.recentLogins.slice(-10).reverse() : [],
+    recentLogins: Array.isArray(user.recentLogins)
+      ? user.recentLogins.slice(-RECENT_LOGIN_RESPONSE_LIMIT).reverse()
+      : [],
+    activitySummary,
     profile: {
       bio: sanitizeText(user.profile?.bio, 320),
       location: sanitizeText(user.profile?.location, 120),
@@ -562,14 +842,51 @@ const sendUserResponse = (res, status, message, user, extra = {}) => {
   });
 };
 
-const buildActivitySummary = (recentLogins = []) => {
+const buildActivitySummary = (recentLogins = [], dailyCounts = []) => {
   const now = Date.now();
-  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+  const sevenDaysAgo = now - 7 * DAY_MS;
+  const thirtyDaysAgo = now - 30 * DAY_MS;
+
+  const uniqueIps = new Set();
+
+  for (const entry of recentLogins) {
+    const timestamp = new Date(entry?.at || '').getTime();
+    if (Number.isNaN(timestamp)) continue;
+
+    const ip = sanitizeText(entry?.ip, 80);
+    if (ip) uniqueIps.add(ip);
+  }
+
+  const normalizedDailyCounts = Array.isArray(dailyCounts)
+    ? dailyCounts
+        .map((entry) => ({
+          day: buildActivityDay(entry?.day),
+          count: Math.max(0, Math.trunc(Number(entry?.count || 0))),
+        }))
+        .filter((entry) => entry.day && entry.count > 0 && !Number.isNaN(parseActivityDayStart(entry.day)))
+        .sort((a, b) => a.day.localeCompare(b.day))
+    : [];
+
+  if (normalizedDailyCounts.length > 0) {
+    let last7Days = 0;
+    let last30Days = 0;
+
+    for (const entry of normalizedDailyCounts) {
+      const dayStart = parseActivityDayStart(entry.day);
+      if (dayStart >= sevenDaysAgo) last7Days += entry.count;
+      if (dayStart >= thirtyDaysAgo) last30Days += entry.count;
+    }
+
+    return {
+      last7Days,
+      last30Days,
+      uniqueIps: uniqueIps.size,
+      recentDays: normalizedDailyCounts.slice(-7),
+    };
+  }
 
   let last7Days = 0;
   let last30Days = 0;
-  const uniqueIps = new Set();
   const byDay = new Map();
 
   for (const entry of recentLogins) {
@@ -578,9 +895,6 @@ const buildActivitySummary = (recentLogins = []) => {
 
     if (timestamp >= sevenDaysAgo) last7Days += 1;
     if (timestamp >= thirtyDaysAgo) last30Days += 1;
-
-    const ip = sanitizeText(entry?.ip, 80);
-    if (ip) uniqueIps.add(ip);
 
     const day = new Date(timestamp).toISOString().slice(0, 10);
     byDay.set(day, (byDay.get(day) || 0) + 1);
@@ -601,58 +915,131 @@ const buildActivitySummary = (recentLogins = []) => {
 
 const getUserById = (id) =>
   User.findById(id).select(
-    'email displayName isVerified verificationToken verificationTokenExpires lastLoginAt lastLoginIp recentLogins profile linkedAccounts preferences security refreshTokenVersion refreshSessions createdAt updatedAt password'
+    'email displayName isVerified verificationToken verificationTokenExpires lastLoginAt lastLoginIp recentLogins loginDayCounts profile linkedAccounts preferences security refreshTokenVersion refreshSessions createdAt updatedAt password'
   );
 
 const loginRateKey = (email, req) => `${normalizeEmail(email)}|${parseClientIp(req)}`;
 
-const getLoginThrottleState = (key) => {
+const getLoginThrottleState = async (key) => {
   const now = Date.now();
-  const entry = LOGIN_FAILURE_STORE.get(key);
+  const entry = await LoginThrottle.findOne({ key }).select('windowStartedAt blockedUntil');
 
   if (!entry) {
     return { blocked: false, retryAfterSec: 0 };
   }
 
-  if (entry.blockedUntil && entry.blockedUntil > now) {
+  const blockedUntil = entry.blockedUntil ? new Date(entry.blockedUntil).getTime() : 0;
+  if (blockedUntil > now) {
     return {
       blocked: true,
-      retryAfterSec: Math.max(1, Math.ceil((entry.blockedUntil - now) / 1000)),
+      retryAfterSec: Math.max(1, Math.ceil((blockedUntil - now) / 1000)),
     };
   }
 
-  if (now - entry.windowStart > LOGIN_RATE_WINDOW_MS) {
-    LOGIN_FAILURE_STORE.delete(key);
+  const windowStartedAt = entry.windowStartedAt ? new Date(entry.windowStartedAt).getTime() : 0;
+  if (!windowStartedAt || now - windowStartedAt > LOGIN_RATE_WINDOW_MS) {
+    await LoginThrottle.deleteOne({ key });
   }
 
   return { blocked: false, retryAfterSec: 0 };
 };
 
-const registerLoginFailure = (key) => {
+const registerLoginFailure = async (key) => {
   const now = Date.now();
-  const current = LOGIN_FAILURE_STORE.get(key);
+  const current = await LoginThrottle.findOne({ key });
 
-  if (!current || now - current.windowStart > LOGIN_RATE_WINDOW_MS) {
-    LOGIN_FAILURE_STORE.set(key, {
-      windowStart: now,
-      count: 1,
-      blockedUntil: 0,
-    });
+  if (
+    !current ||
+    !current.windowStartedAt ||
+    now - new Date(current.windowStartedAt).getTime() > LOGIN_RATE_WINDOW_MS
+  ) {
+    try {
+      await LoginThrottle.findOneAndUpdate(
+        { key },
+        {
+          key,
+          windowStartedAt: new Date(now),
+          count: 1,
+          blockedUntil: null,
+          expiresAt: buildLoginThrottleExpiry(now),
+        },
+        {
+          new: true,
+          upsert: true,
+          setDefaultsOnInsert: true,
+        }
+      );
+    } catch (err) {
+      if (!isDuplicateKeyError(err)) {
+        throw err;
+      }
+
+      const retry = await LoginThrottle.findOne({ key });
+      if (!retry) {
+        throw err;
+      }
+
+      retry.count += 1;
+      retry.expiresAt = buildLoginThrottleExpiry(now);
+      if (retry.count >= LOGIN_RATE_MAX_ATTEMPTS) {
+        retry.blockedUntil = new Date(now + LOGIN_BLOCK_MS);
+      }
+      await retry.save();
+    }
     return;
   }
 
   current.count += 1;
+  current.expiresAt = buildLoginThrottleExpiry(now);
 
   if (current.count >= LOGIN_RATE_MAX_ATTEMPTS) {
-    current.blockedUntil = now + LOGIN_BLOCK_MS;
+    current.blockedUntil = new Date(now + LOGIN_BLOCK_MS);
   }
+
+  await current.save();
 };
 
-const clearLoginFailures = (key) => {
-  LOGIN_FAILURE_STORE.delete(key);
+const clearLoginFailures = async (key) => {
+  await LoginThrottle.deleteOne({ key });
 };
 
-const refreshSessionFromCookie = async (req, res) => {
+const applyEmailChange = async (user, email, currentPassword) => {
+  const nextEmail = normalizeEmail(email);
+  const currentEmail = normalizeEmail(user?.email);
+
+  if (!nextEmail || nextEmail === currentEmail) {
+    return false;
+  }
+
+  if (!isValidEmail(nextEmail)) {
+    throw createHttpError(400, 'Please provide a valid email address.');
+  }
+
+  if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
+    throw createHttpError(400, 'Current password is required to change your email.');
+  }
+
+  const matches = await user.comparePassword(currentPassword);
+  if (!matches) {
+    throw createHttpError(400, 'Current password is incorrect.');
+  }
+
+  const existing = await User.findOne({ email: nextEmail }).select('_id');
+  if (existing && toObjectIdString(existing._id) !== toObjectIdString(user._id)) {
+    throw createHttpError(409, 'Email is already in use.');
+  }
+
+  user.email = nextEmail;
+  return true;
+};
+
+const revokeRefreshSessionForReplay = async (user, sid) => {
+  if (!user || !sid) return;
+  if (!removeRefreshSession(user, sid)) return;
+  await user.save();
+};
+
+const resolveRefreshSessionFromCookie = async (req, res) => {
   const token = req.cookies.refreshToken;
   if (!token) return null;
 
@@ -678,24 +1065,63 @@ const refreshSessionFromCookie = async (req, res) => {
   }
 
   const sidFromToken = sanitizeText(payload.sid, 120);
+  const refreshTokenId = sanitizeText(payload.jti, 120);
 
   if (sidFromToken) {
-    const hasSession = Array.isArray(user.refreshSessions)
-      ? user.refreshSessions.some((session) => sanitizeText(session.sid, 120) === sidFromToken)
-      : false;
-
-    if (!hasSession) {
+    const session = findRefreshSession(user, sidFromToken);
+    if (!session) {
       clearRefreshCookie(res, req);
       return null;
     }
 
-    const touchedSid = upsertRefreshSession(user, req, sidFromToken);
-    return { user, sid: touchedSid };
+    const currentRefreshTokenId = sanitizeText(session.currentRefreshTokenId, 120);
+    const previousRefreshTokenId = sanitizeText(session.previousRefreshTokenId, 120);
+    const previousRefreshTokenGraceUntil = session.previousRefreshTokenGraceUntil
+      ? new Date(session.previousRefreshTokenGraceUntil).getTime()
+      : 0;
+
+    if (currentRefreshTokenId) {
+      if (refreshTokenId === currentRefreshTokenId) {
+        return { user, sid: sidFromToken, session, tokenState: 'current' };
+      }
+
+      if (
+        refreshTokenId &&
+        previousRefreshTokenId &&
+        refreshTokenId === previousRefreshTokenId &&
+        previousRefreshTokenGraceUntil > Date.now()
+      ) {
+        return { user, sid: sidFromToken, session, tokenState: 'grace' };
+      }
+
+      if (refreshTokenId) {
+        await revokeRefreshSessionForReplay(user, sidFromToken);
+        clearRefreshCookie(res, req);
+        return { replayDetected: true };
+      }
+
+      clearRefreshCookie(res, req);
+      return null;
+    }
+
+    if (refreshTokenId) {
+      upsertRefreshSession(user, req, sidFromToken, '', {
+        currentRefreshTokenId: refreshTokenId,
+        previousRefreshTokenId: '',
+        previousRefreshTokenGraceUntil: null,
+      });
+      return {
+        user,
+        sid: sidFromToken,
+        session: findRefreshSession(user, sidFromToken),
+        tokenState: 'current',
+      };
+    }
+
+    return { user, sid: sidFromToken, session, tokenState: 'legacy' };
   }
 
-  // Legacy refresh token fallback: issue a tracked session immediately.
-  const migratedSid = upsertRefreshSession(user, req, '');
-  return { user, sid: migratedSid };
+  return { user, sid: '', session: null, tokenState: 'legacy' };
 };
 
 exports.register = async (req, res) => {
@@ -728,18 +1154,29 @@ exports.register = async (req, res) => {
       preferences: normalizePreferences(req.body?.preferences || {}, {}),
     });
 
+    const verification = prepareEmailVerification(user);
     appendRecentLogin(user, req);
-    const sid = upsertRefreshSession(user, req, '', req.body?.deviceLabel);
+    const sessionTokens = createTrackedRefreshSession(user, req, req.body?.deviceLabel);
     await user.save();
+    const verificationDelivery = await sendVerificationEmail(user, req, verification);
 
-    const accessToken = signToken(user, sid);
-    const refreshToken = signRefreshToken(user, sid);
-    res.cookie('refreshToken', refreshToken, buildCookieOptions(req));
+    res.cookie('refreshToken', sessionTokens.refreshToken, buildCookieOptions(req));
 
-    return sendUserResponse(res, 201, 'Registration successful.', user, {
-      token: accessToken,
-      accessToken,
-    });
+    return sendUserResponse(
+      res,
+      201,
+      getVerificationDeliveryMessage(
+        'Registration successful. Check your inbox to verify your email.',
+        'Registration successful, but the verification email could not be sent right now.',
+        verificationDelivery
+      ),
+      user,
+      {
+        verificationEmail: serializeVerificationDelivery(verificationDelivery),
+        token: sessionTokens.accessToken,
+        accessToken: sessionTokens.accessToken,
+      }
+    );
   } catch (err) {
     console.error('Register error:', err);
     return res.status(500).json({ message: 'Registration failed.' });
@@ -751,7 +1188,7 @@ exports.login = async (req, res) => {
   const password = req.body?.password;
 
   const rateKey = loginRateKey(email, req);
-  const throttle = getLoginThrottleState(rateKey);
+  const throttle = await getLoginThrottleState(rateKey);
   if (throttle.blocked) {
     return res.status(429).json({
       message: `Too many failed login attempts. Try again in ${throttle.retryAfterSec} seconds.`,
@@ -761,36 +1198,33 @@ exports.login = async (req, res) => {
 
   try {
     if (!isValidEmail(email) || typeof password !== 'string') {
-      registerLoginFailure(rateKey);
+      await registerLoginFailure(rateKey);
       return res.status(400).json({ message: 'Invalid credentials.' });
     }
 
     const user = await User.findOne({ email });
     if (!user) {
-      registerLoginFailure(rateKey);
+      await registerLoginFailure(rateKey);
       return res.status(400).json({ message: 'Invalid credentials.' });
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      registerLoginFailure(rateKey);
+      await registerLoginFailure(rateKey);
       return res.status(400).json({ message: 'Invalid credentials.' });
     }
 
-    clearLoginFailures(rateKey);
+    await clearLoginFailures(rateKey);
 
     appendRecentLogin(user, req);
-    const sid = upsertRefreshSession(user, req, '', req.body?.deviceLabel);
+    const sessionTokens = createTrackedRefreshSession(user, req, req.body?.deviceLabel);
     await user.save();
 
-    const accessToken = signToken(user, sid);
-    const refreshToken = signRefreshToken(user, sid);
-
-    res.cookie('refreshToken', refreshToken, buildCookieOptions(req));
+    res.cookie('refreshToken', sessionTokens.refreshToken, buildCookieOptions(req));
 
     return sendUserResponse(res, 200, 'Login successful.', user, {
-      token: accessToken,
-      accessToken,
+      token: sessionTokens.accessToken,
+      accessToken: sessionTokens.accessToken,
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -800,7 +1234,7 @@ exports.login = async (req, res) => {
 
 exports.logout = async (req, res) => {
   try {
-    const session = await refreshSessionFromCookie(req, res);
+    const session = await resolveRefreshSessionFromCookie(req, res);
     if (session?.user) {
       if (session.sid) {
         removeRefreshSession(session.user, session.sid);
@@ -836,22 +1270,29 @@ exports.me = async (req, res) => {
 
 exports.refreshToken = async (req, res) => {
   try {
-    const session = await refreshSessionFromCookie(req, res);
-    if (!session?.user) {
+    const session = await resolveRefreshSessionFromCookie(req, res);
+    if (!session?.user || session.replayDetected) {
       clearRefreshCookie(res, req);
       return res.status(200).json({ authenticated: false, message: 'No active refresh session.' });
     }
 
+    let tokenPair;
+    if (session.tokenState === 'grace') {
+      tokenPair = reissueCurrentRefreshSession(session.user, req, session.sid, session.session);
+    } else if (session.sid) {
+      tokenPair = rotateRefreshSessionToken(session.user, req, session.sid, session.session);
+    } else {
+      tokenPair = createTrackedRefreshSession(session.user, req);
+    }
+
     await session.user.save();
 
-    const newAccessToken = signToken(session.user, session.sid);
-    const rotatedRefreshToken = signRefreshToken(session.user, session.sid);
-    res.cookie('refreshToken', rotatedRefreshToken, buildCookieOptions(req));
+    res.cookie('refreshToken', tokenPair.refreshToken, buildCookieOptions(req));
 
     return res.json({
       message: 'Session refreshed.',
-      token: newAccessToken,
-      accessToken: newAccessToken,
+      token: tokenPair.accessToken,
+      accessToken: tokenPair.accessToken,
       userId: toObjectIdString(session.user._id),
       continentalId: toObjectIdString(session.user._id),
     });
@@ -864,12 +1305,15 @@ exports.refreshToken = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
   const incoming = req.body || {};
+  const currentPassword = req.body?.currentPassword || '';
 
   try {
     const user = await getUserById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
+
+    let verification = null;
 
     if (hasOwn(incoming, 'displayName')) {
       const displayName = sanitizeText(incoming.displayName, 60);
@@ -879,11 +1323,38 @@ exports.updateProfile = async (req, res) => {
       user.displayName = displayName;
     }
 
+    if (hasOwn(incoming, 'email')) {
+      const emailChanged = await applyEmailChange(user, incoming.email, currentPassword);
+      if (emailChanged) {
+        verification = prepareEmailVerification(user);
+      }
+    }
+
     user.profile = normalizeProfile(incoming, user.profile || {});
     await user.save();
 
-    return sendUserResponse(res, 200, 'Profile updated.', user);
+    const verificationDelivery = verification
+      ? await sendVerificationEmail(user, req, verification)
+      : null;
+
+    const message = verification
+      ? getVerificationDeliveryMessage(
+          'Profile updated. Please verify your new email address.',
+          'Profile updated, but the verification email could not be sent right now.',
+          verificationDelivery
+        )
+      : 'Profile updated.';
+
+    return sendUserResponse(res, 200, message, user, {
+      verificationEmail: verification ? serializeVerificationDelivery(verificationDelivery) : undefined,
+    });
   } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    if (isDuplicateKeyError(err)) {
+      return res.status(409).json({ message: 'Email is already in use.' });
+    }
     console.error('Update profile error:', err);
     return res.status(500).json({ message: 'Failed to update profile.' });
   }
@@ -891,10 +1362,7 @@ exports.updateProfile = async (req, res) => {
 
 exports.updateEmail = async (req, res) => {
   const email = normalizeEmail(req.body?.email);
-
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ message: 'Please provide a valid email address.' });
-  }
+  const currentPassword = req.body?.currentPassword || '';
 
   try {
     const user = await getUserById(req.user.id);
@@ -902,18 +1370,68 @@ exports.updateEmail = async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    const existing = await User.findOne({ email }).select('_id');
-    if (existing && toObjectIdString(existing._id) !== toObjectIdString(user._id)) {
-      return res.status(409).json({ message: 'Email is already in use.' });
+    const emailChanged = await applyEmailChange(user, email, currentPassword);
+    let verification = null;
+    if (emailChanged) {
+      verification = prepareEmailVerification(user);
     }
 
-    user.email = email;
     await user.save();
 
-    return sendUserResponse(res, 200, 'Email updated.', user);
+    const verificationDelivery = verification
+      ? await sendVerificationEmail(user, req, verification)
+      : null;
+
+    const message = verification
+      ? getVerificationDeliveryMessage(
+          'Email updated. Please verify your new email address.',
+          'Email updated, but the verification email could not be sent right now.',
+          verificationDelivery
+        )
+      : 'Email updated.';
+
+    return sendUserResponse(res, 200, message, user, {
+      verificationEmail: verification ? serializeVerificationDelivery(verificationDelivery) : undefined,
+    });
   } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    if (isDuplicateKeyError(err)) {
+      return res.status(409).json({ message: 'Email is already in use.' });
+    }
     console.error('Update email error:', err);
     return res.status(500).json({ message: 'Failed to update email.' });
+  }
+};
+
+exports.resendVerificationEmail = async (req, res) => {
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ message: 'Email is already verified.' });
+    }
+
+    const verification = prepareEmailVerification(user);
+    await user.save();
+
+    const verificationDelivery = await sendVerificationEmail(user, req, verification);
+    const message = getVerificationDeliveryMessage(
+      'Verification email sent.',
+      'Verification email could not be sent right now.',
+      verificationDelivery
+    );
+
+    return sendUserResponse(res, 200, message, user, {
+      verificationEmail: serializeVerificationDelivery(verificationDelivery),
+    });
+  } catch (err) {
+    console.error('Resend verification email error:', err);
+    return res.status(500).json({ message: 'Failed to resend verification email.' });
   }
 };
 
@@ -999,7 +1517,7 @@ exports.getActivity = async (req, res) => {
       recentLogins: payload.recentLogins,
       lastLoginAt: payload.lastLoginAt,
       lastLoginIp: payload.lastLoginIp,
-      summary: buildActivitySummary(Array.isArray(user.recentLogins) ? user.recentLogins : []),
+      summary: payload.activitySummary,
     });
   } catch (err) {
     console.error('Get activity error:', err);

@@ -177,9 +177,41 @@
       'https://pclaystation.github.io',
       'https://mpmc.ddns.net',
     ]);
+    const TRUSTED_API_ORIGINS = new Set([
+      'https://dashboard.continental-hub.com',
+      'https://grimoire.continental-hub.com',
+      'https://login.continental-hub.com',
+      'https://mpmc.ddns.net',
+    ]);
     const params = new URLSearchParams(window.location.search);
 
     const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
+
+    const isTrustedApiOrigin = (origin) => {
+      if (!origin) return false;
+
+      try {
+        const parsed = new URL(origin);
+        if (LOCAL_HOSTS.has(parsed.hostname)) {
+          return true;
+        }
+
+        return TRUSTED_API_ORIGINS.has(parsed.origin);
+      } catch {
+        return false;
+      }
+    };
+
+    const resolveTrustedApiBaseUrl = (value) => {
+      if (!value) return '';
+
+      try {
+        const resolved = new URL(value, window.location.origin);
+        return isTrustedApiOrigin(resolved.origin) ? trimTrailingSlash(resolved.origin) : '';
+      } catch {
+        return '';
+      }
+    };
 
     const getDefaultApiBaseUrl = () => {
       if (LOCAL_HOSTS.has(window.location.hostname)) {
@@ -196,9 +228,10 @@
       return window.location.origin;
     };
 
-    const API_BASE_URL = trimTrailingSlash(
-      params.get('apiBaseUrl') || window.__API_BASE_URL__ || getDefaultApiBaseUrl()
-    );
+    const API_BASE_URL =
+      resolveTrustedApiBaseUrl(params.get('apiBaseUrl')) ||
+      resolveTrustedApiBaseUrl(window.__API_BASE_URL__) ||
+      trimTrailingSlash(getDefaultApiBaseUrl());
     const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
 
     const statusDiv = document.getElementById('status');

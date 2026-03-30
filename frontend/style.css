@@ -616,6 +616,24 @@ a:focus-visible {
   font-size: 0.86rem;
 }
 
+.verification-panel {
+  margin-bottom: 1rem;
+  padding: 0.82rem 0.9rem;
+  border: 1px solid rgba(255, 194, 131, 0.42);
+  border-radius: 12px;
+  background: rgba(255, 194, 131, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.verification-panel .helper-line {
+  margin: 0;
+  color: var(--text);
+}
+
 .activity-toolbar {
   display: flex;
   gap: 0.5rem;
@@ -897,12 +915,14 @@ html[data-reduced-motion='true'] *::after {
   }
 
   .activity-toolbar,
-  .session-actions {
+  .session-actions,
+  .verification-panel {
     flex-direction: column;
   }
 
   .activity-toolbar button,
-  .session-actions button {
+  .session-actions button,
+  .verification-panel button {
     width: 100%;
   }
 }
