@@ -80,6 +80,7 @@ For the current hosted static domains (`dashboard.continental-hub.com`, `login.c
 - In your GitHub repo settings, set Pages to **GitHub Actions** as the source.
 - If your API is on a different origin, set backend `ALLOWED_ORIGINS` to include your Pages/custom domain.
 - If you proxy the API through the same public host on `443`, leave the frontend on its default same-origin `/api/*` setup instead of pointing browsers at `:5000`.
+- To mirror the auth pages into the sibling `Login` repo, run `bash scripts/sync-login-popup.sh`.
 
 ## Key API Endpoints
 

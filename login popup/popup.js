@@ -12,10 +12,102 @@ const HOSTED_API_BASE_URL =
 const API_BASE_STORAGE_KEY = 'continental.authApiBaseUrl';
 const USERNAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const BLOCKED_NAME_FRAGMENTS = [
+  'anal',
+  'anus',
+  'arse',
+  'asshole',
+  'bastard',
+  'beaner',
+  'bitch',
+  'bollock',
+  'boner',
+  'boob',
+  'buttplug',
+  'chink',
+  'clit',
+  'cock',
+  'coon',
+  'crackhead',
+  'cum',
+  'cuck',
+  'cunt',
+  'deepthroat',
+  'dick',
+  'dildo',
+  'dyke',
+  'ejaculate',
+  'fag',
+  'faggot',
+  'felch',
+  'fuck',
+  'gangbang',
+  'genital',
+  'gook',
+  'handjob',
+  'hentai',
+  'hitler',
+  'jackoff',
+  'jizz',
+  'kike',
+  'kkk',
+  'nazi',
+  'nigga',
+  'nigger',
+  'nutsack',
+  'orgasm',
+  'penis',
+  'piss',
+  'porn',
+  'prick',
+  'pussy',
+  'queef',
+  'rapist',
+  'rape',
+  'retard',
+  'rimjob',
+  'scrotum',
+  'sex',
+  'shit',
+  'slut',
+  'spic',
+  'tit',
+  'tranny',
+  'twat',
+  'vagina',
+  'wank',
+  'whore',
+];
 const params = new URLSearchParams(window.location.search);
 
 const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
 const safeText = (value) => String(value || '').trim();
+const normalizeForModeration = (value) =>
+  safeText(value)
+    .toLowerCase()
+    .replace(/[0134@5$7+8]/g, (char) => {
+      if (char === '0') return 'o';
+      if (char === '1') return 'i';
+      if (char === '3') return 'e';
+      if (char === '4' || char === '@') return 'a';
+      if (char === '5' || char === '$') return 's';
+      if (char === '7' || char === '+') return 't';
+      if (char === '8') return 'b';
+      return char;
+    })
+    .replace(/[^a-z0-9]+/g, '')
+    .replace(/(.)\1{2,}/g, '$1');
+const buildModerationVariants = (value) => {
+  const normalized = normalizeForModeration(value);
+  if (!normalized) return [];
+
+  const collapsedPairs = normalized.replace(/(.)\1+/g, '$1');
+  return Array.from(new Set([normalized, collapsedPairs])).filter(Boolean);
+};
+const containsBlockedNameTerm = (value) => {
+  const variants = buildModerationVariants(value);
+  return variants.some((variant) => BLOCKED_NAME_FRAGMENTS.some((fragment) => variant.includes(fragment)));
+};
 const HOSTED_APP_HOSTS = new Set(
   [...TRUSTED_APP_ORIGINS]
     .map((origin) => {
@@ -445,10 +537,22 @@ const validateRegisterForm = () => {
       'Usernames must start and end with letters or numbers and may include dots, hyphens, or underscores.'
     );
     valid = false;
+  } else if (containsBlockedNameTerm(username)) {
+    setFieldError(
+      registerUsernameInput,
+      'Choose a different username. Usernames cannot contain offensive or hateful language.'
+    );
+    valid = false;
   }
 
   if (displayName.length > 60) {
     setFieldError(registerDisplayNameInput, 'Display name must be 60 characters or fewer.');
+    valid = false;
+  } else if (displayName && containsBlockedNameTerm(displayName)) {
+    setFieldError(
+      registerDisplayNameInput,
+      'Choose a different display name. Display names cannot contain offensive or hateful language.'
+    );
     valid = false;
   }
 

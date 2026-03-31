@@ -26,6 +26,101 @@ const AVATAR_UPLOAD_MAX_FILE_BYTES = 5 * 1024 * 1024;
 const AVATAR_UPLOAD_MAX_DIMENSION = 256;
 const AVATAR_DATA_URL_MAX_LENGTH = 350000;
 const AVATAR_ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const BLOCKED_NAME_FRAGMENTS = [
+  'anal',
+  'anus',
+  'arse',
+  'asshole',
+  'bastard',
+  'beaner',
+  'bitch',
+  'bollock',
+  'boner',
+  'boob',
+  'buttplug',
+  'chink',
+  'clit',
+  'cock',
+  'coon',
+  'crackhead',
+  'cum',
+  'cuck',
+  'cunt',
+  'deepthroat',
+  'dick',
+  'dildo',
+  'dyke',
+  'ejaculate',
+  'fag',
+  'faggot',
+  'felch',
+  'fuck',
+  'gangbang',
+  'genital',
+  'gook',
+  'handjob',
+  'hentai',
+  'hitler',
+  'jackoff',
+  'jizz',
+  'kike',
+  'kkk',
+  'nazi',
+  'nigga',
+  'nigger',
+  'nutsack',
+  'orgasm',
+  'penis',
+  'piss',
+  'porn',
+  'prick',
+  'pussy',
+  'queef',
+  'rapist',
+  'rape',
+  'retard',
+  'rimjob',
+  'scrotum',
+  'sex',
+  'shit',
+  'slut',
+  'spic',
+  'tit',
+  'tranny',
+  'twat',
+  'vagina',
+  'wank',
+  'whore',
+];
+
+const normalizeForModeration = (value) =>
+  safeText(value)
+    .toLowerCase()
+    .replace(/[0134@5$7+8]/g, (char) => {
+      if (char === '0') return 'o';
+      if (char === '1') return 'i';
+      if (char === '3') return 'e';
+      if (char === '4' || char === '@') return 'a';
+      if (char === '5' || char === '$') return 's';
+      if (char === '7' || char === '+') return 't';
+      if (char === '8') return 'b';
+      return char;
+    })
+    .replace(/[^a-z0-9]+/g, '')
+    .replace(/(.)\1{2,}/g, '$1');
+
+const buildModerationVariants = (value) => {
+  const normalized = normalizeForModeration(value);
+  if (!normalized) return [];
+
+  const collapsedPairs = normalized.replace(/(.)\1+/g, '$1');
+  return Array.from(new Set([normalized, collapsedPairs])).filter(Boolean);
+};
+
+const containsBlockedNameTerm = (value) => {
+  const variants = buildModerationVariants(value);
+  return variants.some((variant) => BLOCKED_NAME_FRAGMENTS.some((fragment) => variant.includes(fragment)));
+};
 
 const dom = {
   loadingScreen: document.getElementById('loading-screen'),
@@ -107,6 +202,19 @@ const dom = {
   publicProfileLinkHelper: document.getElementById('public-profile-link-helper'),
   copyPublicProfileLinkBtn: document.getElementById('copy-public-profile-btn'),
   openPublicProfileBtn: document.getElementById('open-public-profile-btn'),
+  profilePreviewVisibility: document.getElementById('profile-preview-visibility'),
+  profilePreviewAvatar: document.getElementById('profile-preview-avatar'),
+  profilePreviewHandle: document.getElementById('profile-preview-handle'),
+  profilePreviewName: document.getElementById('profile-preview-name'),
+  profilePreviewHeadline: document.getElementById('profile-preview-headline'),
+  profilePreviewSummary: document.getElementById('profile-preview-summary'),
+  profilePreviewMeta: document.getElementById('profile-preview-meta'),
+  profilePreviewVisibleCount: document.getElementById('profile-preview-visible-count'),
+  profilePreviewLinkedCount: document.getElementById('profile-preview-linked-count'),
+  profilePreviewMemberSince: document.getElementById('profile-preview-member-since'),
+  profilePreviewFocus: document.getElementById('profile-preview-focus'),
+  profilePreviewSections: document.getElementById('profile-preview-sections'),
+  profilePreviewNote: document.getElementById('profile-preview-note'),
   profileProgressBar: document.getElementById('profile-progress-bar'),
   profileProgressBars: Array.from(document.querySelectorAll('.profile-progress-fill')),
   profileProgressLabel: document.getElementById('profile-progress-label'),
@@ -137,6 +245,15 @@ const dom = {
   securitySaveBtn: document.getElementById('security-save-btn'),
   loginAlertsToggle: document.getElementById('login-alerts-toggle'),
   sessionLimitNote: document.getElementById('session-limit-note'),
+  securityPostureChip: document.getElementById('security-posture-chip'),
+  securityScoreRing: document.getElementById('security-score-ring'),
+  securityScoreNumber: document.getElementById('security-score-number'),
+  securityScoreSummary: document.getElementById('security-score-summary'),
+  securityMetricSessions: document.getElementById('security-metric-sessions'),
+  securityMetricDevices: document.getElementById('security-metric-devices'),
+  securityMetricTrustedDevices: document.getElementById('security-metric-trusted-devices'),
+  securityMetricNewDevices: document.getElementById('security-metric-new-devices'),
+  securityBreakdown: document.getElementById('security-breakdown'),
   mfaStatusCopy: document.getElementById('mfa-status-copy'),
   mfaSetupBtn: document.getElementById('mfa-setup-btn'),
   mfaDisableBtn: document.getElementById('mfa-disable-btn'),
@@ -202,6 +319,12 @@ const dom = {
   activityRefreshBtn: document.getElementById('activity-refresh-btn'),
   activityExportBtn: document.getElementById('activity-export-btn'),
   activityBars: document.getElementById('activity-bars'),
+  activityTrendChart: document.getElementById('activity-trend-chart'),
+  activityTrendSummary: document.getElementById('activity-trend-summary'),
+  activityMixRing: document.getElementById('activity-mix-ring'),
+  activityMixTotal: document.getElementById('activity-mix-total'),
+  activityMixLegend: document.getElementById('activity-mix-legend'),
+  activityHighlightGrid: document.getElementById('activity-highlight-grid'),
 
   deleteForm: document.getElementById('delete-form'),
   deleteAccountBtn: document.getElementById('delete-account-btn'),
@@ -221,6 +344,7 @@ const dom = {
 
 const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
 const safeText = (value) => String(value || '').trim();
+const readDraftInputValue = (element, fallback = '') => (element ? element.value : fallback);
 const normalizeApiBaseUrl = (value) => {
   if (!value) return '';
 
@@ -474,6 +598,64 @@ const formatDate = (value) => {
   return date.toLocaleString();
 };
 
+const formatDateCompact = (value, options = {}) => {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return 'Unavailable';
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...options,
+  });
+};
+
+const getLocalDayKey = (value) => {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatTimelineDayHeading = (value) => {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return 'Earlier';
+
+  const now = new Date();
+  const todayKey = getLocalDayKey(now);
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const yesterdayKey = getLocalDayKey(yesterday);
+  const dayKey = getLocalDayKey(date);
+
+  if (dayKey === todayKey) return 'Today';
+  if (dayKey === yesterdayKey) return 'Yesterday';
+
+  return date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const formatTrendLabel = (value) => {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+  });
+};
+
+const getInitialsFromSource = (source) => {
+  const parts = safeText(source)
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (!parts.length) return 'CI';
+  return parts.map((part) => part[0].toUpperCase()).join('');
+};
+
 const isDashboardTipsEnabled = () => localStorage.getItem('dashboardTipsEnabled') !== 'false';
 const persistServicePreferences = () => {
   writeStoredArray(SERVICE_FAVORITES_STORAGE_KEY, Array.from(state.favoriteServices).sort());
@@ -507,14 +689,7 @@ const getIdentityName = (user = state.user) =>
   safeText(user?.displayName || getUsername(user) || user?.email || user?.continentalId || user?.userId || 'Continental User');
 
 const getIdentityInitials = (user = state.user) => {
-  const source = getIdentityName(user);
-  const parts = source
-    .split(/[\s@._-]+/)
-    .filter(Boolean)
-    .slice(0, 2);
-
-  if (!parts.length) return 'CI';
-  return parts.map((part) => part[0].toUpperCase()).join('');
+  return getInitialsFromSource(getIdentityName(user));
 };
 
 const getFirstName = (user = state.user) => {
@@ -611,6 +786,79 @@ const setProfileProgress = (completion) => {
   if (dom.summaryCompletion) dom.summaryCompletion.textContent = percentage;
 };
 
+const getAccountHealthContributors = (user = state.user) => {
+  if (!user) return [];
+  const completion = Number(user.profile?.completion || 0);
+  const activeSessions = Math.max(1, getActiveSessionCount());
+  const sessionScore = activeSessions <= 1 ? 10 : Math.max(0, 10 - (activeSessions - 1) * 3);
+
+  return [
+    {
+      title: 'Profile completion',
+      detail: `${completion}% of the profile is filled in.`,
+      points: Math.min(45, Math.round(completion * 0.45)),
+      max: 45,
+    },
+    {
+      title: 'Verified email',
+      detail: user.isVerified ? 'Recovery and trust signals are stronger.' : 'Verification is still pending.',
+      points: user.isVerified ? 20 : 0,
+      max: 20,
+    },
+    {
+      title: 'Login alerts',
+      detail: user.security?.loginAlerts ? 'Suspicious sign-in alerts are enabled.' : 'Alerts are currently off.',
+      points: user.security?.loginAlerts ? 15 : 0,
+      max: 15,
+    },
+    {
+      title: 'Multi-factor authentication',
+      detail: user.security?.mfa?.enabled ? 'Authenticator-based sign-in is active.' : 'Password-only sign-in is still allowed.',
+      points: user.security?.mfa?.enabled ? 18 : 0,
+      max: 18,
+    },
+    {
+      title: 'Claimed username',
+      detail: getUsername(user) ? `${getUserHandle(user)} is reserved.` : 'A username is still missing.',
+      points: getUsername(user) ? 6 : 0,
+      max: 6,
+    },
+    {
+      title: 'Profile photo',
+      detail: getAvatarValue(user) ? 'Avatar helps recognize the account quickly.' : 'No avatar is set yet.',
+      points: getAvatarValue(user) ? 5 : 0,
+      max: 5,
+    },
+    {
+      title: 'Headline',
+      detail: safeText(user.profile?.headline) ? 'Public identity tagline is set.' : 'Add a short headline.',
+      points: safeText(user.profile?.headline) ? 4 : 0,
+      max: 4,
+    },
+    {
+      title: 'Timezone',
+      detail: safeText(user.profile?.timezone) ? 'Timezone helps support account scheduling and context.' : 'Timezone is still missing.',
+      points: safeText(user.profile?.timezone) ? 8 : 0,
+      max: 8,
+    },
+    {
+      title: 'Recovery website',
+      detail: safeText(user.profile?.website) ? 'A website or portfolio is on file.' : 'No website or portfolio is listed.',
+      points: safeText(user.profile?.website) ? 5 : 0,
+      max: 5,
+    },
+    {
+      title: 'Session hygiene',
+      detail:
+        activeSessions <= 1
+          ? 'Only one active session is open.'
+          : `${activeSessions} sessions are active. Review older ones if they are no longer needed.`,
+      points: sessionScore,
+      max: 10,
+    },
+  ];
+};
+
 const computeAccountHealth = (user = state.user) => {
   if (!user) {
     return {
@@ -620,19 +868,7 @@ const computeAccountHealth = (user = state.user) => {
     };
   }
 
-  const completion = Number(user.profile?.completion || 0);
-  const activeSessions = Math.max(1, getActiveSessionCount());
-  let score = Math.min(45, Math.round(completion * 0.45));
-
-  if (user.isVerified) score += 20;
-  if (user.security?.loginAlerts) score += 15;
-  if (user.security?.mfa?.enabled) score += 18;
-  if (getUsername(user)) score += 6;
-  if (getAvatarValue(user)) score += 5;
-  if (safeText(user.profile?.headline)) score += 4;
-  if (safeText(user.profile?.timezone)) score += 8;
-  if (safeText(user.profile?.website)) score += 5;
-  score += activeSessions <= 1 ? 10 : Math.max(0, 10 - (activeSessions - 1) * 3);
+  const score = getAccountHealthContributors(user).reduce((sum, item) => sum + Number(item.points || 0), 0);
 
   const boundedScore = Math.max(0, Math.min(100, score));
 
@@ -1714,6 +1950,326 @@ const updatePublicProfileLink = (user = state.user) => {
   }
 };
 
+const getDraftLinkedAccounts = (user = state.user) =>
+  [
+    ['Google', readDraftInputValue(dom.linkedGoogle, user?.linkedAccounts?.google || '')],
+    ['Facebook', readDraftInputValue(dom.linkedFacebook, user?.linkedAccounts?.facebook || '')],
+    ['GitHub', readDraftInputValue(dom.linkedGithub, user?.linkedAccounts?.github || '')],
+    ['Twitter/X', readDraftInputValue(dom.linkedTwitter, user?.linkedAccounts?.twitter || '')],
+    ['LinkedIn', readDraftInputValue(dom.linkedLinkedin, user?.linkedAccounts?.linkedin || '')],
+    ['Discord', readDraftInputValue(dom.linkedDiscord, user?.linkedAccounts?.discord || '')],
+    ['Apple', readDraftInputValue(dom.linkedApple, user?.linkedAccounts?.apple || '')],
+    ['Microsoft', readDraftInputValue(dom.linkedMicrosoft, user?.linkedAccounts?.microsoft || '')],
+  ]
+    .map(([label, value]) => ({ label, value: safeText(value) }))
+    .filter((entry) => Boolean(entry.value));
+
+const createPreviewSection = (title, body, tone = 'neutral') => {
+  const card = document.createElement('article');
+  card.className = 'preview-section-card';
+  card.dataset.tone = tone;
+
+  const heading = document.createElement('strong');
+  heading.textContent = title;
+  card.appendChild(heading);
+
+  if (body instanceof Node) {
+    card.appendChild(body);
+  } else {
+    const copy = document.createElement('p');
+    copy.textContent = safeText(body) || 'Nothing to show yet.';
+    card.appendChild(copy);
+  }
+
+  return card;
+};
+
+const getDraftPublicProfilePreview = (user = state.user) => {
+  const visible = {
+    headline: Boolean(dom.publicFieldHeadline?.checked),
+    role: Boolean(dom.publicFieldRole?.checked),
+    organization: Boolean(dom.publicFieldOrganization?.checked),
+    bio: Boolean(dom.publicFieldBio?.checked),
+    currentFocus: Boolean(dom.publicFieldCurrentFocus?.checked),
+    focusAreas: Boolean(dom.publicFieldFocusAreas?.checked),
+    pronouns: Boolean(dom.publicFieldPronouns?.checked),
+    location: Boolean(dom.publicFieldLocation?.checked),
+    website: Boolean(dom.publicFieldWebsite?.checked),
+    timezone: Boolean(dom.publicFieldTimezone?.checked),
+    language: Boolean(dom.publicFieldLanguage?.checked),
+    linkedAccounts: Boolean(dom.publicFieldLinked?.checked),
+    memberSince: Boolean(dom.publicFieldMemberSince?.checked),
+  };
+
+  const username = safeText(readDraftInputValue(dom.profileUsername, user?.username || '')).toLowerCase();
+  const displayName = safeText(readDraftInputValue(dom.profileDisplayName, user?.displayName || ''));
+  const headline = safeText(readDraftInputValue(dom.profileHeadline, user?.profile?.headline || ''));
+  const role = safeText(readDraftInputValue(dom.profileRole, user?.profile?.role || ''));
+  const organization = safeText(readDraftInputValue(dom.profileOrganization, user?.profile?.organization || ''));
+  const pronouns = safeText(readDraftInputValue(dom.profilePronouns, user?.profile?.pronouns || ''));
+  const location = safeText(readDraftInputValue(dom.profileLocation, user?.profile?.location || ''));
+  const website = safeText(readDraftInputValue(dom.profileWebsite, user?.profile?.website || ''));
+  const timezone = safeText(readDraftInputValue(dom.profileTimezone, user?.profile?.timezone || ''));
+  const language = safeText(readDraftInputValue(dom.profileLanguage, user?.profile?.language || ''));
+  const currentFocus = safeText(readDraftInputValue(dom.profileCurrentFocus, user?.profile?.currentFocus || ''));
+  const bio = safeText(readDraftInputValue(dom.profileBio, user?.profile?.bio || ''));
+  const focusAreas = normalizeFocusAreas(readDraftInputValue(dom.profileFocusAreas, user?.profile?.focusAreas || ''));
+  const linkedAccounts = getDraftLinkedAccounts(user);
+  const { isPublic, searchable, visibleCount } = getDraftPublicProfileState(user);
+
+  return {
+    avatar: state.profileAvatarDraft || getAvatarValue(user),
+    username,
+    handle: username ? `@${username}` : 'No public handle yet',
+    displayName: displayName || getIdentityName(user),
+    headline,
+    role,
+    organization,
+    pronouns,
+    location,
+    website,
+    timezone,
+    language,
+    currentFocus,
+    bio,
+    focusAreas,
+    linkedAccounts,
+    isPublic,
+    searchable,
+    visibleCount,
+    visible,
+    memberSince: user?.createdAt || null,
+  };
+};
+
+const renderPublicProfilePreview = (user = state.user) => {
+  if (!dom.profilePreviewSections) return;
+
+  const draft = getDraftPublicProfilePreview(user);
+  const previewIdentity = draft.displayName || draft.username || user?.email || 'Continental User';
+
+  setAvatarElement(dom.profilePreviewAvatar, draft.avatar, getInitialsFromSource(previewIdentity));
+
+  if (dom.profilePreviewVisibility) {
+    dom.profilePreviewVisibility.textContent = draft.isPublic
+      ? draft.searchable
+        ? 'Public & searchable'
+        : 'Public by direct link'
+      : 'Private draft';
+  }
+
+  if (dom.profilePreviewHandle) dom.profilePreviewHandle.textContent = draft.handle;
+  if (dom.profilePreviewName) dom.profilePreviewName.textContent = draft.displayName;
+  if (dom.profilePreviewHeadline) {
+    dom.profilePreviewHeadline.textContent =
+      draft.visible.headline && draft.headline
+        ? draft.headline
+        : draft.isPublic
+          ? 'Headline is hidden or not set.'
+          : 'Add a headline and choose whether it should appear publicly.';
+  }
+
+  const summaryParts = [];
+  if (draft.visible.role && draft.role) summaryParts.push(draft.role);
+  if (draft.visible.organization && draft.organization) summaryParts.push(draft.organization);
+  if (draft.visible.currentFocus && draft.currentFocus) summaryParts.push(`Current focus: ${draft.currentFocus}`);
+
+  if (dom.profilePreviewSummary) {
+    dom.profilePreviewSummary.textContent = summaryParts.length
+      ? summaryParts.join(' | ')
+      : 'Role, organization, and current focus will appear here when those public fields are enabled.';
+  }
+
+  if (dom.profilePreviewMeta) {
+    dom.profilePreviewMeta.innerHTML = '';
+    const metaValues = [
+      draft.visible.pronouns && draft.pronouns ? draft.pronouns : '',
+      draft.visible.location && draft.location ? draft.location : '',
+      draft.visible.timezone && draft.timezone ? draft.timezone : '',
+      draft.visible.language && draft.language ? draft.language.toUpperCase() : '',
+      draft.isPublic ? 'Public page ready' : 'Private preview',
+    ].filter(Boolean);
+
+    for (const value of metaValues) {
+      const chip = document.createElement('span');
+      chip.className = 'inline-chip';
+      chip.textContent = value;
+      dom.profilePreviewMeta.appendChild(chip);
+    }
+  }
+
+  if (dom.profilePreviewVisibleCount) {
+    dom.profilePreviewVisibleCount.textContent = String(draft.visibleCount);
+  }
+
+  if (dom.profilePreviewLinkedCount) {
+    dom.profilePreviewLinkedCount.textContent = String(draft.visible.linkedAccounts ? draft.linkedAccounts.length : 0);
+  }
+
+  if (dom.profilePreviewMemberSince) {
+    dom.profilePreviewMemberSince.textContent =
+      draft.visible.memberSince && draft.memberSince ? formatDateCompact(draft.memberSince, { year: 'numeric' }) : 'Hidden';
+  }
+
+  if (dom.profilePreviewFocus) {
+    dom.profilePreviewFocus.innerHTML = '';
+    if (draft.visible.focusAreas && draft.focusAreas.length) {
+      for (const area of draft.focusAreas) {
+        const chip = document.createElement('span');
+        chip.className = 'preview-chip';
+        chip.textContent = area;
+        dom.profilePreviewFocus.appendChild(chip);
+      }
+    } else {
+      const empty = document.createElement('span');
+      empty.className = 'preview-empty';
+      empty.textContent = 'Focus tags are hidden or not set.';
+      dom.profilePreviewFocus.appendChild(empty);
+    }
+  }
+
+  dom.profilePreviewSections.innerHTML = '';
+  const sections = [];
+
+  if (draft.visible.bio && draft.bio) {
+    sections.push(createPreviewSection('Bio', draft.bio));
+  }
+
+  if (draft.visible.currentFocus && draft.currentFocus) {
+    sections.push(createPreviewSection('Current focus', draft.currentFocus, 'accent'));
+  }
+
+  if (draft.visible.website && draft.website) {
+    const link = document.createElement('a');
+    link.href = /^https?:\/\//i.test(draft.website) ? draft.website : `https://${draft.website}`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = link.href;
+    sections.push(createPreviewSection('Website', link));
+  }
+
+  if (draft.visible.linkedAccounts && draft.linkedAccounts.length) {
+    const list = document.createElement('div');
+    list.className = 'preview-linked-list';
+    for (const entry of draft.linkedAccounts) {
+      const row = document.createElement('div');
+      row.className = 'preview-linked-item';
+      const label = document.createElement('strong');
+      label.textContent = entry.label;
+      const value = document.createElement('span');
+      value.textContent = entry.value;
+      row.appendChild(label);
+      row.appendChild(value);
+      list.appendChild(row);
+    }
+    sections.push(createPreviewSection('External profiles', list));
+  }
+
+  if (draft.visible.memberSince && draft.memberSince) {
+    sections.push(
+      createPreviewSection(
+        'Member since',
+        `Joined ${formatDateCompact(draft.memberSince, { year: 'numeric' })}`
+      )
+    );
+  }
+
+  if (!sections.length) {
+    const empty = document.createElement('div');
+    empty.className = 'preview-empty';
+    empty.textContent = 'No public sections are visible yet. Toggle on fields in Preferences to shape the page.';
+    dom.profilePreviewSections.appendChild(empty);
+  } else {
+    for (const section of sections) {
+      dom.profilePreviewSections.appendChild(section);
+    }
+  }
+
+  if (dom.profilePreviewNote) {
+    dom.profilePreviewNote.textContent = draft.isPublic
+      ? draft.searchable
+        ? `This profile is ready for direct links and directory search with ${draft.visibleCount} visible fields.`
+        : `This profile is ready by direct link only with ${draft.visibleCount} visible fields.`
+      : `This is still a private draft. ${draft.visibleCount} public fields are currently enabled.`;
+  }
+};
+
+const refreshDraftPublicProfileUi = () => {
+  updatePublicProfileLink(state.user);
+  renderPublicProfilePreview(state.user);
+};
+
+const renderSecurityPosture = (user = state.user) => {
+  if (!dom.securityBreakdown) return;
+
+  const health = computeAccountHealth(user);
+  const contributors = getAccountHealthContributors(user);
+  const trustedDevices = state.devices.filter((device) => device.trusted).length;
+  const newDevices = state.sessions.filter((session) => session.newDevice).length;
+  const activeSessions = Math.max(0, getActiveSessionCount());
+
+  if (dom.securityPostureChip) dom.securityPostureChip.textContent = health.label;
+  if (dom.securityScoreNumber) dom.securityScoreNumber.textContent = String(health.score);
+  if (dom.securityScoreRing) {
+    dom.securityScoreRing.style.setProperty('--score', `${Math.max(0, Math.min(100, health.score))}%`);
+  }
+
+  if (dom.securityScoreSummary) {
+    dom.securityScoreSummary.textContent = user
+      ? `${health.label}. ${health.description} ${activeSessions} active session${activeSessions === 1 ? '' : 's'} across ${state.devices.length} known device${state.devices.length === 1 ? '' : 's'}.`
+      : 'Sign in to review session, device, and protection signals.';
+  }
+
+  if (dom.securityMetricSessions) dom.securityMetricSessions.textContent = String(activeSessions);
+  if (dom.securityMetricDevices) dom.securityMetricDevices.textContent = String(state.devices.length);
+  if (dom.securityMetricTrustedDevices) dom.securityMetricTrustedDevices.textContent = String(trustedDevices);
+  if (dom.securityMetricNewDevices) dom.securityMetricNewDevices.textContent = String(newDevices);
+
+  dom.securityBreakdown.innerHTML = '';
+  if (!contributors.length) {
+    const empty = document.createElement('p');
+    empty.className = 'helper-line';
+    empty.textContent = 'Security breakdown unavailable until account data loads.';
+    dom.securityBreakdown.appendChild(empty);
+    return;
+  }
+
+  for (const item of contributors) {
+    const card = document.createElement('article');
+    card.className = 'score-breakdown-item';
+    card.dataset.tone = item.points >= item.max ? 'success' : item.points > 0 ? 'neutral' : 'warn';
+
+    const head = document.createElement('div');
+    head.className = 'score-breakdown-head';
+
+    const title = document.createElement('strong');
+    title.textContent = item.title;
+    head.appendChild(title);
+
+    const chip = document.createElement('span');
+    chip.className = 'inline-chip';
+    chip.textContent = `+${item.points} / ${item.max}`;
+    head.appendChild(chip);
+
+    const meter = document.createElement('div');
+    meter.className = 'bar-meter';
+    const fill = document.createElement('div');
+    fill.className = 'bar-meter-fill';
+    fill.style.width = item.points
+      ? `${Math.max(8, Math.round((item.points / Math.max(1, item.max)) * 100))}%`
+      : '0%';
+    meter.appendChild(fill);
+
+    const detail = document.createElement('p');
+    detail.textContent = item.detail;
+
+    card.appendChild(head);
+    card.appendChild(meter);
+    card.appendChild(detail);
+    dom.securityBreakdown.appendChild(card);
+  }
+};
+
 const copyTextToClipboard = async (value) => {
   const text = safeText(value);
   if (!text) {
@@ -1764,6 +2320,7 @@ const fillSummary = (user) => {
   renderAccountHealth(user);
   renderActionCenter(user);
   renderProfileChecklist(user);
+  renderSecurityPosture(user);
 };
 
 const fillProfile = (user) => {
@@ -1791,6 +2348,7 @@ const fillProfile = (user) => {
   setProfileProgress(completion);
   resetProfileAvatarDraft(user);
   updatePublicProfileLink(user);
+  renderPublicProfilePreview(user);
 };
 
 const fillLinkedAccounts = (user) => {
@@ -1803,6 +2361,7 @@ const fillLinkedAccounts = (user) => {
   if (dom.linkedDiscord) dom.linkedDiscord.value = linked.discord || '';
   if (dom.linkedApple) dom.linkedApple.value = linked.apple || '';
   if (dom.linkedMicrosoft) dom.linkedMicrosoft.value = linked.microsoft || '';
+  renderPublicProfilePreview(user);
 };
 
 const fillPreferences = (user) => {
@@ -1842,6 +2401,7 @@ const fillPreferences = (user) => {
 
   applyAppearance(appearance);
   updatePublicProfileLink(user);
+  renderPublicProfilePreview(user);
 };
 
 const fillSecurity = (user) => {
@@ -1850,6 +2410,7 @@ const fillSecurity = (user) => {
   renderAccountHealth(user);
   renderActionCenter(user);
   renderProfileChecklist(user);
+  renderSecurityPosture(user);
 };
 
 const normalizeAuditEvent = (event = {}) => ({
@@ -1970,6 +2531,17 @@ const buildTimelineItems = () => {
   });
 };
 
+const getFilteredTimelineItems = () => {
+  const query = safeText(dom.activityFilter?.value).toLowerCase();
+  const kind = safeText(dom.activityKind?.value).toLowerCase() || 'all';
+
+  return buildTimelineItems().filter((item) => {
+    const matchesKind = kind === 'all' ? true : item.bucket === kind;
+    const matchesQuery = !query || item.searchLine.includes(query);
+    return matchesKind && matchesQuery;
+  });
+};
+
 const createTimelineListItem = (item) => {
   const li = document.createElement('li');
   li.className = 'activity-item';
@@ -1993,6 +2565,22 @@ const createTimelineListItem = (item) => {
   head.appendChild(chip);
   li.appendChild(head);
   li.appendChild(meta);
+  return li;
+};
+
+const createTimelineDayHeader = (value, count) => {
+  const li = document.createElement('li');
+  li.className = 'activity-day-header';
+
+  const title = document.createElement('strong');
+  title.textContent = formatTimelineDayHeading(value);
+  li.appendChild(title);
+
+  const chip = document.createElement('span');
+  chip.className = 'inline-chip';
+  chip.textContent = `${count} event${count === 1 ? '' : 's'}`;
+  li.appendChild(chip);
+
   return li;
 };
 
@@ -2043,31 +2631,213 @@ const renderOverviewActivity = () => {
   }
 };
 
+const renderActivityAnalytics = () => {
+  if (!dom.activityTrendChart || !dom.activityMixRing || !dom.activityHighlightGrid) return;
+
+  const items = getFilteredTimelineItems();
+  const bucketCounts = {
+    logins: 0,
+    security: 0,
+    account: 0,
+  };
+  const dayCounts = new Map();
+  const recentDays = [];
+  const now = new Date();
+
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const day = new Date(now);
+    day.setHours(12, 0, 0, 0);
+    day.setDate(now.getDate() - offset);
+    recentDays.push({
+      key: getLocalDayKey(day),
+      label: formatTrendLabel(day),
+      count: 0,
+    });
+  }
+
+  for (const item of items) {
+    if (bucketCounts[item.bucket] !== undefined) {
+      bucketCounts[item.bucket] += 1;
+    }
+
+    const key = getLocalDayKey(item.at);
+    if (key) {
+      dayCounts.set(key, (dayCounts.get(key) || 0) + 1);
+    }
+  }
+
+  for (const day of recentDays) {
+    day.count = dayCounts.get(day.key) || 0;
+  }
+
+  dom.activityTrendChart.innerHTML = '';
+  const maxCount = Math.max(...recentDays.map((day) => day.count), 1);
+  let weeklyTotal = 0;
+  let peakDay = recentDays[0] || null;
+
+  for (const day of recentDays) {
+    weeklyTotal += day.count;
+    if (!peakDay || day.count > peakDay.count) peakDay = day;
+
+    const bar = document.createElement('div');
+    bar.className = 'trend-bar';
+
+    const fill = document.createElement('div');
+    fill.className = 'trend-fill';
+    fill.style.height = `${Math.max(12, Math.round((day.count / maxCount) * 120))}px`;
+    fill.title = `${day.label}: ${day.count} event${day.count === 1 ? '' : 's'}`;
+
+    const count = document.createElement('span');
+    count.className = 'trend-count';
+    count.textContent = String(day.count);
+
+    const label = document.createElement('span');
+    label.className = 'trend-label';
+    label.textContent = day.label;
+
+    bar.appendChild(count);
+    bar.appendChild(fill);
+    bar.appendChild(label);
+    dom.activityTrendChart.appendChild(bar);
+  }
+
+  if (dom.activityTrendSummary) {
+    dom.activityTrendSummary.textContent = weeklyTotal
+      ? `${weeklyTotal} event${weeklyTotal === 1 ? '' : 's'} in the last 7 days. Peak ${peakDay?.label || '--'} with ${peakDay?.count || 0}.`
+      : 'No recent events in the last 7 days for this filter.';
+  }
+
+  const total = items.length;
+  if (dom.activityMixTotal) dom.activityMixTotal.textContent = String(total);
+
+  const mixSegments = [
+    { key: 'logins', label: 'Logins', count: bucketCounts.logins, color: 'var(--primary)' },
+    { key: 'security', label: 'Security', count: bucketCounts.security, color: 'var(--secondary)' },
+    { key: 'account', label: 'Account', count: bucketCounts.account, color: 'var(--success)' },
+  ];
+
+  let offset = 0;
+  const gradientStops = [];
+  for (const segment of mixSegments) {
+    const ratio = total ? segment.count / total : 0;
+    const start = Math.round(offset * 360);
+    offset += ratio;
+    const end = Math.round(offset * 360);
+    gradientStops.push(`${segment.color} ${start}deg ${end}deg`);
+  }
+  if (dom.activityMixRing) {
+    dom.activityMixRing.style.background = total
+      ? `conic-gradient(${gradientStops.join(', ')})`
+      : 'conic-gradient(color-mix(in srgb, var(--line) 72%, transparent) 0deg 360deg)';
+  }
+
+  if (dom.activityMixLegend) {
+    dom.activityMixLegend.innerHTML = '';
+    for (const segment of mixSegments) {
+      const row = document.createElement('div');
+      row.className = 'chart-legend-row';
+
+      const left = document.createElement('div');
+      left.className = 'chart-legend-label';
+      const swatch = document.createElement('span');
+      swatch.className = 'chart-swatch';
+      swatch.style.background = segment.color;
+      const label = document.createElement('span');
+      label.textContent = segment.label;
+      left.appendChild(swatch);
+      left.appendChild(label);
+
+      const right = document.createElement('strong');
+      right.textContent = `${segment.count}`;
+
+      row.appendChild(left);
+      row.appendChild(right);
+      dom.activityMixLegend.appendChild(row);
+    }
+  }
+
+  if (dom.activityHighlightGrid) {
+    dom.activityHighlightGrid.innerHTML = '';
+    const highlightItems = [
+      {
+        label: 'Security events',
+        value: String(bucketCounts.security),
+        detail: bucketCounts.security ? 'Password, session, verification, and alert events.' : 'No recent security-side changes.',
+      },
+      {
+        label: 'Unique IPs',
+        value: String(state.activitySummary.uniqueIps || 0),
+        detail: 'Unique login locations across the recent summary window.',
+      },
+      {
+        label: 'Active days',
+        value: String(recentDays.filter((day) => day.count > 0).length),
+        detail: 'Days with at least one event in the last week.',
+      },
+      {
+        label: 'Latest event',
+        value: items[0]?.chip || 'None',
+        detail: items[0] ? `${items[0].title} on ${formatDate(items[0].at)}.` : 'No events match the current filter.',
+      },
+    ];
+
+    for (const highlight of highlightItems) {
+      const card = document.createElement('article');
+      card.className = 'activity-highlight-card';
+
+      const label = document.createElement('span');
+      label.textContent = highlight.label;
+      const value = document.createElement('strong');
+      value.textContent = highlight.value;
+      const detail = document.createElement('p');
+      detail.textContent = highlight.detail;
+
+      card.appendChild(label);
+      card.appendChild(value);
+      card.appendChild(detail);
+      dom.activityHighlightGrid.appendChild(card);
+    }
+  }
+};
+
 const renderActivity = () => {
   if (!dom.activityList) return;
-
-  const query = safeText(dom.activityFilter?.value).toLowerCase();
-  const kind = safeText(dom.activityKind?.value).toLowerCase() || 'all';
   dom.activityList.innerHTML = '';
-
-  const filtered = buildTimelineItems().filter((item) => {
-    const matchesKind = kind === 'all' ? true : item.bucket === kind;
-    const matchesQuery = !query || item.searchLine.includes(query);
-    return matchesKind && matchesQuery;
-  });
+  const filtered = getFilteredTimelineItems();
 
   if (filtered.length === 0) {
     const li = document.createElement('li');
+    const query = safeText(dom.activityFilter?.value).toLowerCase();
+    const kind = safeText(dom.activityKind?.value).toLowerCase() || 'all';
     li.textContent = query || kind !== 'all'
       ? 'No activity items match this filter.'
       : 'No recent activity found.';
     dom.activityList.appendChild(li);
+    renderActivityAnalytics();
     return;
   }
 
+  let currentDay = '';
+  const dayCounts = new Map();
+
   for (const item of filtered) {
+    const key = getLocalDayKey(item.at);
+    dayCounts.set(key, (dayCounts.get(key) || 0) + 1);
+  }
+
+  for (let index = 0; index < filtered.length; index += 1) {
+    const item = filtered[index];
+    const dayKey = getLocalDayKey(item.at);
+
+    if (dayKey !== currentDay) {
+      currentDay = dayKey;
+      dom.activityList.appendChild(createTimelineDayHeader(item.at, dayCounts.get(dayKey) || 0));
+    }
+
     dom.activityList.appendChild(createTimelineListItem(item));
   }
+
+  renderActivityAnalytics();
 };
 
 const renderSessions = () => {
@@ -2426,6 +3196,8 @@ const syncUiWithUser = (user) => {
   renderDevices();
   renderServices();
   renderAvatarPreviews(user);
+  renderPublicProfilePreview(user);
+  renderSecurityPosture(user);
 
   const statusText = `Logged in as: ${getUserHandle(user) || user.email || user.displayName || user.userId}`;
   setStatus(statusText, { clickable: false });
@@ -2453,6 +3225,7 @@ const loadActivity = async () => {
   renderOverviewActivity();
   renderActivityBars();
   renderInsights();
+  renderSecurityPosture(state.user);
 };
 
 const loadPreferences = async () => {
@@ -2489,6 +3262,7 @@ const loadDevices = async () => {
 
   renderDevices();
   updateSessionNote();
+  renderSecurityPosture(state.user);
 };
 
 const loadSessions = async () => {
@@ -2511,6 +3285,7 @@ const loadSessions = async () => {
   renderSessions();
 
   updateSessionNote();
+  renderSecurityPosture(state.user);
 };
 
 const loadDashboardData = async ({ silent = false } = {}) => {
@@ -2614,13 +3389,7 @@ const doLogout = async () => {
 };
 
 const exportActivityCsv = () => {
-  const query = safeText(dom.activityFilter?.value).toLowerCase();
-  const kind = safeText(dom.activityKind?.value).toLowerCase() || 'all';
-  const items = buildTimelineItems().filter((item) => {
-    const matchesKind = kind === 'all' ? true : item.bucket === kind;
-    const matchesQuery = !query || item.searchLine.includes(query);
-    return matchesKind && matchesQuery;
-  });
+  const items = getFilteredTimelineItems();
 
   if (!items.length) {
     showToast('No activity to export.', 'warn');
@@ -2697,8 +3466,18 @@ const handleProfileSave = async (event) => {
     return;
   }
 
+  if (containsBlockedNameTerm(username)) {
+    showToast('Choose a different username. Usernames cannot contain offensive or hateful language.', 'error');
+    return;
+  }
+
   if (displayName.length < 2) {
     showToast('Display name must be at least 2 characters.', 'error');
+    return;
+  }
+
+  if (containsBlockedNameTerm(displayName)) {
+    showToast('Choose a different display name. Display names cannot contain offensive or hateful language.', 'error');
     return;
   }
 
@@ -3115,6 +3894,7 @@ const handleDeleteAccount = async (event) => {
 const syncProfileAvatarDraft = (value) => {
   state.profileAvatarDraft = safeText(value);
   renderAvatarPreviews(state.user);
+  renderPublicProfilePreview(state.user);
 };
 
 const handleProfileAvatarUrlInput = () => {
@@ -3132,6 +3912,7 @@ const handleProfileAvatarUpload = async (event) => {
       dom.profileAvatarUrl.value = '';
     }
     renderAvatarPreviews(state.user);
+    renderPublicProfilePreview(state.user);
     markFormDirty(dom.profileForm);
     showToast('Avatar image ready to save.', 'success');
   } catch (err) {
@@ -3151,6 +3932,7 @@ const handleProfileAvatarRemove = () => {
     dom.profileAvatarUpload.value = '';
   }
   renderAvatarPreviews(state.user);
+  renderPublicProfilePreview(state.user);
   markFormDirty(dom.profileForm);
 };
 
@@ -3349,7 +4131,12 @@ const setupEventHandlers = () => {
   }
 
   if (dom.profileUsername) {
-    dom.profileUsername.addEventListener('input', () => updatePublicProfileLink(state.user));
+    dom.profileUsername.addEventListener('input', refreshDraftPublicProfileUi);
+  }
+
+  if (dom.profileForm) {
+    dom.profileForm.addEventListener('input', refreshDraftPublicProfileUi);
+    dom.profileForm.addEventListener('change', refreshDraftPublicProfileUi);
   }
 
   if (dom.profileForm) dom.profileForm.addEventListener('submit', handleProfileSave);
@@ -3366,7 +4153,11 @@ const setupEventHandlers = () => {
   if (dom.verificationResendBtn) {
     dom.verificationResendBtn.addEventListener('click', handleResendVerification);
   }
-  if (dom.linkedForm) dom.linkedForm.addEventListener('submit', handleLinkedSave);
+  if (dom.linkedForm) {
+    dom.linkedForm.addEventListener('submit', handleLinkedSave);
+    dom.linkedForm.addEventListener('input', () => renderPublicProfilePreview(state.user));
+    dom.linkedForm.addEventListener('change', () => renderPublicProfilePreview(state.user));
+  }
   if (dom.passwordForm) dom.passwordForm.addEventListener('submit', handlePasswordSave);
   if (dom.securityForm) dom.securityForm.addEventListener('submit', handleSecuritySave);
   if (dom.mfaSetupBtn) dom.mfaSetupBtn.addEventListener('click', handleMfaSetup);
@@ -3415,7 +4206,7 @@ const setupEventHandlers = () => {
     dom.publicFieldMemberSince,
   ]) {
     if (!input) continue;
-    input.addEventListener('change', () => updatePublicProfileLink(state.user));
+    input.addEventListener('change', refreshDraftPublicProfileUi);
   }
 
   if (dom.newPassword) {
