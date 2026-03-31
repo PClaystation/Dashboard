@@ -326,8 +326,8 @@ const updateSessionNote = () => {
   const limitText = state.sessionLimit ? `${state.sessionLimit}` : '--';
   const knownDevices = Number(state.user?.security?.knownDevices || 0);
   dom.sessionLimitNote.textContent = knownDevices
-    ? `Session limit: ${limitText} | Known devices: ${knownDevices}`
-    : `Session limit: ${limitText}`;
+    ? `Limit: ${limitText} | Devices: ${knownDevices}`
+    : `Limit: ${limitText}`;
 };
 
 const getUsername = (user = state.user) => safeText(user?.username).toLowerCase();
@@ -391,24 +391,22 @@ const updateProfileAvatarHelper = (avatarValue = state.profileAvatarDraft) => {
   if (!dom.profileAvatarHelper) return;
 
   if (!avatarValue) {
-    dom.profileAvatarHelper.textContent =
-      'Upload an image or paste a direct image URL. Uploaded images are resized before saving.';
+    dom.profileAvatarHelper.textContent = 'Upload or paste an image URL.';
     return;
   }
 
   const normalized = normalizeAvatarInput(avatarValue);
   if (!normalized) {
-    dom.profileAvatarHelper.textContent = 'Avatar must be a direct image URL or an uploaded image.';
+    dom.profileAvatarHelper.textContent = 'Use a direct image URL or upload a file.';
     return;
   }
 
   if (String(normalized).startsWith('data:image/')) {
-    dom.profileAvatarHelper.textContent =
-      'Uploaded image ready. It will be saved to your account when you save the profile.';
+    dom.profileAvatarHelper.textContent = 'Uploaded image ready. Save to apply it.';
     return;
   }
 
-  dom.profileAvatarHelper.textContent = 'External avatar URL ready. Save the profile to apply it.';
+  dom.profileAvatarHelper.textContent = 'Avatar URL ready. Save to apply it.';
 };
 
 const renderAvatarPreviews = (user = state.user) => {
@@ -452,7 +450,7 @@ const computeAccountHealth = (user = state.user) => {
     return {
       score: 0,
       label: 'Signed out',
-      description: 'Sign in to load account health.',
+      description: 'Sign in to view health.',
     };
   }
 
@@ -476,7 +474,7 @@ const computeAccountHealth = (user = state.user) => {
     return {
       score: boundedScore,
       label: 'Strong',
-      description: 'Profile and security settings look well maintained.',
+      description: 'Looks good.',
     };
   }
 
@@ -484,7 +482,7 @@ const computeAccountHealth = (user = state.user) => {
     return {
       score: boundedScore,
       label: 'Healthy',
-      description: 'A few details could still be tightened up.',
+      description: 'A few items to review.',
     };
   }
 
@@ -492,14 +490,14 @@ const computeAccountHealth = (user = state.user) => {
     return {
       score: boundedScore,
       label: 'Needs review',
-      description: 'There are a couple of obvious cleanup items.',
+      description: 'Review a few items.',
     };
   }
 
   return {
     score: boundedScore,
     label: 'At risk',
-    description: 'Important setup steps are still missing.',
+    description: 'Finish setup.',
   };
 };
 
@@ -739,8 +737,8 @@ const clearDashboardUi = () => {
   if (dom.activityFilter) dom.activityFilter.value = '';
   if (dom.activityKind) dom.activityKind.value = 'all';
   if (dom.serviceFilter) dom.serviceFilter.value = '';
-  if (dom.activityList) dom.activityList.innerHTML = '<li>No recent login activity found.</li>';
-  if (dom.overviewActivityList) dom.overviewActivityList.innerHTML = '<li>Recent login activity will appear here.</li>';
+  if (dom.activityList) dom.activityList.innerHTML = '<li>No recent activity.</li>';
+  if (dom.overviewActivityList) dom.overviewActivityList.innerHTML = '<li>No recent activity.</li>';
   if (dom.sessionsList) dom.sessionsList.innerHTML = '<li>No active sessions found.</li>';
   if (dom.devicesList) dom.devicesList.innerHTML = '<li>No known devices found.</li>';
   if (dom.activityBars) dom.activityBars.innerHTML = '';
@@ -750,7 +748,7 @@ const clearDashboardUi = () => {
   if (dom.insightLast7) dom.insightLast7.textContent = '0';
   if (dom.insightLast30) dom.insightLast30.textContent = '0';
   if (dom.insightIps) dom.insightIps.textContent = '0';
-  if (dom.sessionLimitNote) dom.sessionLimitNote.textContent = 'Session limit: --';
+  if (dom.sessionLimitNote) dom.sessionLimitNote.textContent = 'Limit: --';
   renderVerificationState();
   renderActionCenter(null);
   renderProfileChecklist(null);
@@ -1007,7 +1005,7 @@ const updatePasswordStrengthUi = () => {
   dom.passwordStrengthFill.style.background = `linear-gradient(120deg, ${strength.color}, #7db4ff)`;
 
   if (!value) {
-    dom.passwordStrengthText.textContent = 'Use 8+ chars with uppercase, lowercase, and number.';
+    dom.passwordStrengthText.textContent = 'Use 8+ chars, upper/lowercase, and a number.';
     return;
   }
 
@@ -1099,15 +1097,15 @@ const renderHero = (user = state.user) => {
 
   if (dom.heroStatusNote) {
     if (!user) {
-      dom.heroStatusNote.textContent = 'Finish your setup to keep your account in good shape.';
+      dom.heroStatusNote.textContent = 'Complete your profile.';
       return;
     }
 
     const completion = Number(user.profile?.completion || 0);
     const sessionCount = Math.max(0, getActiveSessionCount());
     dom.heroStatusNote.textContent = `${completion}% complete, ${
-      user.isVerified ? 'email verified' : 'verification pending'
-    }, ${sessionCount} active ${sessionCount === 1 ? 'session' : 'sessions'}.`;
+      user.isVerified ? 'verified' : 'verification pending'
+    }, ${sessionCount} ${sessionCount === 1 ? 'session' : 'sessions'}.`;
   }
 
   renderAvatarPreviews(user);
@@ -1132,7 +1130,7 @@ const renderVerificationState = (user = state.user) => {
     if (dom.insightVerified) dom.insightVerified.textContent = 'Pending';
     if (dom.verificationPanel) dom.verificationPanel.hidden = true;
     if (dom.verificationHelper) {
-      dom.verificationHelper.textContent = 'Your email address is still pending verification.';
+      dom.verificationHelper.textContent = 'Email not verified.';
     }
     return;
   }
@@ -1149,8 +1147,10 @@ const renderVerificationState = (user = state.user) => {
   if (dom.verificationHelper) {
     const email = safeText(user?.email);
     dom.verificationHelper.textContent = isVerified
-      ? 'Your email address is verified.'
-      : `Your email address${email ? ` (${email})` : ''} is still pending verification.`;
+      ? 'Email verified.'
+      : email
+        ? `${email} not verified.`
+        : 'Email not verified.';
   }
 };
 
@@ -1662,7 +1662,7 @@ const renderOverviewActivity = () => {
   const previewItems = state.activity.slice(0, OVERVIEW_ACTIVITY_LIMIT);
   if (!previewItems.length) {
     const li = document.createElement('li');
-    li.textContent = 'Recent login activity will appear here.';
+    li.textContent = 'No recent activity.';
     dom.overviewActivityList.appendChild(li);
     return;
   }
@@ -1820,11 +1820,11 @@ const renderMfaState = (user = state.user) => {
 
   if (dom.mfaStatusCopy) {
     if (mfa.enabled) {
-      dom.mfaStatusCopy.textContent = `MFA is enabled. Backup codes remaining: ${mfa.backupCodesRemaining}. Last used: ${formatDate(mfa.lastUsedAt)}.`;
+      dom.mfaStatusCopy.textContent = `MFA on. Backup codes: ${mfa.backupCodesRemaining}. Last used: ${formatDate(mfa.lastUsedAt)}.`;
     } else if (state.mfaSetup?.secret) {
-      dom.mfaStatusCopy.textContent = 'Finish the setup below to enable MFA on your account.';
+      dom.mfaStatusCopy.textContent = 'Finish setup below.';
     } else {
-      dom.mfaStatusCopy.textContent = 'MFA is not enabled.';
+      dom.mfaStatusCopy.textContent = 'MFA off.';
     }
   }
 
@@ -2025,8 +2025,8 @@ const renderServices = () => {
   }
 
   if (dom.serviceResultsCount) {
-    const suffix = state.favoriteServicesOnly ? ' pinned view' : ' available';
-    dom.serviceResultsCount.textContent = `${visibleCount} service${visibleCount === 1 ? '' : 's'}${suffix}`;
+    const prefix = state.favoriteServicesOnly ? 'Pinned: ' : '';
+    dom.serviceResultsCount.textContent = `${prefix}${visibleCount} service${visibleCount === 1 ? '' : 's'}`;
   }
 
   if (dom.serviceEmptyState) {

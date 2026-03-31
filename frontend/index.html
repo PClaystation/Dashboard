@@ -16,7 +16,7 @@
 <body>
   <div id="loading-screen" aria-live="polite">
     <img src="images/globe-nbg-w.png" alt="Loading" class="pulsing-image" />
-    <p id="loading-message">Checking your session...</p>
+    <p id="loading-message">Loading...</p>
   </div>
 
   <div id="toast-region" aria-live="polite" aria-atomic="true"></div>
@@ -30,12 +30,6 @@
         <div class="brand-copy">
           <p class="eyebrow">Identity workspace</p>
           <h1>Continental ID Dashboard</h1>
-          <p class="brand-subline">Secure access and profile management for the Continental network.</p>
-          <div class="brand-signals" aria-label="Brand highlights">
-            <span class="brand-signal">Continental Studios</span>
-            <span class="brand-signal">Unified launch</span>
-            <span class="brand-signal">Trusted identity</span>
-          </div>
         </div>
       </div>
 
@@ -77,22 +71,7 @@
               <div id="profile-progress-bar" class="progress-fill profile-progress-fill"></div>
             </div>
 
-            <p id="hero-status-note" class="helper-line">
-              Finish your setup to keep your account in good shape.
-            </p>
-          </div>
-
-          <div class="brand-story-card">
-            <p class="eyebrow">Continental standard</p>
-            <h2>Made for the Continental toolset.</h2>
-            <p class="helper-line">
-              One identity layer for your profile, security settings, and the services that sit at the center of the network.
-            </p>
-            <div class="brand-story-meta" aria-label="Continental workspace pillars">
-              <span class="brand-signal">Studios</span>
-              <span class="brand-signal">Archives</span>
-              <span class="brand-signal">Broadcast</span>
-            </div>
+            <p id="hero-status-note" class="helper-line">Complete your profile.</p>
           </div>
         </section>
 
@@ -119,7 +98,7 @@
             <span class="sr-only">Filter services</span>
             <input id="service-filter" type="search" placeholder="Search services or press Cmd/Ctrl+K" />
           </label>
-          <p id="service-results-count" class="helper-line">4 services available</p>
+          <p id="service-results-count" class="helper-line">4 services</p>
         </section>
 
         <section class="sidebar-card">
@@ -142,9 +121,7 @@
               <div>
                 <p class="eyebrow">At a glance</p>
                 <h2 id="hero-greeting">Welcome back</h2>
-                <p class="hero-copy">
-                  Keep your identity settings tidy, review security posture, and jump into your services without the usual dashboard clutter.
-                </p>
+                <p class="hero-copy">Manage your profile, security, and services.</p>
               </div>
               <div class="hero-actions">
                 <button id="overview-jump-profile-btn" class="secondary-btn" type="button">Edit profile</button>
@@ -159,16 +136,8 @@
                 </div>
                 <div>
                   <p class="eyebrow">Continental network</p>
-                  <h3>Built to keep the core suite connected.</h3>
+                  <h3>Core services.</h3>
                 </div>
-              </div>
-              <p class="hero-brand-copy">
-                A quieter front door for profiles, secure access, and the member tools people use most.
-              </p>
-              <div class="hero-brand-tags" aria-label="Brand attributes">
-                <span class="brand-signal">Member access</span>
-                <span class="brand-signal">Shared profile</span>
-                <span class="brand-signal">Service launchpad</span>
               </div>
             </aside>
           </div>
@@ -177,25 +146,23 @@
             <article class="metric-card">
               <p class="metric-label">Continental ID</p>
               <p class="metric-value" id="summary-id">-</p>
-              <p class="metric-note">Your permanent identity handle.</p>
             </article>
 
             <article class="metric-card">
               <p class="metric-label">Last login</p>
               <p class="metric-value" id="summary-last-login">-</p>
-              <p class="metric-note">Most recent successful account access.</p>
             </article>
 
             <article class="metric-card">
               <p class="metric-label">Account health</p>
               <p class="metric-value" id="health-score-value">0</p>
-              <p class="metric-note" id="health-score-label">Waiting for account data</p>
+              <p class="metric-note" id="health-score-label">Loading health</p>
             </article>
 
             <article class="metric-card">
               <p class="metric-label">Active sessions</p>
               <p class="metric-value" id="summary-sessions">0</p>
-              <p class="metric-note" id="session-limit-note">Session limit: --</p>
+              <p class="metric-note" id="session-limit-note">Limit: --</p>
             </article>
           </section>
 
@@ -258,7 +225,6 @@
                   <p class="eyebrow">Services</p>
                   <h3>Launch your tools</h3>
                 </div>
-                <p class="helper-line">Pin the ones you use most and they will stay at the top.</p>
               </div>
 
               <ul id="service-list" class="card-list">
@@ -266,8 +232,8 @@
                   class="card service-card"
                   data-key="echo"
                   data-title="The Echo Archives"
-                  data-category="Research"
-                  data-description="Research archive, continuity references, and world-building notes."
+                  data-category="Archive"
+                  data-description="Searchable archive of audio dramas with tags, ratings, and show pages."
                 >
                   <button class="service-pin-btn" type="button" aria-label="Pin The Echo Archives">Pin</button>
                   <a
@@ -277,22 +243,20 @@
                     rel="noopener noreferrer"
                     style="--bg-image: url('images/Echo.png')"
                   >
-                    <span class="service-kicker">Research</span>
+                    <span class="service-kicker">Archive</span>
                     <span class="card-title">The Echo Archives</span>
-                    <span class="service-description">
-                      Research archive, continuity references, and world-building notes.
-                    </span>
+                    <span class="service-description">Searchable archive of audio dramas with tags, ratings, and show pages.</span>
                   </a>
                 </li>
 
                 <li
                   class="card service-card"
                   data-key="home"
-                  data-title="Continental Home"
-                  data-category="Portal"
-                  data-description="Your main launch point for account tools and central resources."
+                  data-title="Continental Hub"
+                  data-category="Studio"
+                  data-description="Portfolio hub for Continental Studios projects, updates, and website links."
                 >
-                  <button class="service-pin-btn" type="button" aria-label="Pin Continental Home">Pin</button>
+                  <button class="service-pin-btn" type="button" aria-label="Pin Continental Hub">Pin</button>
                   <a
                     class="service-link"
                     href="https://site2.continental.com"
@@ -300,11 +264,9 @@
                     rel="noopener noreferrer"
                     style="--bg-image: url('images/Continental.png')"
                   >
-                    <span class="service-kicker">Portal</span>
-                    <span class="card-title">Continental Home</span>
-                    <span class="service-description">
-                      Your main launch point for account tools and central resources.
-                    </span>
+                    <span class="service-kicker">Studio</span>
+                    <span class="card-title">Continental Hub</span>
+                    <span class="service-description">Portfolio hub for Continental Studios projects, updates, and website links.</span>
                   </a>
                 </li>
 
@@ -312,8 +274,8 @@
                   class="card service-card"
                   data-key="stepcast"
                   data-title="StepCast"
-                  data-category="Broadcast"
-                  data-description="Streaming, broadcast controls, and publishing workflows."
+                  data-category="Fitness"
+                  data-description="Podcast-focused walk tracker with GPS routes, saved walks, and history."
                 >
                   <button class="service-pin-btn" type="button" aria-label="Pin StepCast">Pin</button>
                   <a
@@ -323,11 +285,9 @@
                     rel="noopener noreferrer"
                     style="--bg-image: url('images/StepCast2.png')"
                   >
-                    <span class="service-kicker">Broadcast</span>
+                    <span class="service-kicker">Fitness</span>
                     <span class="card-title">StepCast</span>
-                    <span class="service-description">
-                      Streaming, broadcast controls, and publishing workflows.
-                    </span>
+                    <span class="service-description">Podcast-focused walk tracker with GPS routes, saved walks, and history.</span>
                   </a>
                 </li>
 
@@ -335,8 +295,8 @@
                   class="card service-card"
                   data-key="minesweeper"
                   data-title="Minesweeper"
-                  data-category="Play"
-                  data-description="A fast break when you want something lighter than settings."
+                  data-category="Game"
+                  data-description="Classic Minesweeper rebuilt for the browser with presets, custom boards, and timers."
                 >
                   <button class="service-pin-btn" type="button" aria-label="Pin Minesweeper">Pin</button>
                   <a
@@ -346,16 +306,14 @@
                     rel="noopener noreferrer"
                     style="--bg-image: url('images/Minesweeper.png')"
                   >
-                    <span class="service-kicker">Play</span>
+                    <span class="service-kicker">Game</span>
                     <span class="card-title">Minesweeper</span>
-                    <span class="service-description">
-                      A fast break when you want something lighter than settings.
-                    </span>
+                    <span class="service-description">Classic Minesweeper rebuilt for the browser with presets, custom boards, and timers.</span>
                   </a>
                 </li>
               </ul>
 
-              <p id="service-empty-state" class="empty-state" hidden>No services match your current filter.</p>
+              <p id="service-empty-state" class="empty-state" hidden>No matching services.</p>
             </article>
 
             <article class="section-card">
@@ -368,7 +326,7 @@
 
               <div id="activity-bars" class="mini-bars" aria-hidden="true"></div>
               <ul id="overview-activity-list" class="activity-list activity-list-compact">
-                <li>Recent login activity will appear here.</li>
+                <li>Loading activity...</li>
               </ul>
             </article>
           </div>
@@ -380,15 +338,12 @@
               <p class="eyebrow">Personal details</p>
               <h2>Profile</h2>
             </div>
-            <p class="helper-line">Keep the essentials accurate and complete so your account stays easy to manage.</p>
           </div>
 
           <div class="stack-grid">
             <article class="section-card">
               <div id="verification-panel" class="verification-panel" hidden>
-                <p id="verification-helper" class="helper-line">
-                  Your email address is still pending verification.
-                </p>
+                <p id="verification-helper" class="helper-line">Email not verified.</p>
                 <button id="verification-resend-btn" class="secondary-btn" type="button">
                   Resend Verification Email
                 </button>
@@ -408,10 +363,8 @@
                     <div id="profile-avatar-preview" class="identity-badge profile-avatar-preview" aria-hidden="true">CI</div>
                     <div class="profile-avatar-copy">
                       <p class="eyebrow">Profile picture</p>
-                      <h3>Identity image</h3>
-                      <p id="profile-avatar-helper" class="helper-line">
-                        Upload an image or paste a direct image URL. Uploaded images are resized before saving.
-                      </p>
+                      <h3>Avatar</h3>
+                      <p id="profile-avatar-helper" class="helper-line">Upload or paste an image URL.</p>
                     </div>
                   </div>
                   <div class="profile-avatar-actions">
@@ -447,7 +400,7 @@
                     pattern="[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?"
                     required
                   />
-                  <small>Used for sign-in and account identity. Letters, numbers, dots, hyphens, and underscores only.</small>
+                  <small>Letters, numbers, dots, hyphens, and underscores only.</small>
                 </label>
                 <label>
                   Display name
@@ -512,7 +465,7 @@
                 <label class="wide-field">
                   Public profile
                   <input id="profile-public-link" type="text" readonly />
-                  <small>Share this link when your profile is public. Search only includes profiles with discovery enabled.</small>
+                  <small>Shown when your profile is public.</small>
                 </label>
                 <button id="open-public-profile-btn" class="secondary-btn" type="button">Open Public Profile</button>
                 <button id="profile-save-btn" class="primary-btn" type="submit">Save Profile</button>
@@ -527,7 +480,6 @@
               <p class="eyebrow">Connections</p>
               <h2>External Profiles</h2>
             </div>
-            <p class="helper-line">Keep reference links to your external identities without turning them into login providers.</p>
           </div>
 
           <article class="section-card">
@@ -575,7 +527,6 @@
               <p class="eyebrow">Control center</p>
               <h2>Preferences</h2>
             </div>
-            <p class="helper-line">Privacy, notifications, and appearance now live together so you can tune the dashboard in one place.</p>
           </div>
 
           <div class="stack-grid">
@@ -597,9 +548,7 @@
                   Allow account discovery in search
                 </label>
                 <div class="public-profile-visibility wide-field">
-                  <p class="helper-line">
-                    Choose what public visitors can see when your profile is enabled.
-                  </p>
+                  <p class="mini-label">Show on public profile</p>
                   <div class="public-profile-grid">
                     <label class="toggle-label" for="public-field-headline">
                       <input id="public-field-headline" type="checkbox" />
@@ -735,7 +684,6 @@
               <p class="eyebrow">Protection</p>
               <h2>Security</h2>
             </div>
-            <p class="helper-line">Review password strength, session behavior, and active devices in one place.</p>
           </div>
 
           <div class="stack-grid">
@@ -763,7 +711,7 @@
                 <div id="password-strength" class="strength-meter" aria-live="polite">
                   <div id="password-strength-fill" class="strength-fill"></div>
                 </div>
-                <small id="password-strength-text">Use 8+ chars with uppercase, lowercase, and number.</small>
+                <small id="password-strength-text">Use 8+ chars, upper/lowercase, and a number.</small>
                 <button id="password-save-btn" class="primary-btn" type="submit">Update Password</button>
               </form>
             </article>
@@ -778,7 +726,7 @@
 
               <div class="stack-grid">
                 <div class="mfa-status-card">
-                  <p id="mfa-status-copy" class="helper-line">MFA is not enabled.</p>
+                  <p id="mfa-status-copy" class="helper-line">MFA off.</p>
                   <div class="mfa-actions">
                     <button id="mfa-setup-btn" class="secondary-btn" type="button">Set Up MFA</button>
                     <button id="mfa-disable-btn" class="danger-btn" type="button">Disable MFA</button>
@@ -787,9 +735,7 @@
                 </div>
 
                 <div id="mfa-setup-panel" class="mfa-setup-panel" hidden>
-                  <p class="helper-line">
-                    Add the secret below to your authenticator app, then confirm with a code to enable MFA.
-                  </p>
+                  <p class="helper-line">Scan or copy the secret, then enter a code.</p>
                   <label>
                     Current password
                     <input id="mfa-current-password" type="password" autocomplete="current-password" />
@@ -871,7 +817,6 @@
               <p class="eyebrow">Timeline</p>
               <h2>Recent Activity</h2>
             </div>
-            <p class="helper-line">Filter by IP, browser, or date and export the full login log when needed.</p>
           </div>
 
           <article class="section-card">
@@ -898,11 +843,10 @@
               <p class="eyebrow">Permanent action</p>
               <h2>Delete Account</h2>
             </div>
-            <p class="helper-line">This removes your account and cannot be undone.</p>
           </div>
 
           <article class="section-card danger-card">
-            <p class="danger-note">This action is permanent and cannot be undone.</p>
+            <p class="danger-note">Cannot be undone.</p>
             <form id="delete-form" class="form-grid">
               <label>
                 Confirm password
@@ -921,7 +865,7 @@
 
     <div id="cookie-popup" class="cookie-popup hide">
       <p>
-        We use cookies for secure sign-in and session continuity.
+        We use cookies to keep you signed in.
         <a href="privacy.html" target="_blank" rel="noopener noreferrer">Learn more</a>
       </p>
       <button id="cookie-accept" type="button">Got it</button>
