@@ -4,475 +4,319 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Continental ID Login</title>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #565656, #282828);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      color: #333;
-      padding: 1rem;
-    }
-
-    .login-container {
-      background: #fff;
-      padding: 2.2rem 2rem;
-      border-radius: 12px;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-      width: min(360px, 100%);
-      text-align: center;
-      position: relative;
-      min-height: 590px;
-      overflow: hidden;
-    }
-
-    .brand-logo {
-      display: block;
-      margin: 0 auto 0.6rem;
-      max-width: 180px;
-      height: auto;
-    }
-
-    .subtitle {
-      margin: 0.2rem 0 1rem;
-      font-size: 1.7rem;
-      color: #000;
-      letter-spacing: 0.5px;
-      font-weight: 700;
-    }
-
-    .toggle-buttons {
-      display: flex;
-      justify-content: center;
-      gap: 1rem;
-      margin-bottom: 1.1rem;
-    }
-
-    .toggle-btn {
-      cursor: pointer;
-      padding: 0.5rem 1.2rem;
-      border: none;
-      background: transparent;
-      font-size: 1rem;
-      font-weight: 500;
-      color: rgba(0, 0, 0, 0.58);
-      transition: all 0.2s ease;
-      border-bottom: 3px solid transparent;
-    }
-
-    .toggle-btn.selected {
-      font-size: 1.2rem;
-      font-weight: 700;
-      color: rgba(0, 0, 0, 0.9);
-      border-bottom-color: #474747;
-    }
-
-    form {
-      width: 100%;
-      transition: opacity 0.2s ease;
-      margin-top: 0.5rem;
-    }
-
-    form.hidden {
-      opacity: 0;
-      pointer-events: none;
-      height: 0;
-      overflow: hidden;
-      margin: 0;
-    }
-
-    .hidden {
-      display: none;
-    }
-
-    input {
-      width: 100%;
-      padding: 12px 14px;
-      margin: 8px 0;
-      border: 1.8px solid #ccc;
-      border-radius: 6px;
-      font-size: 1rem;
-      transition: border-color 0.2s ease;
-    }
-
-    input:focus {
-      border-color: #474747;
-      outline: none;
-    }
-
-    .password-hint {
-      margin: 0.4rem 0 0;
-      font-size: 0.78rem;
-      color: #6a6a6a;
-      text-align: left;
-    }
-
-    .helper-link {
-      display: inline-block;
-      margin-top: 0.3rem;
-      color: #4d4d4d;
-      font-size: 0.86rem;
-      text-decoration: none;
-    }
-
-    .helper-link:hover {
-      text-decoration: underline;
-    }
-
-    .submit-btn {
-      width: 100%;
-      padding: 12px 0;
-      margin-top: 1rem;
-      background: #5a5a5a;
-      color: #fff;
-      font-weight: 600;
-      font-size: 1rem;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-    }
-
-    .submit-btn:hover {
-      background: #474747;
-    }
-
-    .submit-btn:disabled {
-      cursor: not-allowed;
-      opacity: 0.65;
-    }
-
-    #status {
-      margin-top: 1rem;
-      min-height: 20px;
-      font-weight: 600;
-      color: #d33;
-      font-size: 0.95rem;
-    }
-  </style>
+  <link rel="stylesheet" href="auth.css" />
 </head>
-<body>
-  <div class="login-container">
-    <img src="C2.png" alt="Brand logo" class="brand-logo" />
-    <p class="subtitle">Continental ID</p>
+<body class="auth-page">
+  <main class="auth-shell" aria-labelledby="auth-title">
+    <aside class="auth-brand">
+      <div class="auth-brand-logo" aria-hidden="true">
+        <img src="C2.png" alt="" />
+      </div>
+      <p class="auth-eyebrow">Continental standard</p>
+      <h1>Secure sign-in for the Continental network.</h1>
+      <p class="auth-brand-copy">
+        One place to access your profile, sessions, and connected tools without a cluttered front door.
+      </p>
+      <ul class="auth-brand-list" aria-label="Authentication highlights">
+        <li>Email and username sign-in</li>
+        <li>Dedicated MFA verification step</li>
+        <li>Secure session cookies across the dashboard</li>
+      </ul>
+      <p class="auth-brand-footnote">
+        Best results come from opening this flow in a normal browser window with cookies enabled.
+      </p>
+    </aside>
 
-    <div class="toggle-buttons">
-      <button id="login-toggle" class="toggle-btn selected" type="button">Login</button>
-      <button id="register-toggle" class="toggle-btn" type="button">Register</button>
-    </div>
+    <section class="auth-panel">
+      <div class="auth-panel-heading">
+        <p class="auth-eyebrow">Secure access</p>
+        <h2 id="auth-title">Access your dashboard</h2>
+        <p class="auth-panel-copy">
+          Sign in with your username or email, or create a new account and verify it before first use.
+        </p>
+      </div>
 
-    <form id="login-form" novalidate>
-      <input type="text" id="login-identifier" placeholder="Email or username" autocomplete="username" required />
-      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required />
-      <input
-        type="text"
-        id="login-mfa-code"
-        class="hidden"
-        placeholder="Authenticator code"
-        inputmode="numeric"
-        autocomplete="one-time-code"
-      />
-      <input
-        type="text"
-        id="login-backup-code"
-        class="hidden"
-        placeholder="Backup code"
-        autocomplete="one-time-code"
-      />
-      <a id="forgot-password-link" class="helper-link" href="reset-password.html">Forgot password?</a>
-      <button type="submit" id="login-btn" class="submit-btn">Login</button>
-    </form>
+      <div id="status-banner" class="status-banner" data-status="info" aria-live="polite" aria-atomic="true"></div>
 
-    <form id="register-form" class="hidden" novalidate>
-      <input
-        type="text"
-        id="register-username"
-        placeholder="Username"
-        maxlength="30"
-        minlength="3"
-        pattern="[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?"
-        autocomplete="username"
-        required
-      />
-      <input type="text" id="register-display-name" placeholder="Display name (optional)" maxlength="60" autocomplete="nickname" />
-      <input type="email" id="register-email" placeholder="Email" autocomplete="email" required />
-      <input type="password" id="register-password" placeholder="Password" autocomplete="new-password" required />
-      <p class="password-hint">Usernames are for sign-in. Display names are what people see.</p>
-      <p class="password-hint">Use 8+ chars with uppercase, lowercase, and number.</p>
-      <button type="submit" id="register-btn" class="submit-btn">Register</button>
-    </form>
+      <div class="auth-tabs" role="tablist" aria-label="Authentication options">
+        <button
+          id="login-toggle"
+          class="auth-tab"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          aria-controls="login-panel"
+          tabindex="0"
+        >
+          Sign in
+        </button>
+        <button
+          id="register-toggle"
+          class="auth-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="register-panel"
+          tabindex="-1"
+        >
+          Create account
+        </button>
+      </div>
 
-    <div id="status" aria-live="polite"></div>
-  </div>
+      <section id="login-panel" class="auth-tab-panel" role="tabpanel" aria-labelledby="login-toggle">
+        <form id="login-form" class="form-grid" novalidate>
+          <div id="login-primary-fields" class="form-grid">
+            <div class="field-group" data-field="login-identifier">
+              <label class="field-label" for="login-identifier">Email or username</label>
+              <div class="input-row">
+                <input
+                  id="login-identifier"
+                  class="input-control"
+                  type="text"
+                  placeholder="name@example.com or continental.user"
+                  autocomplete="username"
+                  aria-describedby="login-identifier-hint login-identifier-error"
+                  required
+                />
+              </div>
+              <p id="login-identifier-hint" class="field-hint">Use the same sign-in handle you use across the dashboard.</p>
+              <p id="login-identifier-error" class="field-error"></p>
+            </div>
 
-  <script>
-    const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
-    const TRUSTED_APP_ORIGINS = new Set([
-      'https://dashboard.continental-hub.com',
-      'https://grimoire.continental-hub.com',
-      'https://pclaystation.github.io',
-      'https://mpmc.ddns.net',
-    ]);
-    const TRUSTED_API_ORIGINS = new Set([
-      'https://dashboard.continental-hub.com',
-      'https://grimoire.continental-hub.com',
-      'https://login.continental-hub.com',
-      'https://mpmc.ddns.net',
-    ]);
-    const params = new URLSearchParams(window.location.search);
+            <div class="field-group" data-field="login-password">
+              <label class="field-label" for="login-password">Password</label>
+              <div class="input-row">
+                <input
+                  id="login-password"
+                  class="input-control"
+                  type="password"
+                  placeholder="Enter your password"
+                  autocomplete="current-password"
+                  aria-describedby="login-password-error login-password-caps"
+                  required
+                />
+                <button type="button" class="input-action" data-password-toggle data-target="login-password" aria-pressed="false">
+                  Show
+                </button>
+              </div>
+              <p id="login-password-caps" class="caps-warning">Caps Lock appears to be on.</p>
+              <p id="login-password-error" class="field-error"></p>
+            </div>
 
-    const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
+            <div class="inline-actions">
+              <p class="field-hint">Passwords are never stored in the popup UI after the page closes.</p>
+              <a id="forgot-password-link" class="text-link" href="reset-password.html">Forgot password?</a>
+            </div>
+          </div>
 
-    const isTrustedApiOrigin = (origin) => {
-      if (!origin) return false;
+          <div id="login-mfa-step" class="mfa-step" aria-live="polite">
+            <div class="mfa-step-head">
+              <p class="mfa-step-title">Second step required</p>
+              <p id="login-mfa-copy" class="mfa-step-copy">
+                Your password was accepted. Finish sign-in with your authenticator app or a backup code.
+              </p>
+            </div>
 
-      try {
-        const parsed = new URL(origin);
-        if (LOCAL_HOSTS.has(parsed.hostname)) {
-          return true;
-        }
+            <div class="mfa-switcher" role="tablist" aria-label="Verification method">
+              <button
+                id="mfa-method-totp"
+                class="mfa-method-btn is-active"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="mfa-panel-totp"
+                tabindex="0"
+              >
+                Authenticator code
+              </button>
+              <button
+                id="mfa-method-backup"
+                class="mfa-method-btn"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="mfa-panel-backup"
+                tabindex="-1"
+              >
+                Backup code
+              </button>
+            </div>
 
-        return TRUSTED_API_ORIGINS.has(parsed.origin);
-      } catch {
-        return false;
-      }
-    };
+            <div id="mfa-panel-totp" class="mfa-method-panel" role="tabpanel" aria-labelledby="mfa-method-totp">
+              <div class="field-group" data-field="login-mfa-code">
+                <label class="field-label" for="login-mfa-code">6-digit authenticator code</label>
+                <div class="input-row">
+                  <input
+                    id="login-mfa-code"
+                    class="input-control"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="8"
+                    placeholder="123456"
+                    autocomplete="one-time-code"
+                    aria-describedby="login-mfa-code-hint login-mfa-code-error"
+                  />
+                </div>
+                <p id="login-mfa-code-hint" class="field-hint">Codes from your authenticator app expire quickly.</p>
+                <p id="login-mfa-code-error" class="field-error"></p>
+              </div>
+            </div>
 
-    const resolveTrustedApiBaseUrl = (value) => {
-      if (!value) return '';
+            <div id="mfa-panel-backup" class="mfa-method-panel" role="tabpanel" aria-labelledby="mfa-method-backup" hidden>
+              <div class="field-group" data-field="login-backup-code">
+                <label class="field-label" for="login-backup-code">Backup code</label>
+                <div class="input-row">
+                  <input
+                    id="login-backup-code"
+                    class="input-control"
+                    type="text"
+                    maxlength="40"
+                    placeholder="Enter one of your backup codes"
+                    autocomplete="one-time-code"
+                    aria-describedby="login-backup-code-hint login-backup-code-error"
+                  />
+                </div>
+                <p id="login-backup-code-hint" class="field-hint">Use a backup code only when your authenticator is unavailable.</p>
+                <p id="login-backup-code-error" class="field-error"></p>
+              </div>
+            </div>
 
-      try {
-        const resolved = new URL(value, window.location.origin);
-        return isTrustedApiOrigin(resolved.origin) ? trimTrailingSlash(resolved.origin) : '';
-      } catch {
-        return '';
-      }
-    };
+            <p id="login-mfa-helper" class="helper-message is-visible">Keep this window open until the sign-in finishes.</p>
 
-    const getDefaultApiBaseUrl = () => {
-      if (LOCAL_HOSTS.has(window.location.hostname)) {
-        return 'http://localhost:5000';
-      }
+            <div class="mfa-actions">
+              <button id="login-mfa-back-btn" class="ghost-btn" type="button">Edit sign-in details</button>
+            </div>
+          </div>
 
-      if (
-        window.location.hostname === 'dashboard.continental-hub.com' ||
-        window.location.hostname === 'login.continental-hub.com'
-      ) {
-        return 'https://grimoire.continental-hub.com';
-      }
+          <button type="submit" id="login-btn" class="submit-btn">Sign in</button>
+        </form>
 
-      return window.location.origin;
-    };
+        <div id="verification-actions" class="verification-actions" aria-live="polite">
+          <button id="resend-verification-btn" class="secondary-btn" type="button">Send new verification link</button>
+          <button id="verification-reset-btn" class="ghost-btn" type="button">Reset password instead</button>
+        </div>
+      </section>
 
-    const API_BASE_URL =
-      resolveTrustedApiBaseUrl(params.get('apiBaseUrl')) ||
-      resolveTrustedApiBaseUrl(window.__API_BASE_URL__) ||
-      trimTrailingSlash(getDefaultApiBaseUrl());
-    const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
+      <section id="register-panel" class="auth-tab-panel" role="tabpanel" aria-labelledby="register-toggle" hidden>
+        <form id="register-form" class="form-grid" novalidate>
+          <div class="field-group" data-field="register-username">
+            <label class="field-label" for="register-username">Username</label>
+            <div class="input-row">
+              <input
+                id="register-username"
+                class="input-control"
+                type="text"
+                maxlength="30"
+                minlength="3"
+                pattern="[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?"
+                placeholder="continental.user"
+                autocomplete="username"
+                aria-describedby="register-username-hint register-username-error"
+                required
+              />
+            </div>
+            <p id="register-username-hint" class="field-hint">
+              Letters, numbers, dots, hyphens, and underscores only. This is your sign-in handle.
+            </p>
+            <p id="register-username-error" class="field-error"></p>
+          </div>
 
-    const statusDiv = document.getElementById('status');
-    const loginToggle = document.getElementById('login-toggle');
-    const registerToggle = document.getElementById('register-toggle');
-    const loginForm = document.getElementById('login-form');
-    const registerForm = document.getElementById('register-form');
-    const loginBtn = document.getElementById('login-btn');
-    const registerBtn = document.getElementById('register-btn');
-    const forgotPasswordLink = document.getElementById('forgot-password-link');
-    const loginMfaCode = document.getElementById('login-mfa-code');
-    const loginBackupCode = document.getElementById('login-backup-code');
-    let awaitingMfa = false;
+          <div class="field-group" data-field="register-display-name">
+            <label class="field-label" for="register-display-name">Display name <span class="field-hint">(optional)</span></label>
+            <div class="input-row">
+              <input
+                id="register-display-name"
+                class="input-control"
+                type="text"
+                maxlength="60"
+                placeholder="Continental User"
+                autocomplete="nickname"
+                aria-describedby="register-display-name-error"
+              />
+            </div>
+            <p id="register-display-name-error" class="field-error"></p>
+          </div>
 
-    const isTrustedAppOrigin = (origin) => {
-      if (!origin) return false;
+          <div class="field-group" data-field="register-email">
+            <label class="field-label" for="register-email">Email address</label>
+            <div class="input-row">
+              <input
+                id="register-email"
+                class="input-control"
+                type="email"
+                placeholder="name@example.com"
+                autocomplete="email"
+                aria-describedby="register-email-hint register-email-error"
+                required
+              />
+            </div>
+            <p id="register-email-hint" class="field-hint">You will verify this address before first sign-in.</p>
+            <p id="register-email-error" class="field-error"></p>
+          </div>
 
-      try {
-        const parsed = new URL(origin);
-        if (LOCAL_HOSTS.has(parsed.hostname)) {
-          return true;
-        }
+          <div class="field-group" data-field="register-password">
+            <label class="field-label" for="register-password">Password</label>
+            <div class="input-row">
+              <input
+                id="register-password"
+                class="input-control"
+                type="password"
+                placeholder="Create a strong password"
+                autocomplete="new-password"
+                aria-describedby="register-password-hint register-password-error register-password-caps register-password-strength-copy"
+                required
+              />
+              <button type="button" class="input-action" data-password-toggle data-target="register-password" aria-pressed="false">
+                Show
+              </button>
+            </div>
+            <p id="register-password-caps" class="caps-warning">Caps Lock appears to be on.</p>
+            <div id="register-password-strength" class="password-strength" data-score="0">
+              <div class="password-strength-bar" aria-hidden="true">
+                <div id="register-password-strength-fill" class="password-strength-fill"></div>
+              </div>
+              <p id="register-password-strength-copy" class="password-strength-copy">
+                Use at least 8 characters with uppercase, lowercase, and a number.
+              </p>
+            </div>
+            <p id="register-password-hint" class="field-hint">Stronger passwords also use length and uncommon combinations.</p>
+            <p id="register-password-error" class="field-error"></p>
+          </div>
 
-        return TRUSTED_APP_ORIGINS.has(parsed.origin);
-      } catch {
-        return false;
-      }
-    };
+          <div class="field-group" data-field="register-confirm-password">
+            <label class="field-label" for="register-confirm-password">Confirm password</label>
+            <div class="input-row">
+              <input
+                id="register-confirm-password"
+                class="input-control"
+                type="password"
+                placeholder="Repeat your password"
+                autocomplete="new-password"
+                aria-describedby="register-confirm-password-error register-confirm-password-caps"
+                required
+              />
+              <button type="button" class="input-action" data-password-toggle data-target="register-confirm-password" aria-pressed="false">
+                Show
+              </button>
+            </div>
+            <p id="register-confirm-password-caps" class="caps-warning">Caps Lock appears to be on.</p>
+            <p id="register-confirm-password-error" class="field-error"></p>
+          </div>
 
-    const resolveTrustedOrigin = (value) => {
-      if (!value) return '';
+          <button type="submit" id="register-btn" class="submit-btn">Create account</button>
+        </form>
+      </section>
 
-      try {
-        const origin = new URL(value).origin;
-        return isTrustedAppOrigin(origin) ? origin : '';
-      } catch {
-        return '';
-      }
-    };
+      <div class="auth-divider"></div>
 
-    const targetOrigin =
-      resolveTrustedOrigin(params.get('origin')) || resolveTrustedOrigin(document.referrer) || '';
+      <div class="auth-meta">
+        <span>Cookies are used for secure sign-in and session continuity.</span>
+        <a id="open-full-page-link" class="text-link" href="">Open full-page login</a>
+      </div>
+    </section>
+  </main>
 
-    const resolveRedirectUrl = (value, fallbackOrigin) => {
-      const safeFallbackOrigin = isTrustedAppOrigin(fallbackOrigin)
-        ? fallbackOrigin
-        : 'https://dashboard.continental-hub.com';
-
-      try {
-        const resolved = new URL(value || '/', safeFallbackOrigin);
-        if (!isTrustedAppOrigin(resolved.origin)) {
-          return new URL('/', safeFallbackOrigin).toString();
-        }
-        return resolved.toString();
-      } catch {
-        return new URL('/', safeFallbackOrigin).toString();
-      }
-    };
-
-    const redirectUrl = resolveRedirectUrl(params.get('redirect'), targetOrigin);
-
-    const setStatus = (message, color = '#d33') => {
-      statusDiv.textContent = message;
-      statusDiv.style.color = color;
-    };
-
-    const setBusy = (button, busy) => {
-      button.disabled = busy;
-    };
-
-    const switchToLogin = () => {
-      loginToggle.classList.add('selected');
-      registerToggle.classList.remove('selected');
-      loginForm.classList.remove('hidden');
-      registerForm.classList.add('hidden');
-      awaitingMfa = false;
-      loginMfaCode.classList.add('hidden');
-      loginBackupCode.classList.add('hidden');
-      loginBtn.textContent = 'Login';
-      setStatus('', '#d33');
-    };
-
-    const switchToRegister = () => {
-      registerToggle.classList.add('selected');
-      loginToggle.classList.remove('selected');
-      registerForm.classList.remove('hidden');
-      loginForm.classList.add('hidden');
-      setStatus('', '#d33');
-    };
-
-    loginToggle.addEventListener('click', switchToLogin);
-    registerToggle.addEventListener('click', switchToRegister);
-
-    if (forgotPasswordLink) {
-      const resetUrl = new URL('reset-password.html', window.location.href);
-      if (params.get('origin')) resetUrl.searchParams.set('origin', params.get('origin'));
-      if (params.get('redirect')) resetUrl.searchParams.set('redirect', params.get('redirect'));
-      if (params.get('apiBaseUrl')) resetUrl.searchParams.set('apiBaseUrl', params.get('apiBaseUrl'));
-      forgotPasswordLink.href = resetUrl.toString();
-    }
-
-    const finishAuth = (payload) => {
-      if (window.opener && !window.opener.closed && targetOrigin) {
-        window.opener.postMessage(
-          {
-            type: 'LOGIN_SUCCESS',
-          },
-          targetOrigin
-        );
-
-        window.close();
-        return;
-      }
-
-      window.location.href = redirectUrl;
-    };
-
-    const parseJson = async (res) => {
-      const text = await res.text();
-      if (!text) return {};
-
-      try {
-        return JSON.parse(text);
-      } catch {
-        return { message: text };
-      }
-    };
-
-    const requestAuth = async (endpoint, body, submitButton) => {
-      setBusy(submitButton, true);
-      setStatus('Working...', '#444');
-
-      try {
-        const res = await fetch(`${AUTH_API_BASE}${endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(body),
-        });
-
-        const data = await parseJson(res);
-
-        if (!res.ok) {
-          if (data.mfaRequired) {
-            awaitingMfa = true;
-            loginMfaCode.classList.remove('hidden');
-            loginBackupCode.classList.remove('hidden');
-            loginBtn.textContent = 'Verify and Login';
-          }
-          throw new Error(data.message || 'Authentication failed.');
-        }
-
-        awaitingMfa = false;
-        setStatus('Success. Continuing...', 'green');
-        finishAuth(data);
-      } catch (error) {
-        setStatus(error.message || 'Authentication failed.', '#d33');
-      } finally {
-        setBusy(submitButton, false);
-      }
-    };
-
-    loginForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-
-      const identifier = document.getElementById('login-identifier').value.trim();
-      const password = document.getElementById('login-password').value;
-      const mfaCode = loginMfaCode.value.trim();
-      const backupCode = loginBackupCode.value.trim();
-
-      if (!identifier || !password) {
-        setStatus('Username/email and password are required.');
-        return;
-      }
-
-      if (awaitingMfa && !mfaCode && !backupCode) {
-        setStatus('Enter an authenticator code or backup code.');
-        return;
-      }
-
-      await requestAuth('/login', { identifier, password, mfaCode, backupCode }, loginBtn);
-    });
-
-    registerForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-
-      const username = document.getElementById('register-username').value.trim();
-      const displayName = document.getElementById('register-display-name').value.trim();
-      const email = document.getElementById('register-email').value.trim();
-      const password = document.getElementById('register-password').value;
-
-      if (!username || !email || !password) {
-        setStatus('Username, email, and password are required.');
-        return;
-      }
-
-      await requestAuth('/register', { username, displayName, email, password }, registerBtn);
-    });
-  </script>
+  <script src="auth-config.js"></script>
+  <script src="popup.js"></script>
 </body>
 </html>

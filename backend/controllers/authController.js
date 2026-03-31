@@ -35,6 +35,8 @@ const LOGIN_ACTIVITY_RETENTION_DAYS = 45;
 const MAX_AUDIT_EVENTS = 120;
 const MAX_KNOWN_DEVICES = 24;
 const PASSWORD_RESET_TTL_MS = Number(process.env.PASSWORD_RESET_TTL_MS) || 60 * 60 * 1000;
+const PASSWORD_RESET_EMAIL_COOLDOWN_MS =
+  Number(process.env.PASSWORD_RESET_EMAIL_COOLDOWN_MS) || 10 * 60 * 1000;
 const NEW_DEVICE_SESSION_WINDOW_MS = 15 * 60 * 1000;
 
 const LINKED_PROVIDERS = [
@@ -248,6 +250,7 @@ const preparePasswordReset = (user) => {
   const reset = createPasswordResetToken();
   user.passwordResetToken = reset.hashedToken;
   user.passwordResetTokenExpires = reset.expiresAt;
+  user.passwordResetRequestedAt = new Date();
   return reset;
 };
 
@@ -617,9 +620,9 @@ const buildSecurityEmailContent = ({ title, intro, details = [] }) => {
   };
 };
 
-const shouldSendSecurityNotifications = (user) =>
+const shouldSendSecurityNotifications = (user, emailOverride = '') =>
   Boolean(
-    user?.email &&
+    sanitizeText(emailOverride || user?.email, 320) &&
       (hasOwn(user?.preferences?.notifications || {}, 'security')
         ? user?.preferences?.notifications?.security
         : DEFAULT_NOTIFICATIONS.security)
@@ -629,15 +632,16 @@ const shouldSendLoginAlert = (user) =>
   shouldSendSecurityNotifications(user) &&
   Boolean(hasOwn(user?.security || {}, 'loginAlerts') ? user?.security?.loginAlerts : true);
 
-const sendSecurityAlertEmail = async (user, subject, title, intro, details = []) => {
-  if (!shouldSendSecurityNotifications(user)) {
+const sendSecurityAlertEmail = async (user, subject, title, intro, details = [], options = {}) => {
+  const recipient = sanitizeText(options.emailOverride || user?.email, 320);
+  if (!shouldSendSecurityNotifications(user, recipient)) {
     return { sent: false };
   }
 
   try {
     const emailContent = buildSecurityEmailContent({ title, intro, details });
     const response = await sendEmail({
-      to: user.email,
+      to: recipient,
       subject,
       text: emailContent.text,
       html: emailContent.html,
@@ -1672,7 +1676,7 @@ const buildActivitySummary = (recentLogins = [], dailyCounts = []) => {
 };
 
 const FULL_USER_SELECT_FIELDS =
-  'email username displayName isVerified verificationToken verificationTokenExpires passwordResetToken passwordResetTokenExpires lastLoginAt lastLoginIp recentLogins loginDayCounts knownDevices auditEvents profile linkedAccounts preferences security refreshTokenVersion refreshSessions createdAt updatedAt password';
+  'email username displayName isVerified verificationToken verificationTokenExpires passwordResetToken passwordResetTokenExpires passwordResetRequestedAt lastLoginAt lastLoginIp recentLogins loginDayCounts knownDevices auditEvents profile linkedAccounts preferences security refreshTokenVersion refreshSessions createdAt updatedAt password';
 
 const getUserById = async (id, { ensureIdentity = true } = {}) => {
   const user = await User.findById(id).select(FULL_USER_SELECT_FIELDS);
@@ -1787,6 +1791,20 @@ const clearLoginFailures = async (key) => {
   await LoginThrottle.deleteOne({ key });
 };
 
+const revokeAllTrackedSessions = (user) => {
+  if (!user) return;
+  user.refreshTokenVersion += 1;
+  user.refreshSessions = [];
+};
+
+const getPasswordResetCooldownRemainingMs = (user) => {
+  const requestedAt = user?.passwordResetRequestedAt
+    ? new Date(user.passwordResetRequestedAt).getTime()
+    : 0;
+  if (!requestedAt) return 0;
+  return Math.max(0, requestedAt + PASSWORD_RESET_EMAIL_COOLDOWN_MS - Date.now());
+};
+
 const applyEmailChange = async (user, email, currentPassword) => {
   const nextEmail = normalizeEmail(email);
   const currentEmail = normalizeEmail(user?.email);
@@ -1816,6 +1834,14 @@ const applyEmailChange = async (user, email, currentPassword) => {
   user.email = nextEmail;
   return true;
 };
+
+const buildEmailChangeSecurityDetails = (req, previousEmail = '', nextEmail = '') =>
+  [
+    previousEmail ? `Previous email: ${previousEmail}` : '',
+    nextEmail ? `New email: ${nextEmail}` : '',
+    `Time: ${new Date().toUTCString()}`,
+    `IP address: ${parseClientIp(req) || 'Unknown'}`,
+  ].filter(Boolean);
 
 const revokeRefreshSessionForReplay = async (user, sid) => {
   if (!user || !sid) return;
@@ -1944,38 +1970,23 @@ exports.register = async (req, res) => {
     });
 
     await applyUsernameChange(user, requestedUsername);
-    const device = rememberKnownDevice(user, req, req.body?.deviceLabel);
     const verification = prepareEmailVerification(user);
-    appendRecentLogin(user, req);
-    appendAuditEvent(user, req, 'register', 'Account created.', {
+    appendAuditEvent(user, req, 'register', 'Account created. Email verification required before sign-in.', {
       username: getDisplayableUsername(user),
     });
-    const sessionTokens = createTrackedRefreshSession(
-      user,
-      req,
-      req.body?.deviceLabel,
-      device.fingerprint
-    );
     await user.save();
     const verificationDelivery = await sendVerificationEmail(user, req, verification);
 
-    res.cookie('refreshToken', sessionTokens.refreshToken, buildCookieOptions(req));
-
-    return sendUserResponse(
-      res,
-      201,
-      getVerificationDeliveryMessage(
-        'Registration successful. Check your inbox to verify your email.',
-        'Registration successful, but the verification email could not be sent right now.',
+    return res.status(201).json({
+      message: getVerificationDeliveryMessage(
+        'Registration successful. Check your inbox to verify your email before signing in.',
+        'Registration successful, but the verification email could not be sent right now. Try signing in later to request another verification email.',
         verificationDelivery
       ),
-      user,
-      {
-        verificationEmail: serializeVerificationDelivery(verificationDelivery),
-        token: sessionTokens.accessToken,
-        accessToken: sessionTokens.accessToken,
-      }
-    );
+      authenticated: false,
+      requiresVerification: true,
+      verificationEmail: serializeVerificationDelivery(verificationDelivery),
+    });
   } catch (err) {
     if (err?.statusCode) {
       return res.status(err.statusCode).json({ message: err.message });
@@ -2023,6 +2034,37 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials.' });
     }
 
+    await ensureUserIdentityFields(user);
+
+    if (!user.isVerified) {
+      await clearLoginFailures(rateKey);
+
+      const verification = prepareEmailVerification(user);
+      revokeAllTrackedSessions(user);
+      appendAuditEvent(
+        user,
+        req,
+        'login_blocked_unverified',
+        'Sign-in blocked until email verification is completed.',
+        { identifier }
+      );
+      await user.save();
+
+      const verificationDelivery = await sendVerificationEmail(user, req, verification);
+      clearRefreshCookie(res, req);
+
+      return res.status(403).json({
+        message: getVerificationDeliveryMessage(
+          'Verify your email before signing in. A fresh verification link has been sent.',
+          'Verify your email before signing in. We could not send a new verification email right now.',
+          verificationDelivery
+        ),
+        authenticated: false,
+        requiresVerification: true,
+        verificationEmail: serializeVerificationDelivery(verificationDelivery),
+      });
+    }
+
     const mfaEnabled = Boolean(user?.security?.mfa?.enabled && user?.security?.mfa?.secret);
     if (mfaEnabled) {
       const mfaResult = verifyMfaAttempt(user, { mfaCode, backupCode });
@@ -2046,7 +2088,6 @@ exports.login = async (req, res) => {
 
     await clearLoginFailures(rateKey);
 
-    await ensureUserIdentityFields(user);
     const device = rememberKnownDevice(user, req, req.body?.deviceLabel);
     appendRecentLogin(user, req);
     appendAuditEvent(
@@ -2138,6 +2179,10 @@ exports.requestPasswordReset = async (req, res) => {
     }
 
     await ensureUserIdentityFields(user);
+    if (getPasswordResetCooldownRemainingMs(user) > 0) {
+      return res.status(200).json({ message: genericMessage });
+    }
+
     const reset = preparePasswordReset(user);
     appendAuditEvent(user, req, 'password_reset_requested', 'Password reset requested.');
     await user.save();
@@ -2146,6 +2191,44 @@ exports.requestPasswordReset = async (req, res) => {
     return res.status(200).json({ message: genericMessage });
   } catch (err) {
     console.error('Password reset request error:', err);
+    return res.status(200).json({ message: genericMessage });
+  }
+};
+
+exports.publicResendVerificationEmail = async (req, res) => {
+  const identifier = normalizeLoginIdentifier(
+    req.body?.identifier || req.body?.email || req.body?.username
+  );
+  const genericMessage =
+    'If that sign-in belongs to an unverified account, a verification link will be sent shortly.';
+
+  try {
+    if (!identifier || (!isValidEmail(identifier) && !isValidUsername(identifier))) {
+      return res.status(200).json({ message: genericMessage });
+    }
+
+    const user = await findUserByLoginIdentifier(identifier);
+    if (!user || user.isVerified) {
+      return res.status(200).json({ message: genericMessage });
+    }
+
+    await ensureUserIdentityFields(user);
+    const verification = prepareEmailVerification(user);
+    revokeAllTrackedSessions(user);
+    appendAuditEvent(
+      user,
+      req,
+      'verification_resent_public',
+      'Verification email resent from the public sign-in flow.'
+    );
+    await user.save();
+
+    await sendVerificationEmail(user, req, verification);
+    clearRefreshCookie(res, req);
+
+    return res.status(200).json({ message: genericMessage });
+  } catch (err) {
+    console.error('Public resend verification email error:', err);
     return res.status(200).json({ message: genericMessage });
   }
 };
@@ -2286,6 +2369,15 @@ exports.refreshToken = async (req, res) => {
       return res.status(200).json({ authenticated: false, message: 'No active refresh session.' });
     }
 
+    if (!session.user.isVerified) {
+      clearRefreshCookie(res, req);
+      return res.status(200).json({
+        authenticated: false,
+        requiresVerification: true,
+        message: 'Verify your email before signing in.',
+      });
+    }
+
     let tokenPair;
     if (session.tokenState === 'grace') {
       tokenPair = reissueCurrentRefreshSession(session.user, req, session.sid, session.session);
@@ -2325,6 +2417,8 @@ exports.updateProfile = async (req, res) => {
 
     let verification = null;
     let emailChanged = false;
+    const previousEmail = sanitizeText(user.email, 320);
+    const previousEmailWasVerified = Boolean(user.isVerified);
 
     if (hasOwn(incoming, 'username')) {
       if (!normalizeUsername(incoming.username)) {
@@ -2345,6 +2439,7 @@ exports.updateProfile = async (req, res) => {
       emailChanged = await applyEmailChange(user, incoming.email, currentPassword);
       if (emailChanged) {
         verification = prepareEmailVerification(user);
+        revokeAllTrackedSessions(user);
       }
     }
 
@@ -2363,21 +2458,23 @@ exports.updateProfile = async (req, res) => {
       : null;
 
     if (emailChanged) {
-      await sendSecurityAlertEmail(
-        user,
-        'Your Continental ID email was changed',
-        'Email change detected',
-        'Your account email was updated and now requires verification.',
-        [
-          `Time: ${new Date().toUTCString()}`,
-          `IP address: ${parseClientIp(req) || 'Unknown'}`,
-        ]
-      );
+      if (previousEmailWasVerified && previousEmail && previousEmail !== user.email) {
+        await sendSecurityAlertEmail(
+          user,
+          'Your Continental ID email was changed',
+          'Email change detected',
+          'The email address on your Continental ID account was changed. If this was not you, secure your account immediately.',
+          buildEmailChangeSecurityDetails(req, previousEmail, user.email),
+          { emailOverride: previousEmail }
+        );
+      }
+
+      clearRefreshCookie(res, req);
     }
 
     const message = verification
       ? getVerificationDeliveryMessage(
-          'Profile updated. Please verify your new email address.',
+          'Profile updated. Verify your new email before signing in again.',
           'Profile updated, but the verification email could not be sent right now.',
           verificationDelivery
         )
@@ -2385,6 +2482,7 @@ exports.updateProfile = async (req, res) => {
 
     return sendUserResponse(res, 200, message, user, {
       verificationEmail: verification ? serializeVerificationDelivery(verificationDelivery) : undefined,
+      forceRelogin: emailChanged,
     });
   } catch (err) {
     if (err?.statusCode) {
@@ -2408,10 +2506,13 @@ exports.updateEmail = async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
+    const previousEmail = sanitizeText(user.email, 320);
+    const previousEmailWasVerified = Boolean(user.isVerified);
     const emailChanged = await applyEmailChange(user, email, currentPassword);
     let verification = null;
     if (emailChanged) {
       verification = prepareEmailVerification(user);
+      revokeAllTrackedSessions(user);
     }
 
     appendAuditEvent(
@@ -2428,21 +2529,23 @@ exports.updateEmail = async (req, res) => {
       : null;
 
     if (emailChanged) {
-      await sendSecurityAlertEmail(
-        user,
-        'Your Continental ID email was changed',
-        'Email change detected',
-        'Your Continental ID email was changed and needs to be verified again.',
-        [
-          `Time: ${new Date().toUTCString()}`,
-          `IP address: ${parseClientIp(req) || 'Unknown'}`,
-        ]
-      );
+      if (previousEmailWasVerified && previousEmail && previousEmail !== user.email) {
+        await sendSecurityAlertEmail(
+          user,
+          'Your Continental ID email was changed',
+          'Email change detected',
+          'The email address on your Continental ID account was changed. If this was not you, secure your account immediately.',
+          buildEmailChangeSecurityDetails(req, previousEmail, user.email),
+          { emailOverride: previousEmail }
+        );
+      }
+
+      clearRefreshCookie(res, req);
     }
 
     const message = verification
       ? getVerificationDeliveryMessage(
-          'Email updated. Please verify your new email address.',
+          'Email updated. Verify your new email before signing in again.',
           'Email updated, but the verification email could not be sent right now.',
           verificationDelivery
         )
@@ -2450,6 +2553,7 @@ exports.updateEmail = async (req, res) => {
 
     return sendUserResponse(res, 200, message, user, {
       verificationEmail: verification ? serializeVerificationDelivery(verificationDelivery) : undefined,
+      forceRelogin: emailChanged,
     });
   } catch (err) {
     if (err?.statusCode) {
@@ -2630,10 +2734,21 @@ exports.updateSecurity = async (req, res) => {
 };
 
 exports.beginMfaSetup = async (req, res) => {
+  const currentPassword = req.body?.currentPassword || '';
+
   try {
     const user = await getUserById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
+    }
+
+    if (user.security?.mfa?.enabled && user.security?.mfa?.secret) {
+      return res.status(400).json({ message: 'MFA is already enabled on this account.' });
+    }
+
+    const matches = await user.comparePassword(currentPassword);
+    if (!matches) {
+      return res.status(400).json({ message: 'Current password is incorrect.' });
     }
 
     const secret = generateMfaSecret();
@@ -2656,6 +2771,7 @@ exports.beginMfaSetup = async (req, res) => {
 };
 
 exports.enableMfa = async (req, res) => {
+  const currentPassword = req.body?.currentPassword || '';
   const code = sanitizeMfaCode(req.body?.code);
 
   try {
@@ -2667,6 +2783,11 @@ exports.enableMfa = async (req, res) => {
     const pendingSecret = sanitizeText(user?.security?.mfa?.pendingSecret, 120);
     if (!pendingSecret) {
       return res.status(400).json({ message: 'Start MFA setup before enabling it.' });
+    }
+
+    const matches = await user.comparePassword(currentPassword);
+    if (!matches) {
+      return res.status(400).json({ message: 'Current password is incorrect.' });
     }
 
     if (!verifyTotp({ secret: pendingSecret, token: code })) {

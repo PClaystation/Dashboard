@@ -100,6 +100,7 @@ const userSchema = new mongoose.Schema(
     verificationTokenExpires: { type: Date, default: null },
     passwordResetToken: { type: String, default: '' },
     passwordResetTokenExpires: { type: Date, default: null },
+    passwordResetRequestedAt: { type: Date, default: null },
     lastLoginAt: { type: Date },
     lastLoginIp: { type: String, default: '' },
     recentLogins: {

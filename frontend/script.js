@@ -114,6 +114,7 @@ const dom = {
   mfaDisableBtn: document.getElementById('mfa-disable-btn'),
   mfaBackupBtn: document.getElementById('mfa-backup-btn'),
   mfaSetupPanel: document.getElementById('mfa-setup-panel'),
+  mfaCurrentPassword: document.getElementById('mfa-current-password'),
   mfaSecret: document.getElementById('mfa-secret'),
   mfaOtpAuthUrl: document.getElementById('mfa-otpauth-url'),
   mfaCode: document.getElementById('mfa-code'),
@@ -264,6 +265,14 @@ const loginPopupOrigin = (() => {
     return null;
   }
 })();
+
+const buildLoginPopupUrl = () => {
+  const popupUrl = new URL(LOGIN_POPUP_URL, window.location.href);
+  popupUrl.searchParams.set('origin', window.location.origin);
+  popupUrl.searchParams.set('redirect', window.location.href);
+  popupUrl.searchParams.set('apiBaseUrl', API_BASE_URL);
+  return popupUrl;
+};
 
 const state = {
   user: null,
@@ -648,15 +657,11 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = REQUEST_TIMEOUT_M
 };
 
 const openLoginPopup = () => {
-  const width = 520;
-  const height = 700;
+  const width = 860;
+  const height = 780;
   const left = window.screenX + (window.outerWidth - width) / 2;
   const top = window.screenY + (window.outerHeight - height) / 2;
-
-  const popupUrl = new URL(LOGIN_POPUP_URL, window.location.href);
-  popupUrl.searchParams.set('origin', window.location.origin);
-  popupUrl.searchParams.set('redirect', window.location.href);
-  popupUrl.searchParams.set('apiBaseUrl', API_BASE_URL);
+  const popupUrl = buildLoginPopupUrl();
 
   if (state.loginPopupWindow && !state.loginPopupWindow.closed) {
     state.loginPopupWindow.focus();
@@ -670,6 +675,10 @@ const openLoginPopup = () => {
   );
 
   return state.loginPopupWindow;
+};
+
+const openLoginPage = () => {
+  window.location.assign(buildLoginPopupUrl().toString());
 };
 
 const closeLoginPopup = () => {
@@ -731,6 +740,8 @@ const clearDashboardUi = () => {
   if (dom.openPublicProfileBtn) dom.openPublicProfileBtn.disabled = true;
   if (dom.profileAvatarUrl) dom.profileAvatarUrl.value = '';
   if (dom.profileAvatarUpload) dom.profileAvatarUpload.value = '';
+  if (dom.mfaCurrentPassword) dom.mfaCurrentPassword.value = '';
+  if (dom.mfaCode) dom.mfaCode.value = '';
 
   if (dom.activityFilter) dom.activityFilter.value = '';
   if (dom.activityKind) dom.activityKind.value = 'all';
@@ -769,7 +780,12 @@ const setLoggedOutUI = (openPopup = true) => {
 
   setStatus('Not logged in - click to sign in', {
     clickable: true,
-    onClick: () => openLoginPopup(),
+    onClick: () => {
+      const popup = openLoginPopup();
+      if (!popup) {
+        openLoginPage();
+      }
+    },
   });
 
   if (dom.logoutBtn) {
@@ -786,19 +802,13 @@ const setLoggedOutUI = (openPopup = true) => {
   if (popup) return;
 
   if (dom.loadingMessage) {
-    dom.loadingMessage.textContent = 'Login popup blocked. Click here to open login.';
+    dom.loadingMessage.textContent = 'Login popup blocked. Click here to continue to login.';
   }
 
   if (dom.loadingScreen) {
     dom.loadingScreen.style.cursor = 'pointer';
     dom.loadingScreen.onclick = () => {
-      const retry = openLoginPopup();
-      if (!retry) return;
-      dom.loadingScreen.style.cursor = 'default';
-      dom.loadingScreen.onclick = null;
-      if (dom.loadingMessage) {
-        dom.loadingMessage.textContent = 'Waiting for login...';
-      }
+      openLoginPage();
     };
   }
 };
@@ -1825,9 +1835,11 @@ const renderMfaState = (user = state.user) => {
     }
   }
 
+  if (dom.mfaSetupBtn) dom.mfaSetupBtn.disabled = mfa.enabled;
   if (dom.mfaDisableBtn) dom.mfaDisableBtn.disabled = !mfa.enabled;
   if (dom.mfaBackupBtn) dom.mfaBackupBtn.disabled = !mfa.enabled;
   if (dom.mfaSetupPanel) dom.mfaSetupPanel.hidden = !state.mfaSetup?.secret;
+  if (dom.mfaCurrentPassword && !state.mfaSetup?.secret) dom.mfaCurrentPassword.value = '';
   if (dom.mfaSecret) dom.mfaSecret.value = safeText(state.mfaSetup?.secret);
   if (dom.mfaOtpAuthUrl) dom.mfaOtpAuthUrl.value = safeText(state.mfaSetup?.otpAuthUrl);
 };
@@ -2364,6 +2376,14 @@ const handleProfileSave = async (event) => {
       profileResult.message || 'Profile updated.',
       profileResult.verificationEmail?.sent === false ? 'warn' : 'success'
     );
+
+    if (profileResult.forceRelogin) {
+      clearStoredAuth();
+      stopSessionAutoRefresh();
+      setTimeout(() => setLoggedOutUI(true), 450);
+      return;
+    }
+
     setSyncStatus(new Date());
   } catch (err) {
     showToast(err.message, 'error');
@@ -2489,15 +2509,22 @@ const handleSecuritySave = async (event) => {
 };
 
 const handleMfaSetup = async () => {
+  const currentPassword = dom.mfaCurrentPassword?.value || '';
+  if (!currentPassword) {
+    showToast('Enter your current password to start MFA setup.', 'error');
+    return;
+  }
+
   setButtonBusy(dom.mfaSetupBtn, true, 'Preparing...');
 
   try {
     const data = await apiRequest('/mfa/setup', {
       method: 'POST',
-      body: {},
+      body: { currentPassword },
     });
 
     state.mfaSetup = data.setup || null;
+    if (dom.mfaCurrentPassword) dom.mfaCurrentPassword.value = '';
     renderBackupCodes(data.setup?.backupCodes || []);
     renderMfaState(state.user);
     showToast('Authenticator setup created.', 'success');
@@ -2509,7 +2536,12 @@ const handleMfaSetup = async () => {
 };
 
 const handleMfaEnable = async () => {
+  const currentPassword = dom.mfaCurrentPassword?.value || '';
   const code = safeText(dom.mfaCode?.value);
+  if (!currentPassword) {
+    showToast('Enter your current password to enable MFA.', 'error');
+    return;
+  }
   if (!code) {
     showToast('Enter the MFA code from your authenticator app.', 'error');
     return;
@@ -2520,11 +2552,12 @@ const handleMfaEnable = async () => {
   try {
     const data = await apiRequest('/mfa/enable', {
       method: 'POST',
-      body: { code },
+      body: { currentPassword, code },
     });
 
     state.user = normalizeUserPayload(data);
     state.mfaSetup = null;
+    if (dom.mfaCurrentPassword) dom.mfaCurrentPassword.value = '';
     if (dom.mfaCode) dom.mfaCode.value = '';
     renderBackupCodes([]);
     syncUiWithUser(state.user);
