@@ -5,6 +5,76 @@ const USERNAME_MAX_LENGTH = 30;
 const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{1,28}[a-z0-9])?$/;
 const USERNAME_VALIDATION_MESSAGE =
   'Username must be 3-30 characters and use only letters, numbers, dots, hyphens, or underscores.';
+const USERNAME_MODERATION_MESSAGE =
+  'Choose a different username. Usernames cannot contain offensive or hateful language.';
+const DISPLAY_NAME_MODERATION_MESSAGE =
+  'Choose a different display name. Display names cannot contain offensive or hateful language.';
+const BLOCKED_NAME_FRAGMENTS = [
+  'anal',
+  'anus',
+  'arse',
+  'asshole',
+  'bastard',
+  'beaner',
+  'bitch',
+  'bollock',
+  'boner',
+  'boob',
+  'buttplug',
+  'chink',
+  'clit',
+  'cock',
+  'coon',
+  'crackhead',
+  'cum',
+  'cuck',
+  'cunt',
+  'deepthroat',
+  'dick',
+  'dildo',
+  'dyke',
+  'ejaculate',
+  'fag',
+  'faggot',
+  'felch',
+  'fuck',
+  'gangbang',
+  'genital',
+  'gook',
+  'handjob',
+  'hentai',
+  'hitler',
+  'jackoff',
+  'jizz',
+  'kike',
+  'kkk',
+  'nazi',
+  'nigga',
+  'nigger',
+  'nutsack',
+  'orgasm',
+  'penis',
+  'piss',
+  'porn',
+  'prick',
+  'pussy',
+  'queef',
+  'rapist',
+  'rape',
+  'retard',
+  'rimjob',
+  'scrotum',
+  'sex',
+  'shit',
+  'slut',
+  'spic',
+  'tit',
+  'tranny',
+  'twat',
+  'vagina',
+  'wank',
+  'whore',
+];
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
 const toObjectIdString = (value) => String(value || '');
@@ -12,6 +82,36 @@ const sanitizeText = (value, maxLength = 120) => String(value || '').trim().slic
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 const normalizeUsername = (value) => sanitizeText(value, USERNAME_MAX_LENGTH).toLowerCase();
 const isValidUsername = (value) => USERNAME_PATTERN.test(normalizeUsername(value));
+const normalizeForModeration = (value) =>
+  sanitizeText(value, 120)
+    .toLowerCase()
+    .replace(/[0134@5$7+8]/g, (char) => {
+      if (char === '0') return 'o';
+      if (char === '1') return 'i';
+      if (char === '3') return 'e';
+      if (char === '4' || char === '@') return 'a';
+      if (char === '5' || char === '$') return 's';
+      if (char === '7' || char === '+') return 't';
+      if (char === '8') return 'b';
+      return char;
+    })
+    .replace(/[^a-z0-9]+/g, '')
+    .replace(/(.)\1{2,}/g, '$1');
+const buildModerationVariants = (value) => {
+  const normalized = normalizeForModeration(value);
+  if (!normalized) return [];
+
+  const collapsedPairs = normalized.replace(/(.)\1+/g, '$1');
+  return Array.from(new Set([normalized, collapsedPairs])).filter(Boolean);
+};
+const containsBlockedNameTerm = (value) => {
+  const variants = buildModerationVariants(value);
+  if (!variants.length) return false;
+
+  return variants.some((variant) =>
+    BLOCKED_NAME_FRAGMENTS.some((fragment) => variant.includes(fragment))
+  );
+};
 
 const slugifyUsernameSeed = (value) =>
   String(value || '')
@@ -30,7 +130,7 @@ const trimUsernameBase = (value) =>
 const buildUsernameBase = (...candidates) => {
   for (const candidate of candidates) {
     const normalized = trimUsernameBase(candidate);
-    if (normalized.length >= USERNAME_MIN_LENGTH) {
+    if (normalized.length >= USERNAME_MIN_LENGTH && !containsBlockedNameTerm(normalized)) {
       return normalized;
     }
   }
@@ -55,7 +155,12 @@ const appendUsernameSuffix = (base, suffix) => {
 
 const buildFallbackDisplayName = (email) => {
   const [localPart] = normalizeEmail(email).split('@');
-  return sanitizeText(localPart, 60) || 'User';
+  const fallback = sanitizeText(localPart, 60);
+  if (fallback && !containsBlockedNameTerm(fallback)) {
+    return fallback;
+  }
+
+  return 'User';
 };
 
 const normalizeIdentityProfile = (profile = {}) => ({
@@ -186,7 +291,10 @@ const migrateUsersToLatestIdentity = async ({ logger = console } = {}) => {
 };
 
 module.exports = {
+  DISPLAY_NAME_MODERATION_MESSAGE,
   USERNAME_VALIDATION_MESSAGE,
+  USERNAME_MODERATION_MESSAGE,
+  containsBlockedNameTerm,
   getDisplayableUsername,
   ensureStoredUsername,
   ensureUserIdentityFields,

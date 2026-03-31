@@ -527,6 +527,55 @@
                 <button id="profile-save-btn" class="primary-btn" type="submit">Save Profile</button>
               </form>
             </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Live draft</p>
+                  <h3>Public profile preview</h3>
+                </div>
+                <span id="profile-preview-visibility" class="inline-chip">Private draft</span>
+              </div>
+
+              <div class="public-preview-card">
+                <div class="public-preview-hero">
+                  <div id="profile-preview-avatar" class="identity-badge public-preview-avatar" aria-hidden="true">CI</div>
+                  <div class="public-preview-copy">
+                    <p id="profile-preview-handle" class="eyebrow">@continental</p>
+                    <h3 id="profile-preview-name">Continental User</h3>
+                    <p id="profile-preview-headline" class="public-preview-headline">
+                      Add a headline to make the public page easier to scan.
+                    </p>
+                    <p id="profile-preview-summary" class="helper-line">
+                      Role, organization, and focus details will appear here as you edit.
+                    </p>
+                  </div>
+                </div>
+
+                <div id="profile-preview-meta" class="preview-chip-list" aria-live="polite"></div>
+
+                <div class="preview-stat-grid">
+                  <div class="preview-stat">
+                    <span>Visible fields</span>
+                    <strong id="profile-preview-visible-count">0</strong>
+                  </div>
+                  <div class="preview-stat">
+                    <span>Linked profiles</span>
+                    <strong id="profile-preview-linked-count">0</strong>
+                  </div>
+                  <div class="preview-stat">
+                    <span>Member since</span>
+                    <strong id="profile-preview-member-since">Hidden</strong>
+                  </div>
+                </div>
+
+                <div id="profile-preview-focus" class="preview-chip-list"></div>
+                <div id="profile-preview-sections" class="preview-section-list"></div>
+                <p id="profile-preview-note" class="helper-line">
+                  This preview follows your current visibility toggles, even before you save.
+                </p>
+              </div>
+            </article>
           </div>
         </section>
 
@@ -816,6 +865,52 @@
             <article class="section-card">
               <div class="section-heading">
                 <div>
+                  <p class="eyebrow">Overview</p>
+                  <h3>Security posture</h3>
+                </div>
+                <span id="security-posture-chip" class="inline-chip">Loading</span>
+              </div>
+
+              <div class="security-overview">
+                <div id="security-score-ring" class="score-ring" aria-hidden="true">
+                  <div class="score-ring-inner">
+                    <strong id="security-score-number">0</strong>
+                    <span>health</span>
+                  </div>
+                </div>
+
+                <div class="security-overview-copy">
+                  <p id="security-score-summary" class="helper-line">
+                    Security signals will appear once your account data loads.
+                  </p>
+
+                  <div class="security-mini-grid">
+                    <div class="security-mini-card">
+                      <span>Sessions</span>
+                      <strong id="security-metric-sessions">0</strong>
+                    </div>
+                    <div class="security-mini-card">
+                      <span>Known devices</span>
+                      <strong id="security-metric-devices">0</strong>
+                    </div>
+                    <div class="security-mini-card">
+                      <span>Trusted devices</span>
+                      <strong id="security-metric-trusted-devices">0</strong>
+                    </div>
+                    <div class="security-mini-card">
+                      <span>New devices</span>
+                      <strong id="security-metric-new-devices">0</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="security-breakdown" class="security-breakdown-list"></div>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
                   <p class="eyebrow">Credentials</p>
                   <h3>Password</h3>
                 </div>
@@ -944,6 +1039,41 @@
               <h2>Recent Activity</h2>
             </div>
           </div>
+
+          <article class="section-card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Insights</p>
+                <h3>Activity analytics</h3>
+              </div>
+            </div>
+
+            <div class="activity-insights-grid">
+              <section class="chart-card">
+                <p class="mini-label">Last 7 days</p>
+                <div id="activity-trend-chart" class="trend-bars" aria-live="polite"></div>
+                <p id="activity-trend-summary" class="helper-line">Loading recent trend.</p>
+              </section>
+
+              <section class="chart-card">
+                <p class="mini-label">Event mix</p>
+                <div class="mix-chart-shell">
+                  <div id="activity-mix-ring" class="mix-ring" aria-hidden="true">
+                    <div class="mix-ring-inner">
+                      <strong id="activity-mix-total">0</strong>
+                      <span>events</span>
+                    </div>
+                  </div>
+                  <div id="activity-mix-legend" class="chart-legend"></div>
+                </div>
+              </section>
+
+              <section class="chart-card">
+                <p class="mini-label">Highlights</p>
+                <div id="activity-highlight-grid" class="activity-highlight-grid"></div>
+              </section>
+            </div>
+          </article>
 
           <article class="section-card">
             <div class="activity-toolbar">

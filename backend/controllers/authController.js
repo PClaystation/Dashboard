@@ -12,7 +12,10 @@ const {
   verifyTotp,
 } = require('../utils/mfa');
 const {
+  DISPLAY_NAME_MODERATION_MESSAGE,
   USERNAME_VALIDATION_MESSAGE,
+  USERNAME_MODERATION_MESSAGE,
+  containsBlockedNameTerm,
   ensureStoredUsername,
   ensureUserIdentityFields,
   getDisplayableUsername,
@@ -113,10 +116,12 @@ const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 const sanitizeDisplayName = (displayName, email = '') => {
   const cleaned = sanitizeText(displayName, 60);
-  if (cleaned.length >= 2) return cleaned;
+  if (cleaned.length >= 2 && !containsBlockedNameTerm(cleaned)) return cleaned;
 
   const fallback = sanitizeText(String(email).split('@')[0], 60);
-  return fallback || 'User';
+  if (fallback && !containsBlockedNameTerm(fallback)) return fallback;
+
+  return 'User';
 };
 
 const isStrongPassword = (password) => {
@@ -343,14 +348,254 @@ const clearPasswordReset = (user) => {
   user.passwordResetTokenExpires = null;
 };
 
+const formatEmailDate = (value) => new Date(value).toUTCString();
+
+const renderEmailParagraphs = (paragraphs = [], styles = {}) => {
+  const mergedStyles = {
+    margin: '0 0 14px 0',
+    fontFamily: "'Helvetica Neue',Arial,sans-serif",
+    fontSize: '16px',
+    lineHeight: '1.75',
+    color: '#1f2937',
+    ...styles,
+  };
+  const styleAttr = Object.entries(mergedStyles)
+    .map(([key, value]) => `${key}:${value};`)
+    .join('');
+
+  return paragraphs
+    .filter(Boolean)
+    .map((paragraph, index, array) => {
+      const marginStyle =
+        index === array.length - 1
+          ? styleAttr.replace('margin:0 0 14px 0;', 'margin:0;')
+          : styleAttr;
+      return `<p style="${marginStyle}">${paragraph}</p>`;
+    })
+    .join('');
+};
+
+const renderEmailBulletList = (items = [], accentColor = '#0f766e') => {
+  const normalizedItems = items.filter(Boolean);
+  if (!normalizedItems.length) return '';
+
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0;">
+      ${normalizedItems
+        .map(
+          (item) => `
+            <tr>
+              <td valign="top" style="width:28px;padding:0 0 12px 0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:2px 0 0 0;">
+                  <tr>
+                    <td style="width:12px;height:12px;border-radius:999px;background-color:${accentColor};font-size:0;line-height:0;">&nbsp;</td>
+                  </tr>
+                </table>
+              </td>
+              <td style="padding:0 0 12px 0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#334155;">
+                ${item}
+              </td>
+            </tr>
+          `
+        )
+        .join('')}
+    </table>
+  `;
+};
+
+const renderEmailDetailRows = (rows = []) => {
+  const normalizedRows = rows.filter((row) => row?.label && row?.value);
+  if (!normalizedRows.length) return '';
+
+  return normalizedRows
+    .map(
+      (row, index) => `
+        <tr>
+          <td style="padding:${index === 0 ? '0' : '14px'} 0 0 0;border-top:${index === 0 ? '0' : '1px solid #dbe4ea'};">
+            <p style="margin:0 0 4px 0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;line-height:1.4;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;font-weight:700;">
+              ${row.label}
+            </p>
+            <p style="margin:0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#0f172a;">
+              ${row.value}
+            </p>
+          </td>
+        </tr>
+      `
+    )
+    .join('');
+};
+
+const buildBrandedEmailHtml = ({
+  preheader = '',
+  accentColor = '#0f766e',
+  accentSoft = '#dff6f1',
+  accentStrong = '#0b5d56',
+  surfaceTint = '#f8fbfc',
+  panelBorder = '#dbe4ea',
+  eyebrow = 'Continental ID',
+  title = '',
+  lead = '',
+  greeting = '',
+  bodyParagraphs = [],
+  ctaLabel = '',
+  ctaUrl = '',
+  detailTitle = '',
+  detailRows = [],
+  bulletTitle = '',
+  bulletItems = [],
+  fallbackLabel = '',
+  footerNote = '',
+}) => {
+  const safePreheader = escapeHtml(preheader);
+  const safeEyebrow = escapeHtml(eyebrow);
+  const safeTitle = escapeHtml(title);
+  const safeLead = escapeHtml(lead);
+  const safeGreeting = greeting;
+  const safeCtaLabel = escapeHtml(ctaLabel);
+  const safeCtaUrl = escapeHtml(ctaUrl);
+  const safeDetailTitle = escapeHtml(detailTitle);
+  const safeBulletTitle = escapeHtml(bulletTitle);
+  const safeFallbackLabel = escapeHtml(fallbackLabel);
+  const safeFooterNote = escapeHtml(footerNote);
+
+  return `
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;color:transparent;">
+      ${safePreheader}
+    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0;padding:32px 12px;background-color:#efe7dc;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:680px;margin:0 auto;">
+            <tr>
+              <td style="padding:0 0 16px 0;text-align:center;">
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                  <tr>
+                    <td style="padding:8px 14px;border-radius:999px;background-color:${accentSoft};border:1px solid ${panelBorder};font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;line-height:1.2;letter-spacing:0.18em;text-transform:uppercase;color:${accentStrong};font-weight:700;">
+                      ${safeEyebrow}
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background-color:#15202b;border-radius:30px 30px 0 0;">
+                  <tr>
+                    <td style="padding:12px 28px 0 28px;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                        <tr>
+                          <td style="height:6px;border-radius:999px;background-color:${accentColor};font-size:0;line-height:0;">&nbsp;</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:28px 28px 26px 28px;">
+                      <p style="margin:0 0 14px 0;font-family:Georgia,'Times New Roman',serif;font-size:36px;line-height:1.08;color:#ffffff;font-weight:700;">
+                        ${safeTitle}
+                      </p>
+                      <p style="margin:0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:17px;line-height:1.75;color:#dbe7ef;">
+                        ${safeLead}
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background-color:#ffffff;border:1px solid ${panelBorder};border-top:0;border-radius:0 0 30px 30px;">
+                  <tr>
+                    <td style="padding:30px 28px 28px 28px;">
+                      ${renderEmailParagraphs([safeGreeting], {
+                        margin: '0 0 16px 0',
+                        fontSize: '16px',
+                        lineHeight: '1.75',
+                        color: '#0f172a',
+                      })}
+                      ${renderEmailParagraphs(bodyParagraphs)}
+                      ${
+                        safeCtaLabel && safeCtaUrl
+                          ? `
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 24px 0;">
+                              <tr>
+                                <td style="border-radius:999px;background-color:${accentColor};">
+                                  <a href="${safeCtaUrl}" style="display:inline-block;padding:15px 26px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.2;font-weight:700;color:#ffffff;text-decoration:none;">
+                                    ${safeCtaLabel}
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
+                          `
+                          : ''
+                      }
+                      ${
+                        safeDetailTitle && detailRows.length
+                          ? `
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 22px 0;background-color:${surfaceTint};border:1px solid ${panelBorder};border-radius:22px;">
+                              <tr>
+                                <td style="padding:20px 20px 18px 20px;">
+                                  <p style="margin:0 0 14px 0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.4;letter-spacing:0.14em;text-transform:uppercase;color:${accentStrong};font-weight:700;">
+                                    ${safeDetailTitle}
+                                  </p>
+                                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                                    ${renderEmailDetailRows(detailRows)}
+                                  </table>
+                                </td>
+                              </tr>
+                            </table>
+                          `
+                          : ''
+                      }
+                      ${
+                        safeBulletTitle && bulletItems.length
+                          ? `
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 22px 0;background-color:#ffffff;border:1px solid ${panelBorder};border-radius:22px;">
+                              <tr>
+                                <td style="padding:20px;">
+                                  <p style="margin:0 0 14px 0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.4;letter-spacing:0.14em;text-transform:uppercase;color:#475569;font-weight:700;">
+                                    ${safeBulletTitle}
+                                  </p>
+                                  ${renderEmailBulletList(bulletItems, accentColor)}
+                                </td>
+                              </tr>
+                            </table>
+                          `
+                          : ''
+                      }
+                      ${
+                        safeFallbackLabel && safeCtaUrl
+                          ? `
+                            <p style="margin:0 0 10px 0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.7;color:#475569;">
+                              ${safeFallbackLabel}
+                            </p>
+                            <p style="margin:0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.8;word-break:break-all;">
+                              <a href="${safeCtaUrl}" style="color:${accentStrong};text-decoration:underline;">
+                                ${safeCtaUrl}
+                              </a>
+                            </p>
+                          `
+                          : ''
+                      }
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 20px 0 20px;text-align:center;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.8;color:#6b7280;">
+                ${safeFooterNote}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+};
+
 const buildVerificationEmailContent = (user, verificationUrl, expiresAt) => {
   const displayName = sanitizeText(user?.displayName || user?.email, 60) || 'there';
   const emailAddress = sanitizeText(user?.email, 160);
-  const expiresLabel = new Date(expiresAt).toUTCString();
+  const expiresLabel = formatEmailDate(expiresAt);
   const safeDisplayName = escapeHtml(displayName);
   const safeEmailAddress = escapeHtml(emailAddress);
-  const safeVerificationUrl = escapeHtml(verificationUrl);
-  const safeExpiresLabel = escapeHtml(expiresLabel);
   const verificationTarget = emailAddress
     ? `the email address ${emailAddress}`
     : 'your email address';
@@ -369,160 +614,36 @@ const buildVerificationEmailContent = (user, verificationUrl, expiresAt) => {
       `This link expires on ${expiresLabel}.`,
       'If you did not create this account, you can ignore this message.',
     ].join('\n'),
-    html: `
-      <div
-        style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;color:transparent;"
-      >
-        Verify your Continental ID email to finish setting up your account.
-      </div>
-      <table
-        role="presentation"
-        width="100%"
-        cellpadding="0"
-        cellspacing="0"
-        style="width:100%;margin:0;padding:32px 12px;background-color:#f7f2ea;"
-      >
-        <tr>
-          <td align="center">
-            <table
-              role="presentation"
-              width="100%"
-              cellpadding="0"
-              cellspacing="0"
-              style="max-width:640px;width:100%;margin:0 auto;"
-            >
-              <tr>
-                <td style="padding:0 0 16px 0;">
-                  <table
-                    role="presentation"
-                    width="100%"
-                    cellpadding="0"
-                    cellspacing="0"
-                    style="width:100%;background-color:#1c2530;border-radius:24px 24px 0 0;"
-                  >
-                    <tr>
-                      <td style="padding:24px 28px 22px 28px;">
-                        <p
-                          style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.2;letter-spacing:0.22em;text-transform:uppercase;color:#c6d3d0;font-weight:700;"
-                        >
-                          Continental ID
-                        </p>
-                        <h1
-                          style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:30px;line-height:1.15;color:#ffffff;font-weight:700;"
-                        >
-                          Verify your email
-                        </h1>
-                        <p
-                          style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.65;color:#dce7e4;"
-                        >
-                          Finish setting up your account and keep your sign-in trusted across the
-                          dashboard.
-                        </p>
-                      </td>
-                    </tr>
-                  </table>
-                  <table
-                    role="presentation"
-                    width="100%"
-                    cellpadding="0"
-                    cellspacing="0"
-                    style="width:100%;background-color:#ffffff;border:1px solid #e2d8cb;border-top:0;border-radius:0 0 24px 24px;"
-                  >
-                    <tr>
-                      <td style="padding:28px;">
-                        <p
-                          style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1c2530;"
-                        >
-                          Hi ${safeDisplayName},
-                        </p>
-                        <p
-                          style="margin:0 0 18px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1c2530;"
-                        >
-                          We received a request to verify ${safeVerificationTarget} for your
-                          Continental ID account.
-                        </p>
-                        <table
-                          role="presentation"
-                          cellpadding="0"
-                          cellspacing="0"
-                          style="margin:0 0 24px 0;"
-                        >
-                          <tr>
-                            <td style="border-radius:999px;background-color:#146f63;">
-                              <a
-                                href="${safeVerificationUrl}"
-                                style="display:inline-block;padding:14px 24px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.2;font-weight:700;color:#ffffff;text-decoration:none;"
-                              >
-                                Verify email address
-                              </a>
-                            </td>
-                          </tr>
-                        </table>
-                        <table
-                          role="presentation"
-                          width="100%"
-                          cellpadding="0"
-                          cellspacing="0"
-                          style="width:100%;margin:0 0 24px 0;background-color:#f6faf9;border:1px solid #d7e5e1;border-radius:18px;"
-                        >
-                          <tr>
-                            <td style="padding:18px 20px;">
-                              <p
-                                style="margin:0 0 6px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.4;letter-spacing:0.08em;text-transform:uppercase;color:#5c6b68;font-weight:700;"
-                              >
-                                Verification details
-                              </p>
-                              <p
-                                style="margin:0 0 10px 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#1c2530;"
-                              >
-                                Address: ${safeEmailAddress || 'Your email address'}
-                              </p>
-                              <p
-                                style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#1c2530;"
-                              >
-                                Link expires: ${safeExpiresLabel}
-                              </p>
-                            </td>
-                          </tr>
-                        </table>
-                        <p
-                          style="margin:0 0 10px 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#1c2530;"
-                        >
-                          If the button does not work, copy and paste this link into your browser:
-                        </p>
-                        <p
-                          style="margin:0 0 22px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.8;word-break:break-all;"
-                        >
-                          <a
-                            href="${safeVerificationUrl}"
-                            style="color:#0d5a52;text-decoration:underline;"
-                          >
-                            ${safeVerificationUrl}
-                          </a>
-                        </p>
-                        <p
-                          style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#69707d;"
-                        >
-                          If you did not create a Continental ID account, you can safely ignore
-                          this message.
-                        </p>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-              <tr>
-                <td
-                  style="padding:0 18px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#7b6f66;text-align:center;"
-                >
-                  This verification link was sent for Continental ID account setup.
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    `,
+    html: buildBrandedEmailHtml({
+      preheader: 'Verify your Continental ID email to finish setting up your account.',
+      accentColor: '#0f766e',
+      accentSoft: '#dff6f1',
+      accentStrong: '#0b5d56',
+      surfaceTint: '#f3fbf8',
+      panelBorder: '#d7e5e1',
+      title: 'Verify your email',
+      lead: 'Finish setting up your account and keep sign-in trusted across the dashboard.',
+      greeting: `Hi ${safeDisplayName},`,
+      bodyParagraphs: [
+        `We received a request to verify ${safeVerificationTarget} for your Continental ID account.`,
+        'Use the button below to confirm the address and unlock verified sign-in.',
+      ],
+      ctaLabel: 'Verify email address',
+      ctaUrl: verificationUrl,
+      detailTitle: 'Verification details',
+      detailRows: [
+        { label: 'Address', value: safeEmailAddress || 'Your email address' },
+        { label: 'Link expires', value: escapeHtml(expiresLabel) },
+      ],
+      bulletTitle: 'What happens next',
+      bulletItems: [
+        'Your email address is marked as verified for this account.',
+        'You can complete sign-in flows that require email verification.',
+        'If this was not your account creation attempt, no action is required.',
+      ],
+      fallbackLabel: 'If the button does not work, copy and paste this link into your browser:',
+      footerNote: 'This verification link was sent for Continental ID account setup.',
+    }),
   };
 };
 
@@ -567,10 +688,8 @@ const buildPasswordResetUrl = (req, token) => {
 
 const buildPasswordResetEmailContent = (user, resetUrl, expiresAt) => {
   const displayName = sanitizeText(user?.displayName || user?.email, 60) || 'there';
-  const expiresLabel = new Date(expiresAt).toUTCString();
+  const expiresLabel = formatEmailDate(expiresAt);
   const safeDisplayName = escapeHtml(displayName);
-  const safeResetUrl = escapeHtml(resetUrl);
-  const safeExpiresLabel = escapeHtml(expiresLabel);
 
   return {
     subject: PASSWORD_RESET_SUBJECT,
@@ -583,24 +702,36 @@ const buildPasswordResetEmailContent = (user, resetUrl, expiresAt) => {
       `This link expires on ${expiresLabel}.`,
       'If you did not request this, you can ignore this message.',
     ].join('\n'),
-    html: `
-      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;">
-        <h1 style="margin-bottom:16px;">Reset your password</h1>
-        <p>Hi ${safeDisplayName},</p>
-        <p>We received a request to reset your Continental ID password.</p>
-        <p>
-          <a
-            href="${safeResetUrl}"
-            style="display:inline-block;padding:12px 18px;border-radius:8px;background:#111827;color:#ffffff;text-decoration:none;font-weight:700;"
-          >
-            Reset password
-          </a>
-        </p>
-        <p>If the button does not work, copy and paste this link into your browser:</p>
-        <p><a href="${safeResetUrl}">${safeResetUrl}</a></p>
-        <p>This link expires on ${safeExpiresLabel}.</p>
-      </div>
-    `,
+    html: buildBrandedEmailHtml({
+      preheader: 'Use this secure link to reset your Continental ID password.',
+      accentColor: '#b45309',
+      accentSoft: '#fff1dd',
+      accentStrong: '#92400e',
+      surfaceTint: '#fff8ee',
+      panelBorder: '#eadfce',
+      title: 'Reset your password',
+      lead: 'A password reset was requested for your Continental ID account.',
+      greeting: `Hi ${safeDisplayName},`,
+      bodyParagraphs: [
+        'Use the secure link below to choose a new password and restore access to your account.',
+        'For security, this reset link works only for a limited time.',
+      ],
+      ctaLabel: 'Reset password',
+      ctaUrl: resetUrl,
+      detailTitle: 'Reset details',
+      detailRows: [
+        { label: 'Link expires', value: escapeHtml(expiresLabel) },
+        { label: 'Requested for', value: 'Your Continental ID account' },
+      ],
+      bulletTitle: 'Security notes',
+      bulletItems: [
+        'After resetting, use the new password the next time you sign in.',
+        'If you did not request this reset, you can ignore this email.',
+        'If you keep receiving unexpected reset emails, review your account security.',
+      ],
+      fallbackLabel: 'If the button does not work, copy and paste this link into your browser:',
+      footerNote: 'This password reset email was sent because a reset request was submitted for your account.',
+    }),
   };
 };
 
@@ -857,17 +988,30 @@ const buildSecurityEmailContent = ({ title, intro, details = [] }) => {
       '',
       ...normalizedDetails.map((item) => `- ${item}`),
     ].join('\n'),
-    html: `
-      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;">
-        <h1 style="margin-bottom:16px;">${safeTitle}</h1>
-        <p>${safeIntro}</p>
-        ${
-          normalizedDetails.length
-            ? `<ul>${normalizedDetails.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
-            : ''
-        }
-      </div>
-    `,
+    html: buildBrandedEmailHtml({
+      preheader: title || 'Security alert for your Continental ID account.',
+      accentColor: '#b91c1c',
+      accentSoft: '#fee2e2',
+      accentStrong: '#991b1b',
+      surfaceTint: '#fff5f5',
+      panelBorder: '#f1d3d3',
+      title: title || 'Security alert',
+      lead: 'A security-sensitive action was detected on your Continental ID account.',
+      greeting: 'Security notice,',
+      bodyParagraphs: [safeIntro],
+      detailTitle: normalizedDetails.length ? 'Event details' : '',
+      detailRows: normalizedDetails.map((item, index) => ({
+        label: `Detail ${index + 1}`,
+        value: escapeHtml(item),
+      })),
+      bulletTitle: 'Recommended next steps',
+      bulletItems: [
+        'Review the activity details below and confirm that you recognize them.',
+        'If this action was not expected, change your password immediately.',
+        'Check recent sign-ins and revoke access on devices you do not recognize.',
+      ],
+      footerNote: 'This alert was sent because security notifications are enabled for your Continental ID account.',
+    }),
   };
 };
 
@@ -1701,6 +1845,10 @@ const applyUsernameChange = async (user, username) => {
     throw createHttpError(400, USERNAME_VALIDATION_MESSAGE);
   }
 
+  if (containsBlockedNameTerm(normalized)) {
+    throw createHttpError(400, USERNAME_MODERATION_MESSAGE);
+  }
+
   const taken = await isUsernameTaken(normalized, user?._id);
   if (taken) {
     throw createHttpError(409, 'Username is already in use.');
@@ -2352,6 +2500,14 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: USERNAME_VALIDATION_MESSAGE });
     }
 
+    if (containsBlockedNameTerm(requestedUsername)) {
+      return res.status(400).json({ message: USERNAME_MODERATION_MESSAGE });
+    }
+
+    if (hasOwn(req.body || {}, 'displayName') && containsBlockedNameTerm(req.body?.displayName)) {
+      return res.status(400).json({ message: DISPLAY_NAME_MODERATION_MESSAGE });
+    }
+
     const existingUser = await User.findOne({ email }).select('_id');
     if (existingUser) {
       return res.status(409).json({ message: 'A user with that email already exists.' });
@@ -2846,6 +3002,9 @@ exports.updateProfile = async (req, res) => {
       if (!normalizeUsername(incoming.username)) {
         return res.status(400).json({ message: USERNAME_VALIDATION_MESSAGE });
       }
+      if (containsBlockedNameTerm(incoming.username)) {
+        return res.status(400).json({ message: USERNAME_MODERATION_MESSAGE });
+      }
       await applyUsernameChange(user, incoming.username);
     }
 
@@ -2853,6 +3012,9 @@ exports.updateProfile = async (req, res) => {
       const displayName = sanitizeText(incoming.displayName, 60);
       if (displayName.length < 2) {
         return res.status(400).json({ message: 'Display name must be at least 2 characters.' });
+      }
+      if (containsBlockedNameTerm(displayName)) {
+        return res.status(400).json({ message: DISPLAY_NAME_MODERATION_MESSAGE });
       }
       user.displayName = displayName;
     }
