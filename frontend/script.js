@@ -425,11 +425,19 @@ const loginPopupOrigin = (() => {
   }
 })();
 
+const getLoginPopupApiBaseUrl = () => {
+  if (apiBaseValidated && API_BASE_URL) {
+    return API_BASE_URL;
+  }
+
+  return trimTrailingSlash(getDefaultApiBaseUrl());
+};
+
 const buildLoginPopupUrl = () => {
   const popupUrl = new URL(LOGIN_POPUP_URL, window.location.href);
   popupUrl.searchParams.set('origin', window.location.origin);
   popupUrl.searchParams.set('redirect', window.location.href);
-  popupUrl.searchParams.set('apiBaseUrl', API_BASE_URL);
+  popupUrl.searchParams.set('apiBaseUrl', getLoginPopupApiBaseUrl());
   return popupUrl;
 };
 
