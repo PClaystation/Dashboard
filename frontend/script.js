@@ -232,13 +232,6 @@ const getDefaultApiBaseUrl = () => {
     return 'http://localhost:5000';
   }
 
-  if (
-    window.location.hostname === 'dashboard.continental-hub.com' ||
-    window.location.hostname === 'login.continental-hub.com'
-  ) {
-    return 'https://grimoire.continental-hub.com';
-  }
-
   return window.location.origin;
 };
 
@@ -252,7 +245,7 @@ const getDefaultLoginPopupUrl = () => {
     return new URL('../login popup/popup.html', window.location.href).toString();
   }
 
-  return 'https://grimoire.continental-hub.com/login/popup.html';
+  return 'https://login.continental-hub.com/popup.html';
 };
 
 const DEFAULT_LOGIN_POPUP_URL = getDefaultLoginPopupUrl();

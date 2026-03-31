@@ -13,5 +13,5 @@ window.__AUTH_CONFIG__ = {
     'https://mpmc.ddns.net',
   ],
   defaultDashboardOrigin: 'https://dashboard.continental-hub.com',
-  hostedApiBaseUrl: 'https://grimoire.continental-hub.com',
+  hostedApiBaseUrl: 'https://dashboard.continental-hub.com',
 };

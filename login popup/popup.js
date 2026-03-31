@@ -5,7 +5,7 @@ const TRUSTED_API_ORIGINS = new Set(AUTH_CONFIG.trustedApiOrigins || []);
 const DEFAULT_DASHBOARD_ORIGIN =
   AUTH_CONFIG.defaultDashboardOrigin || 'https://dashboard.continental-hub.com';
 const HOSTED_API_BASE_URL =
-  AUTH_CONFIG.hostedApiBaseUrl || 'https://grimoire.continental-hub.com';
+  AUTH_CONFIG.hostedApiBaseUrl || 'https://dashboard.continental-hub.com';
 const USERNAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const params = new URLSearchParams(window.location.search);

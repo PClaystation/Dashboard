@@ -48,7 +48,8 @@ A full-stack account dashboard with hardened auth/session handling, profile and 
    EMAIL_FROM=no-reply@your-domain.com
    EMAIL_FROM_NAME=Continental ID
    EMAIL_REPLY_TO=support@your-domain.com
-   EMAIL_VERIFY_URL=https://auth.example.com/login/verify.html
+   LOGIN_POPUP_URL=https://login.continental-hub.com/popup.html
+   EMAIL_VERIFY_URL=https://login.continental-hub.com/verify.html
    ```
 4. Start backend:
    ```bash
@@ -108,7 +109,8 @@ Default behavior now assumes the frontend and `/api/*` are available on the same
 - Existing users are migrated forward on backend startup, and the same migration can be run manually with `npm run migrate:users`.
 - Changing an account email resets `isVerified`, issues a new token, and sends a fresh verification email.
 - Signed-in users can request a new verification email with `POST /api/auth/resend-verification`.
-- Set `EMAIL_VERIFY_URL` to the public URL of the verification page, for example `/login/verify.html`, that loads the token and calls `/api/auth/verify-email`.
+- Set `LOGIN_POPUP_URL` to the public login page, for example `https://login.continental-hub.com/popup.html`, so verification and reset emails can derive the correct hosted auth routes automatically.
+- Set `EMAIL_VERIFY_URL` to the public URL of the verification page, for example `https://login.continental-hub.com/verify.html`, that loads the token and calls `/api/auth/verify-email`.
 
 ## Notes
 

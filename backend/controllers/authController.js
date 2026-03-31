@@ -80,8 +80,11 @@ const DEFAULT_PUBLIC_PROFILE = {
   memberSince: true,
 };
 
-const DEFAULT_EMAIL_VERIFY_PATH = '/login/verify.html';
-const DEFAULT_PASSWORD_RESET_PATH = '/login/reset-password.html';
+const DEFAULT_DASHBOARD_ORIGIN = 'https://dashboard.continental-hub.com';
+const DEFAULT_LOGIN_ORIGIN = 'https://login.continental-hub.com';
+const DEFAULT_LOGIN_POPUP_URL = `${DEFAULT_LOGIN_ORIGIN}/popup.html`;
+const DEFAULT_EMAIL_VERIFY_PATH = '/verify.html';
+const DEFAULT_PASSWORD_RESET_PATH = '/reset-password.html';
 const EMAIL_VERIFICATION_SUBJECT = 'Verify your Continental ID email';
 const PASSWORD_RESET_SUBJECT = 'Reset your Continental ID password';
 const AVATAR_DATA_URL_MAX_LENGTH = 350000;
@@ -180,6 +183,43 @@ const resolveAbsoluteUrl = (value) => {
   }
 };
 
+const isHostedLoginOrigin = (value) => {
+  const resolved = resolveAbsoluteUrl(value);
+  if (!resolved) return false;
+
+  try {
+    const origin = new URL(resolved).origin;
+    return origin === DEFAULT_DASHBOARD_ORIGIN || origin === DEFAULT_LOGIN_ORIGIN;
+  } catch {
+    return false;
+  }
+};
+
+const resolveLoginPopupPageUrl = (req) => {
+  const explicitLoginPopupUrl = resolveAbsoluteUrl(
+    process.env.LOGIN_POPUP_URL || process.env.PUBLIC_LOGIN_POPUP_URL || process.env.PUBLIC_LOGIN_URL
+  );
+  if (explicitLoginPopupUrl) {
+    return explicitLoginPopupUrl;
+  }
+
+  const appBaseUrl = resolveAbsoluteUrl(
+    process.env.APP_BASE_URL || process.env.PUBLIC_APP_URL || process.env.PUBLIC_BASE_URL
+  );
+  if (isHostedLoginOrigin(appBaseUrl)) {
+    return DEFAULT_LOGIN_POPUP_URL;
+  }
+
+  if ((process.env.NODE_ENV || 'development') !== 'production') {
+    const requestOrigin = getRequestOrigin(req);
+    if (isHostedLoginOrigin(requestOrigin)) {
+      return DEFAULT_LOGIN_POPUP_URL;
+    }
+  }
+
+  return '';
+};
+
 const escapeHtml = (value) =>
   String(value || '')
     .replace(/&/g, '&amp;')
@@ -194,9 +234,7 @@ const resolveEmailVerificationPageUrl = (req) => {
     return explicitVerifyUrl;
   }
 
-  const loginPopupUrl = resolveAbsoluteUrl(
-    process.env.LOGIN_POPUP_URL || process.env.PUBLIC_LOGIN_POPUP_URL || process.env.PUBLIC_LOGIN_URL
-  );
+  const loginPopupUrl = resolveLoginPopupPageUrl(req);
   if (loginPopupUrl) {
     return new URL('verify.html', loginPopupUrl).toString();
   }
@@ -451,9 +489,7 @@ const resolvePasswordResetPageUrl = (req) => {
     return explicitResetUrl;
   }
 
-  const loginPopupUrl = resolveAbsoluteUrl(
-    process.env.LOGIN_POPUP_URL || process.env.PUBLIC_LOGIN_POPUP_URL || process.env.PUBLIC_LOGIN_URL
-  );
+  const loginPopupUrl = resolveLoginPopupPageUrl(req);
   if (loginPopupUrl) {
     return new URL('reset-password.html', loginPopupUrl).toString();
   }

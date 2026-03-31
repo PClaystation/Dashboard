@@ -2,7 +2,7 @@ const AUTH_CONFIG = window.__AUTH_CONFIG__ || {};
 const LOCAL_HOSTS = new Set(AUTH_CONFIG.localHosts || ['localhost', '127.0.0.1']);
 const TRUSTED_API_ORIGINS = new Set(AUTH_CONFIG.trustedApiOrigins || []);
 const HOSTED_API_BASE_URL =
-  AUTH_CONFIG.hostedApiBaseUrl || 'https://grimoire.continental-hub.com';
+  AUTH_CONFIG.hostedApiBaseUrl || 'https://dashboard.continental-hub.com';
 const params = new URLSearchParams(window.location.search);
 const token = String(params.get('token') || '').trim();
 
