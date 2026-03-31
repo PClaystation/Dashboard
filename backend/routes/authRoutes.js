@@ -9,7 +9,11 @@ router.post('/register', ctrl.register);
 router.post('/login', ctrl.login);
 router.post('/logout', ctrl.logout);
 router.post('/refresh_token', ctrl.refreshToken);
+router.post('/request-password-reset', ctrl.requestPasswordReset);
+router.post('/reset-password', ctrl.resetPassword);
 router.get('/verify-email', verifyEmailCtrl.verifyEmail);
+router.get('/public-search', ctrl.searchPublicProfiles);
+router.get('/public/:username', ctrl.getPublicProfile);
 
 router.get('/me', auth, ctrl.me);
 router.post('/resend-verification', auth, ctrl.resendVerificationEmail);

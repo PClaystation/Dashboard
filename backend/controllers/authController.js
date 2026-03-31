@@ -4,6 +4,14 @@ const LoginThrottle = require('../models/LoginThrottle');
 const User = require('../models/User');
 const sendEmail = require('../utils/email');
 const { createEmailVerificationToken } = require('../utils/emailVerification');
+const {
+  USERNAME_VALIDATION_MESSAGE,
+  ensureStoredUsername,
+  ensureUserIdentityFields,
+  getDisplayableUsername,
+  isValidUsername,
+  normalizeUsername,
+} = require('../utils/userIdentity');
 
 const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || '1h';
 const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
@@ -18,6 +26,10 @@ const LOGIN_BLOCK_MS = Number(process.env.LOGIN_BLOCK_MS) || 15 * 60 * 1000;
 const REFRESH_TOKEN_REPLAY_GRACE_MS =
   Number(process.env.REFRESH_TOKEN_REPLAY_GRACE_MS) || 15_000;
 const LOGIN_ACTIVITY_RETENTION_DAYS = 45;
+const MAX_AUDIT_EVENTS = 120;
+const MAX_KNOWN_DEVICES = 24;
+const PASSWORD_RESET_TTL_MS = Number(process.env.PASSWORD_RESET_TTL_MS) || 60 * 60 * 1000;
+const NEW_DEVICE_SESSION_WINDOW_MS = 15 * 60 * 1000;
 
 const LINKED_PROVIDERS = [
   'google',
@@ -50,13 +62,19 @@ const DEFAULT_APPEARANCE = {
 };
 
 const DEFAULT_EMAIL_VERIFY_PATH = '/login/verify.html';
+const DEFAULT_PASSWORD_RESET_PATH = '/login/reset-password.html';
 const EMAIL_VERIFICATION_SUBJECT = 'Verify your Continental ID email';
+const PASSWORD_RESET_SUBJECT = 'Reset your Continental ID password';
+const AVATAR_DATA_URL_MAX_LENGTH = 350000;
+const AVATAR_DATA_URL_PATTERN = /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/i;
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
 
 const toObjectIdString = (value) => String(value || '');
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+const normalizeLoginIdentifier = (value) => String(value || '').trim().toLowerCase();
 const sanitizeText = (value, maxLength = 120) => String(value || '').trim().slice(0, maxLength);
+const hashToken = (value) => crypto.createHash('sha256').update(String(value || '')).digest('hex');
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
@@ -89,6 +107,14 @@ const buildLoginThrottleExpiry = (now = Date.now()) =>
   new Date(now + Math.max(LOGIN_RATE_WINDOW_MS, LOGIN_BLOCK_MS) + 60_000);
 
 const isDuplicateKeyError = (err) => err?.code === 11000;
+const getDuplicateFieldName = (err) =>
+  Object.keys(err?.keyPattern || err?.keyValue || {}).find(Boolean) || '';
+const getDuplicateUserFieldMessage = (err) => {
+  const field = getDuplicateFieldName(err);
+  if (field === 'username') return 'Username is already in use.';
+  if (field === 'email') return 'Email is already in use.';
+  return 'That account identity is already in use.';
+};
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -106,6 +132,8 @@ const parseActivityDayStart = (value) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return Number.NaN;
   return Date.parse(`${day}T00:00:00.000Z`);
 };
+
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const getRequestOrigin = (req) => {
   const forwardedProto = sanitizeText(req.headers['x-forwarded-proto'], 20).toLowerCase();
@@ -189,6 +217,28 @@ const prepareEmailVerification = (user) => {
   return verification;
 };
 
+const createPasswordResetToken = () => {
+  const token = crypto.randomBytes(32).toString('hex');
+  return {
+    token,
+    hashedToken: hashToken(token),
+    expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+  };
+};
+
+const preparePasswordReset = (user) => {
+  const reset = createPasswordResetToken();
+  user.passwordResetToken = reset.hashedToken;
+  user.passwordResetTokenExpires = reset.expiresAt;
+  return reset;
+};
+
+const clearPasswordReset = (user) => {
+  if (!user) return;
+  user.passwordResetToken = '';
+  user.passwordResetTokenExpires = null;
+};
+
 const buildVerificationEmailContent = (user, verificationUrl, expiresAt) => {
   const displayName = sanitizeText(user?.displayName || user?.email, 60) || 'there';
   const expiresLabel = new Date(expiresAt).toUTCString();
@@ -221,6 +271,86 @@ const buildVerificationEmailContent = (user, verificationUrl, expiresAt) => {
         </p>
         <p>If the button does not work, copy and paste this link into your browser:</p>
         <p><a href="${safeVerificationUrl}">${safeVerificationUrl}</a></p>
+        <p>This link expires on ${safeExpiresLabel}.</p>
+      </div>
+    `,
+  };
+};
+
+const resolvePasswordResetPageUrl = (req) => {
+  const explicitResetUrl = resolveAbsoluteUrl(
+    process.env.PASSWORD_RESET_URL || process.env.PASSWORD_RESET_PAGE_URL
+  );
+  if (explicitResetUrl) {
+    return explicitResetUrl;
+  }
+
+  const loginPopupUrl = resolveAbsoluteUrl(
+    process.env.LOGIN_POPUP_URL || process.env.PUBLIC_LOGIN_POPUP_URL || process.env.PUBLIC_LOGIN_URL
+  );
+  if (loginPopupUrl) {
+    return new URL('reset-password.html', loginPopupUrl).toString();
+  }
+
+  const appBaseUrl = resolveAbsoluteUrl(
+    process.env.APP_BASE_URL || process.env.PUBLIC_APP_URL || process.env.PUBLIC_BASE_URL
+  );
+  if (appBaseUrl) {
+    return new URL(DEFAULT_PASSWORD_RESET_PATH, appBaseUrl).toString();
+  }
+
+  if ((process.env.NODE_ENV || 'development') !== 'production') {
+    const requestOrigin = getRequestOrigin(req);
+    if (requestOrigin) {
+      return new URL(DEFAULT_PASSWORD_RESET_PATH, requestOrigin).toString();
+    }
+  }
+
+  return '';
+};
+
+const buildPasswordResetUrl = (req, token) => {
+  const baseUrl = resolvePasswordResetPageUrl(req);
+  if (!baseUrl || !token) return '';
+
+  const url = new URL(baseUrl);
+  url.searchParams.set('token', token);
+  return url.toString();
+};
+
+const buildPasswordResetEmailContent = (user, resetUrl, expiresAt) => {
+  const displayName = sanitizeText(user?.displayName || user?.email, 60) || 'there';
+  const expiresLabel = new Date(expiresAt).toUTCString();
+  const safeDisplayName = escapeHtml(displayName);
+  const safeResetUrl = escapeHtml(resetUrl);
+  const safeExpiresLabel = escapeHtml(expiresLabel);
+
+  return {
+    subject: PASSWORD_RESET_SUBJECT,
+    text: [
+      `Hi ${displayName},`,
+      '',
+      'Open this link to reset your Continental ID password:',
+      resetUrl,
+      '',
+      `This link expires on ${expiresLabel}.`,
+      'If you did not request this, you can ignore this message.',
+    ].join('\n'),
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;">
+        <h1 style="margin-bottom:16px;">Reset your password</h1>
+        <p>Hi ${safeDisplayName},</p>
+        <p>We received a request to reset your Continental ID password.</p>
+        <p>
+          <a
+            href="${safeResetUrl}"
+            style="display:inline-block;padding:12px 18px;border-radius:8px;background:#111827;color:#ffffff;text-decoration:none;font-weight:700;"
+          >
+            Reset password
+          </a>
+        </p>
+        <p>If the button does not work, copy and paste this link into your browser:</p>
+        <p><a href="${safeResetUrl}">${safeResetUrl}</a></p>
         <p>This link expires on ${safeExpiresLabel}.</p>
       </div>
     `,
@@ -263,6 +393,214 @@ const sendVerificationEmail = async (user, req, verification) => {
     console.error('Verification email delivery error:', err);
     return { sent: false };
   }
+};
+
+const sendPasswordResetEmail = async (user, req, reset) => {
+  if (!user?.email || !reset?.token) {
+    return { sent: false };
+  }
+
+  const resetUrl = buildPasswordResetUrl(req, reset.token);
+  if (!resetUrl) {
+    console.warn('Password reset URL is not configured; skipping password reset email.');
+    return { sent: false };
+  }
+
+  try {
+    const emailContent = buildPasswordResetEmailContent(user, resetUrl, reset.expiresAt);
+    const response = await sendEmail({
+      to: user.email,
+      subject: emailContent.subject,
+      text: emailContent.text,
+      html: emailContent.html,
+    });
+
+    return {
+      sent: !response?.skipped,
+      id: sanitizeText(response?.id, 120),
+    };
+  } catch (err) {
+    console.error('Password reset email delivery error:', err);
+    return { sent: false };
+  }
+};
+
+const buildSecurityEmailContent = ({ title, intro, details = [] }) => {
+  const safeTitle = escapeHtml(title || 'Security alert');
+  const safeIntro = escapeHtml(intro || 'A security-sensitive action was detected on your account.');
+  const normalizedDetails = Array.isArray(details)
+    ? details.map((item) => sanitizeText(item, 240)).filter(Boolean)
+    : [];
+
+  return {
+    text: [
+      title || 'Security alert',
+      '',
+      intro || 'A security-sensitive action was detected on your account.',
+      '',
+      ...normalizedDetails.map((item) => `- ${item}`),
+    ].join('\n'),
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;">
+        <h1 style="margin-bottom:16px;">${safeTitle}</h1>
+        <p>${safeIntro}</p>
+        ${
+          normalizedDetails.length
+            ? `<ul>${normalizedDetails.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+            : ''
+        }
+      </div>
+    `,
+  };
+};
+
+const shouldSendSecurityNotifications = (user) =>
+  Boolean(
+    user?.email &&
+      (hasOwn(user?.preferences?.notifications || {}, 'security')
+        ? user?.preferences?.notifications?.security
+        : DEFAULT_NOTIFICATIONS.security)
+  );
+
+const shouldSendLoginAlert = (user) =>
+  shouldSendSecurityNotifications(user) &&
+  Boolean(hasOwn(user?.security || {}, 'loginAlerts') ? user?.security?.loginAlerts : true);
+
+const sendSecurityAlertEmail = async (user, subject, title, intro, details = []) => {
+  if (!shouldSendSecurityNotifications(user)) {
+    return { sent: false };
+  }
+
+  try {
+    const emailContent = buildSecurityEmailContent({ title, intro, details });
+    const response = await sendEmail({
+      to: user.email,
+      subject,
+      text: emailContent.text,
+      html: emailContent.html,
+    });
+
+    return {
+      sent: !response?.skipped,
+      id: sanitizeText(response?.id, 120),
+    };
+  } catch (err) {
+    console.error('Security alert email delivery error:', err);
+    return { sent: false };
+  }
+};
+
+const sanitizeAuditMeta = (value = {}) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  const next = {};
+
+  for (const [rawKey, rawValue] of Object.entries(value).slice(0, 10)) {
+    const key = sanitizeText(rawKey, 40);
+    if (!key) continue;
+    if (rawValue === undefined || rawValue === null || rawValue === '') continue;
+
+    if (typeof rawValue === 'number' || typeof rawValue === 'boolean') {
+      next[key] = rawValue;
+      continue;
+    }
+
+    next[key] = sanitizeText(rawValue, 160);
+  }
+
+  return next;
+};
+
+const serializeAuditEvent = (event = {}) => ({
+  at: event?.at || null,
+  type: sanitizeText(event?.type, 60),
+  message: sanitizeText(event?.message, 240),
+  ip: sanitizeText(event?.ip, 80),
+  userAgent: sanitizeText(event?.userAgent, 300),
+  meta: sanitizeAuditMeta(event?.meta),
+});
+
+const appendAuditEvent = (user, req, type, message, meta = {}) => {
+  if (!user) return;
+
+  const events = Array.isArray(user.auditEvents)
+    ? user.auditEvents.map((event) => serializeAuditEvent(event)).filter((event) => event.type)
+    : [];
+
+  events.push(
+    serializeAuditEvent({
+      at: new Date(),
+      type,
+      message,
+      ip: parseClientIp(req),
+      userAgent: parseUserAgent(req),
+      meta,
+    })
+  );
+
+  user.auditEvents = events.slice(-MAX_AUDIT_EVENTS);
+};
+
+const normalizeDeviceFingerprintSource = (userAgent = '') =>
+  sanitizeText(String(userAgent || '').toLowerCase().replace(/\/\d+(?:\.\d+)*/g, ''), 260) ||
+  'unknown-device';
+
+const buildDeviceFingerprint = (userAgent = '') => hashToken(normalizeDeviceFingerprintSource(userAgent));
+
+const rememberKnownDevice = (user, req, requestedLabel = '') => {
+  const userAgent = parseUserAgent(req);
+  const fingerprint = buildDeviceFingerprint(userAgent);
+  const label = buildSessionLabel(requestedLabel, userAgent);
+  const now = new Date();
+  const ip = parseClientIp(req);
+  const devices = Array.isArray(user.knownDevices) ? [...user.knownDevices] : [];
+  const existingIndex = devices.findIndex(
+    (device) => sanitizeText(device?.fingerprint, 128) === fingerprint
+  );
+
+  const nextDevice = {
+    fingerprint,
+    label,
+    firstSeenAt: now,
+    lastSeenAt: now,
+    lastIp: ip,
+    userAgent,
+  };
+
+  if (existingIndex >= 0) {
+    const currentDevice = devices[existingIndex];
+    devices[existingIndex] = {
+      ...currentDevice,
+      fingerprint,
+      label: sanitizeText(currentDevice?.label || label, 60) || label,
+      lastSeenAt: now,
+      lastIp: ip,
+      userAgent,
+    };
+  } else {
+    devices.push(nextDevice);
+  }
+
+  devices.sort((left, right) => {
+    const leftTime = new Date(left?.lastSeenAt || 0).getTime();
+    const rightTime = new Date(right?.lastSeenAt || 0).getTime();
+    return leftTime - rightTime;
+  });
+
+  while (devices.length > MAX_KNOWN_DEVICES) {
+    devices.shift();
+  }
+
+  user.knownDevices = devices;
+
+  return {
+    fingerprint,
+    isNewDevice: existingIndex < 0,
+    device:
+      devices.find((device) => sanitizeText(device?.fingerprint, 128) === fingerprint) || nextDevice,
+  };
 };
 
 const isCrossSiteRequest = (req) => {
@@ -313,6 +651,33 @@ const sanitizeWebsite = (value, fallback = '') => {
   }
 };
 
+const sanitizeAvatar = (value, fallback = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  if (raw.length <= AVATAR_DATA_URL_MAX_LENGTH && AVATAR_DATA_URL_PATTERN.test(raw)) {
+    return raw;
+  }
+
+  const normalized = sanitizeText(raw, 2400);
+  if (!normalized) return '';
+
+  const withProtocol = /^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`;
+
+  try {
+    const parsed = new URL(withProtocol);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return fallback;
+    }
+    return parsed.toString();
+  } catch {
+    return fallback;
+  }
+};
+
+const sanitizeHeadline = (value, fallback = '') => sanitizeText(value, 100) || fallback;
+const sanitizePronouns = (value, fallback = '') => sanitizeText(value, 40) || fallback;
+
 const sanitizeLanguage = (value, fallback = 'en') => {
   const raw = sanitizeText(value, 32).replace('_', '-');
   if (!raw) return fallback;
@@ -336,6 +701,15 @@ const normalizeProfile = (incoming = {}, current = {}) => {
   const currentProfile = current || {};
 
   return {
+    avatar: hasOwn(incoming, 'avatar')
+      ? sanitizeAvatar(incoming.avatar, sanitizeAvatar(currentProfile.avatar, ''))
+      : sanitizeAvatar(currentProfile.avatar, ''),
+    headline: hasOwn(incoming, 'headline')
+      ? sanitizeHeadline(incoming.headline, sanitizeHeadline(currentProfile.headline, ''))
+      : sanitizeHeadline(currentProfile.headline, ''),
+    pronouns: hasOwn(incoming, 'pronouns')
+      ? sanitizePronouns(incoming.pronouns, sanitizePronouns(currentProfile.pronouns, ''))
+      : sanitizePronouns(currentProfile.pronouns, ''),
     bio: hasOwn(incoming, 'bio') ? sanitizeText(incoming.bio, 320) : sanitizeText(currentProfile.bio, 320),
     location: hasOwn(incoming, 'location')
       ? sanitizeText(incoming.location, 120)
@@ -552,8 +926,10 @@ const upsertRefreshSession = (user, req, sid = '', requestedLabel = '', options 
   const ip = parseClientIp(req);
   const userAgent = parseUserAgent(req);
   const label = buildSessionLabel(requestedLabel, userAgent);
+  const deviceFingerprint = sanitizeText(options.deviceFingerprint, 128);
   const currentRefreshTokenId = sanitizeText(options.currentRefreshTokenId, 120);
   const previousRefreshTokenId = sanitizeText(options.previousRefreshTokenId, 120);
+  const hasDeviceFingerprint = hasOwn(options, 'deviceFingerprint');
   const hasCurrentRefreshTokenId = hasOwn(options, 'currentRefreshTokenId');
   const hasPreviousRefreshTokenId = hasOwn(options, 'previousRefreshTokenId');
   const hasPreviousRefreshTokenGraceUntil = hasOwn(options, 'previousRefreshTokenGraceUntil');
@@ -579,6 +955,9 @@ const upsertRefreshSession = (user, req, sid = '', requestedLabel = '', options 
       userAgent,
     };
 
+    if (hasDeviceFingerprint) {
+      nextSession.deviceFingerprint = deviceFingerprint;
+    }
     if (hasCurrentRefreshTokenId) {
       nextSession.currentRefreshTokenId = currentRefreshTokenId;
     }
@@ -598,6 +977,7 @@ const upsertRefreshSession = (user, req, sid = '', requestedLabel = '', options 
       lastUsedAt: now,
       ip,
       userAgent,
+      deviceFingerprint,
       currentRefreshTokenId,
       previousRefreshTokenId,
       previousRefreshTokenGraceUntil,
@@ -639,10 +1019,11 @@ const buildTokenPair = (user, sid, refreshTokenId) => {
   };
 };
 
-const createTrackedRefreshSession = (user, req, requestedLabel = '') => {
+const createTrackedRefreshSession = (user, req, requestedLabel = '', deviceFingerprint = '') => {
   const sid = createSessionId();
   const refreshTokenId = createRefreshTokenId();
   upsertRefreshSession(user, req, sid, requestedLabel, {
+    deviceFingerprint,
     currentRefreshTokenId: refreshTokenId,
     previousRefreshTokenId: '',
     previousRefreshTokenGraceUntil: null,
@@ -659,6 +1040,7 @@ const rotateRefreshSessionToken = (user, req, sid, session, requestedLabel = '')
   const currentRefreshTokenId = sanitizeText(session?.currentRefreshTokenId, 120);
 
   upsertRefreshSession(user, req, sid, requestedLabel, {
+    deviceFingerprint: sanitizeText(session?.deviceFingerprint, 128),
     currentRefreshTokenId: nextRefreshTokenId,
     previousRefreshTokenId: currentRefreshTokenId,
     previousRefreshTokenGraceUntil: currentRefreshTokenId
@@ -674,6 +1056,7 @@ const reissueCurrentRefreshSession = (user, req, sid, session, requestedLabel = 
     sanitizeText(session?.currentRefreshTokenId, 120) || createRefreshTokenId();
 
   upsertRefreshSession(user, req, sid, requestedLabel, {
+    deviceFingerprint: sanitizeText(session?.deviceFingerprint, 128),
     currentRefreshTokenId,
   });
 
@@ -708,8 +1091,20 @@ const revokeAllSessions = (user, currentSid, exceptCurrent = false) => {
   user.refreshSessions = [];
 };
 
-const serializeSession = (session, currentSid = '') => {
+const getKnownDeviceMap = (user) =>
+  new Map(
+    (Array.isArray(user?.knownDevices) ? user.knownDevices : [])
+      .map((device) => [sanitizeText(device?.fingerprint, 128), device])
+      .filter(([fingerprint]) => fingerprint)
+  );
+
+const serializeSession = (session, currentSid = '', knownDevice = null) => {
   const sid = sanitizeText(session?.sid, 120);
+  const deviceFirstSeenAt = knownDevice?.firstSeenAt ? new Date(knownDevice.firstSeenAt).getTime() : 0;
+  const sessionCreatedAt = session?.createdAt ? new Date(session.createdAt).getTime() : 0;
+  const newDevice =
+    Boolean(deviceFirstSeenAt && sessionCreatedAt) &&
+    Math.abs(deviceFirstSeenAt - sessionCreatedAt) <= NEW_DEVICE_SESSION_WINDOW_MS;
   return {
     sid,
     label: sanitizeText(session?.label, 60) || 'Browser session',
@@ -717,14 +1112,56 @@ const serializeSession = (session, currentSid = '') => {
     lastUsedAt: session?.lastUsedAt || null,
     ip: sanitizeText(session?.ip, 80),
     userAgent: sanitizeText(session?.userAgent, 300),
+    recognized: Boolean(knownDevice),
+    newDevice,
+    deviceLabel: sanitizeText(knownDevice?.label, 60) || '',
     current: Boolean(sid && sid === sanitizeText(currentSid, 120)),
   };
 };
 
+const isUsernameTaken = async (username, userId) => {
+  const candidate = normalizeUsername(username);
+  if (!candidate) return false;
+
+  const query = { username: candidate };
+  if (userId) {
+    query._id = { $ne: userId };
+  }
+
+  return Boolean(await User.exists(query));
+};
+
+const applyUsernameChange = async (user, username) => {
+  const normalized = normalizeUsername(username);
+
+  if (!normalized) {
+    return ensureStoredUsername(user);
+  }
+
+  if (!isValidUsername(normalized)) {
+    throw createHttpError(400, USERNAME_VALIDATION_MESSAGE);
+  }
+
+  const taken = await isUsernameTaken(normalized, user?._id);
+  if (taken) {
+    throw createHttpError(409, 'Username is already in use.');
+  }
+
+  if (user.username !== normalized) {
+    user.username = normalized;
+    return true;
+  }
+
+  return false;
+};
+
 const profileCompletion = (user) => {
   const fields = [
+    getDisplayableUsername(user),
     sanitizeText(user.displayName, 60),
     sanitizeText(user.email, 120),
+    sanitizeAvatar(user.profile?.avatar, ''),
+    sanitizeHeadline(user.profile?.headline, ''),
     sanitizeText(user.profile?.bio, 320),
     sanitizeText(user.profile?.location, 120),
     sanitizeText(user.profile?.website, 240),
@@ -750,6 +1187,8 @@ const buildUserPayload = (user) => {
     userId: toObjectIdString(user._id),
     continentalId: toObjectIdString(user._id),
     email: user.email,
+    username: getDisplayableUsername(user),
+    handle: `@${getDisplayableUsername(user)}`,
     displayName: user.displayName || 'User',
     isVerified: Boolean(user.isVerified),
     createdAt: user.createdAt || null,
@@ -759,8 +1198,14 @@ const buildUserPayload = (user) => {
     recentLogins: Array.isArray(user.recentLogins)
       ? user.recentLogins.slice(-RECENT_LOGIN_RESPONSE_LIMIT).reverse()
       : [],
+    auditEvents: Array.isArray(user.auditEvents)
+      ? user.auditEvents.slice(-MAX_AUDIT_EVENTS).reverse().map((event) => serializeAuditEvent(event))
+      : [],
     activitySummary,
     profile: {
+      avatar: sanitizeAvatar(user.profile?.avatar, ''),
+      headline: sanitizeHeadline(user.profile?.headline, ''),
+      pronouns: sanitizePronouns(user.profile?.pronouns, ''),
       bio: sanitizeText(user.profile?.bio, 320),
       location: sanitizeText(user.profile?.location, 120),
       website: sanitizeText(user.profile?.website, 240),
@@ -827,9 +1272,42 @@ const buildUserPayload = (user) => {
       loginAlerts: Boolean(hasOwn(user.security || {}, 'loginAlerts') ? user.security?.loginAlerts : true),
       passwordChangedAt: user.security?.passwordChangedAt || null,
       activeSessions: Array.isArray(user.refreshSessions) ? user.refreshSessions.length : 0,
+      knownDevices: Array.isArray(user.knownDevices) ? user.knownDevices.length : 0,
     },
   };
 };
+
+const buildPublicLinkedAccounts = (linkedAccounts = {}) => {
+  const next = {};
+
+  for (const provider of LINKED_PROVIDERS) {
+    const value = sanitizeText(linkedAccounts?.[provider], 120);
+    if (value) {
+      next[provider] = value;
+    }
+  }
+
+  return next;
+};
+
+const buildPublicProfilePayload = (user) => ({
+  username: getDisplayableUsername(user),
+  handle: `@${getDisplayableUsername(user)}`,
+  displayName: sanitizeText(user?.displayName, 60) || 'User',
+  createdAt: user?.createdAt || null,
+  updatedAt: user?.updatedAt || null,
+  profile: {
+    avatar: sanitizeAvatar(user?.profile?.avatar, ''),
+    headline: sanitizeHeadline(user?.profile?.headline, ''),
+    pronouns: sanitizePronouns(user?.profile?.pronouns, ''),
+    bio: sanitizeText(user?.profile?.bio, 320),
+    location: sanitizeText(user?.profile?.location, 120),
+    website: sanitizeText(user?.profile?.website, 240),
+    timezone: sanitizeTimezone(user?.profile?.timezone, 'UTC'),
+    language: sanitizeLanguage(user?.profile?.language, 'en'),
+  },
+  linkedAccounts: buildPublicLinkedAccounts(user?.linkedAccounts),
+});
 
 const sendUserResponse = (res, status, message, user, extra = {}) => {
   const payload = buildUserPayload(user);
@@ -913,12 +1391,38 @@ const buildActivitySummary = (recentLogins = [], dailyCounts = []) => {
   };
 };
 
-const getUserById = (id) =>
-  User.findById(id).select(
-    'email displayName isVerified verificationToken verificationTokenExpires lastLoginAt lastLoginIp recentLogins loginDayCounts profile linkedAccounts preferences security refreshTokenVersion refreshSessions createdAt updatedAt password'
-  );
+const FULL_USER_SELECT_FIELDS =
+  'email username displayName isVerified verificationToken verificationTokenExpires passwordResetToken passwordResetTokenExpires lastLoginAt lastLoginIp recentLogins loginDayCounts knownDevices auditEvents profile linkedAccounts preferences security refreshTokenVersion refreshSessions createdAt updatedAt password';
 
-const loginRateKey = (email, req) => `${normalizeEmail(email)}|${parseClientIp(req)}`;
+const getUserById = async (id, { ensureIdentity = true } = {}) => {
+  const user = await User.findById(id).select(FULL_USER_SELECT_FIELDS);
+
+  if (user && ensureIdentity) {
+    const changed = await ensureUserIdentityFields(user);
+    if (changed) {
+      await user.save();
+    }
+  }
+
+  return user;
+};
+
+const loginRateKey = (identifier, req) => `${normalizeLoginIdentifier(identifier)}|${parseClientIp(req)}`;
+
+const findUserByLoginIdentifier = async (identifier) => {
+  const normalized = normalizeLoginIdentifier(identifier);
+  if (!normalized) return null;
+
+  if (isValidEmail(normalized)) {
+    return User.findOne({ email: normalized });
+  }
+
+  if (isValidUsername(normalized)) {
+    return User.findOne({ username: normalized });
+  }
+
+  return null;
+};
 
 const getLoginThrottleState = async (key) => {
   const now = Date.now();
@@ -1128,6 +1632,7 @@ exports.register = async (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const password = req.body?.password;
   const displayName = sanitizeDisplayName(req.body?.displayName, email);
+  const requestedUsername = req.body?.username;
 
   try {
     if (!isValidEmail(email)) {
@@ -1139,6 +1644,10 @@ exports.register = async (req, res) => {
         message:
           'Password must be at least 8 characters and include uppercase, lowercase, and a number.',
       });
+    }
+
+    if (hasOwn(req.body || {}, 'username') && !normalizeUsername(requestedUsername)) {
+      return res.status(400).json({ message: USERNAME_VALIDATION_MESSAGE });
     }
 
     const existingUser = await User.findOne({ email }).select('_id');
@@ -1154,9 +1663,19 @@ exports.register = async (req, res) => {
       preferences: normalizePreferences(req.body?.preferences || {}, {}),
     });
 
+    await applyUsernameChange(user, requestedUsername);
+    const device = rememberKnownDevice(user, req, req.body?.deviceLabel);
     const verification = prepareEmailVerification(user);
     appendRecentLogin(user, req);
-    const sessionTokens = createTrackedRefreshSession(user, req, req.body?.deviceLabel);
+    appendAuditEvent(user, req, 'register', 'Account created.', {
+      username: getDisplayableUsername(user),
+    });
+    const sessionTokens = createTrackedRefreshSession(
+      user,
+      req,
+      req.body?.deviceLabel,
+      device.fingerprint
+    );
     await user.save();
     const verificationDelivery = await sendVerificationEmail(user, req, verification);
 
@@ -1178,16 +1697,24 @@ exports.register = async (req, res) => {
       }
     );
   } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    if (isDuplicateKeyError(err)) {
+      return res.status(409).json({ message: getDuplicateUserFieldMessage(err) });
+    }
     console.error('Register error:', err);
     return res.status(500).json({ message: 'Registration failed.' });
   }
 };
 
 exports.login = async (req, res) => {
-  const email = normalizeEmail(req.body?.email);
+  const identifier = normalizeLoginIdentifier(
+    req.body?.identifier || req.body?.email || req.body?.username
+  );
   const password = req.body?.password;
 
-  const rateKey = loginRateKey(email, req);
+  const rateKey = loginRateKey(identifier, req);
   const throttle = await getLoginThrottleState(rateKey);
   if (throttle.blocked) {
     return res.status(429).json({
@@ -1197,12 +1724,12 @@ exports.login = async (req, res) => {
   }
 
   try {
-    if (!isValidEmail(email) || typeof password !== 'string') {
+    if ((!isValidEmail(identifier) && !isValidUsername(identifier)) || typeof password !== 'string') {
       await registerLoginFailure(rateKey);
       return res.status(400).json({ message: 'Invalid credentials.' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await findUserByLoginIdentifier(identifier);
     if (!user) {
       await registerLoginFailure(rateKey);
       return res.status(400).json({ message: 'Invalid credentials.' });
@@ -1216,9 +1743,39 @@ exports.login = async (req, res) => {
 
     await clearLoginFailures(rateKey);
 
+    await ensureUserIdentityFields(user);
+    const device = rememberKnownDevice(user, req, req.body?.deviceLabel);
     appendRecentLogin(user, req);
-    const sessionTokens = createTrackedRefreshSession(user, req, req.body?.deviceLabel);
+    appendAuditEvent(
+      user,
+      req,
+      'login',
+      device.isNewDevice ? 'Signed in from a new device.' : 'Signed in.',
+      {
+        newDevice: device.isNewDevice,
+      }
+    );
+    const sessionTokens = createTrackedRefreshSession(
+      user,
+      req,
+      req.body?.deviceLabel,
+      device.fingerprint
+    );
     await user.save();
+
+    if (device.isNewDevice && shouldSendLoginAlert(user)) {
+      await sendSecurityAlertEmail(
+        user,
+        'New device sign-in to Continental ID',
+        'New device sign-in detected',
+        'A sign-in from a device we had not seen before was detected on your account.',
+        [
+          `Time: ${new Date().toUTCString()}`,
+          `IP address: ${parseClientIp(req) || 'Unknown'}`,
+          `Device: ${buildSessionLabel(req.body?.deviceLabel, parseUserAgent(req))}`,
+        ]
+      );
+    }
 
     res.cookie('refreshToken', sessionTokens.refreshToken, buildCookieOptions(req));
 
@@ -1242,6 +1799,12 @@ exports.logout = async (req, res) => {
         session.user.refreshTokenVersion += 1;
         session.user.refreshSessions = [];
       }
+      appendAuditEvent(
+        session.user,
+        req,
+        'logout',
+        session.sid ? 'Signed out of the current session.' : 'Signed out of all sessions.'
+      );
       await session.user.save();
     }
 
@@ -1251,6 +1814,150 @@ exports.logout = async (req, res) => {
     console.error('Logout error:', err);
     clearRefreshCookie(res, req);
     return res.status(200).json({ message: 'Logged out.' });
+  }
+};
+
+exports.requestPasswordReset = async (req, res) => {
+  const identifier = normalizeLoginIdentifier(
+    req.body?.identifier || req.body?.email || req.body?.username
+  );
+  const genericMessage =
+    'If an account matches that sign-in, a password reset link will be sent shortly.';
+
+  try {
+    if (!identifier || (!isValidEmail(identifier) && !isValidUsername(identifier))) {
+      return res.status(200).json({ message: genericMessage });
+    }
+
+    const user = await findUserByLoginIdentifier(identifier);
+    if (!user) {
+      return res.status(200).json({ message: genericMessage });
+    }
+
+    await ensureUserIdentityFields(user);
+    const reset = preparePasswordReset(user);
+    appendAuditEvent(user, req, 'password_reset_requested', 'Password reset requested.');
+    await user.save();
+    await sendPasswordResetEmail(user, req, reset);
+
+    return res.status(200).json({ message: genericMessage });
+  } catch (err) {
+    console.error('Password reset request error:', err);
+    return res.status(200).json({ message: genericMessage });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  const token = sanitizeText(req.body?.token, 200);
+  const newPassword = req.body?.newPassword || '';
+
+  if (!token) {
+    return res.status(400).json({ message: 'Password reset token is required.' });
+  }
+
+  if (!isStrongPassword(newPassword)) {
+    return res.status(400).json({
+      message:
+        'New password must be at least 8 characters and include uppercase, lowercase, and a number.',
+    });
+  }
+
+  try {
+    const user = await User.findOne({
+      passwordResetToken: hashToken(token),
+      passwordResetTokenExpires: { $gt: Date.now() },
+    }).select(FULL_USER_SELECT_FIELDS);
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired password reset link.' });
+    }
+
+    clearPasswordReset(user);
+    user.password = newPassword;
+    user.refreshTokenVersion += 1;
+    user.refreshSessions = [];
+    appendAuditEvent(user, req, 'password_reset_completed', 'Password reset completed.');
+    await user.save();
+
+    await sendSecurityAlertEmail(
+      user,
+      'Your Continental ID password was reset',
+      'Password reset completed',
+      'Your Continental ID password was just reset.',
+      [
+        `Time: ${new Date().toUTCString()}`,
+        `IP address: ${parseClientIp(req) || 'Unknown'}`,
+      ]
+    );
+
+    return res.status(200).json({
+      message: 'Password reset successful. You can now sign in with your new password.',
+    });
+  } catch (err) {
+    console.error('Password reset completion error:', err);
+    return res.status(500).json({ message: 'Failed to reset password.' });
+  }
+};
+
+exports.searchPublicProfiles = async (req, res) => {
+  const query = sanitizeText(req.query?.q, 60);
+
+  try {
+    if (query.length < 2) {
+      return res.json({ message: 'Search loaded.', results: [] });
+    }
+
+    const regex = new RegExp(escapeRegex(query), 'i');
+    const users = await User.find({
+      'preferences.profilePublic': true,
+      'preferences.searchable': true,
+      $or: [
+        { username: regex },
+        { displayName: regex },
+        { 'profile.headline': regex },
+      ],
+    })
+      .select('username displayName profile linkedAccounts createdAt updatedAt')
+      .sort({ updatedAt: -1, _id: -1 })
+      .limit(12)
+      .lean();
+
+    return res.json({
+      message: 'Search loaded.',
+      results: users.map((user) => buildPublicProfilePayload(user)),
+    });
+  } catch (err) {
+    console.error('Public profile search error:', err);
+    return res.status(500).json({ message: 'Failed to search public profiles.' });
+  }
+};
+
+exports.getPublicProfile = async (req, res) => {
+  const username = normalizeUsername(req.params?.username);
+
+  try {
+    if (!username) {
+      return res.status(404).json({ message: 'Profile not found.' });
+    }
+
+    const user = await User.findOne({
+      username,
+      'preferences.profilePublic': true,
+    })
+      .select('username displayName profile linkedAccounts createdAt updatedAt')
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: 'Profile not found.' });
+    }
+
+    return res.json({
+      message: 'Profile loaded.',
+      profile: buildPublicProfilePayload(user),
+    });
+  } catch (err) {
+    console.error('Get public profile error:', err);
+    return res.status(500).json({ message: 'Failed to load public profile.' });
   }
 };
 
@@ -1314,6 +2021,14 @@ exports.updateProfile = async (req, res) => {
     }
 
     let verification = null;
+    let emailChanged = false;
+
+    if (hasOwn(incoming, 'username')) {
+      if (!normalizeUsername(incoming.username)) {
+        return res.status(400).json({ message: USERNAME_VALIDATION_MESSAGE });
+      }
+      await applyUsernameChange(user, incoming.username);
+    }
 
     if (hasOwn(incoming, 'displayName')) {
       const displayName = sanitizeText(incoming.displayName, 60);
@@ -1324,18 +2039,38 @@ exports.updateProfile = async (req, res) => {
     }
 
     if (hasOwn(incoming, 'email')) {
-      const emailChanged = await applyEmailChange(user, incoming.email, currentPassword);
+      emailChanged = await applyEmailChange(user, incoming.email, currentPassword);
       if (emailChanged) {
         verification = prepareEmailVerification(user);
       }
     }
 
     user.profile = normalizeProfile(incoming, user.profile || {});
+    appendAuditEvent(
+      user,
+      req,
+      'profile_updated',
+      emailChanged ? 'Profile updated and email changed.' : 'Profile updated.',
+      { emailChanged }
+    );
     await user.save();
 
     const verificationDelivery = verification
       ? await sendVerificationEmail(user, req, verification)
       : null;
+
+    if (emailChanged) {
+      await sendSecurityAlertEmail(
+        user,
+        'Your Continental ID email was changed',
+        'Email change detected',
+        'Your account email was updated and now requires verification.',
+        [
+          `Time: ${new Date().toUTCString()}`,
+          `IP address: ${parseClientIp(req) || 'Unknown'}`,
+        ]
+      );
+    }
 
     const message = verification
       ? getVerificationDeliveryMessage(
@@ -1353,7 +2088,7 @@ exports.updateProfile = async (req, res) => {
       return res.status(err.statusCode).json({ message: err.message });
     }
     if (isDuplicateKeyError(err)) {
-      return res.status(409).json({ message: 'Email is already in use.' });
+      return res.status(409).json({ message: getDuplicateUserFieldMessage(err) });
     }
     console.error('Update profile error:', err);
     return res.status(500).json({ message: 'Failed to update profile.' });
@@ -1376,11 +2111,31 @@ exports.updateEmail = async (req, res) => {
       verification = prepareEmailVerification(user);
     }
 
+    appendAuditEvent(
+      user,
+      req,
+      'email_updated',
+      emailChanged ? 'Email updated.' : 'Email update checked.',
+      { emailChanged }
+    );
     await user.save();
 
     const verificationDelivery = verification
       ? await sendVerificationEmail(user, req, verification)
       : null;
+
+    if (emailChanged) {
+      await sendSecurityAlertEmail(
+        user,
+        'Your Continental ID email was changed',
+        'Email change detected',
+        'Your Continental ID email was changed and needs to be verified again.',
+        [
+          `Time: ${new Date().toUTCString()}`,
+          `IP address: ${parseClientIp(req) || 'Unknown'}`,
+        ]
+      );
+    }
 
     const message = verification
       ? getVerificationDeliveryMessage(
@@ -1398,7 +2153,7 @@ exports.updateEmail = async (req, res) => {
       return res.status(err.statusCode).json({ message: err.message });
     }
     if (isDuplicateKeyError(err)) {
-      return res.status(409).json({ message: 'Email is already in use.' });
+      return res.status(409).json({ message: getDuplicateUserFieldMessage(err) });
     }
     console.error('Update email error:', err);
     return res.status(500).json({ message: 'Failed to update email.' });
@@ -1417,6 +2172,7 @@ exports.resendVerificationEmail = async (req, res) => {
     }
 
     const verification = prepareEmailVerification(user);
+    appendAuditEvent(user, req, 'verification_resent', 'Verification email resent.');
     await user.save();
 
     const verificationDelivery = await sendVerificationEmail(user, req, verification);
@@ -1460,6 +2216,7 @@ exports.updatePreferences = async (req, res) => {
     }
 
     user.preferences = normalizePreferences(req.body || {}, user.preferences || {});
+    appendAuditEvent(user, req, 'preferences_updated', 'Preferences updated.');
     await user.save();
 
     return sendUserResponse(res, 200, 'Preferences updated.', user);
@@ -1494,6 +2251,7 @@ exports.updateLinkedAccounts = async (req, res) => {
     }
 
     user.linkedAccounts = normalizeLinkedAccounts(req.body || {}, user.linkedAccounts || {});
+    appendAuditEvent(user, req, 'linked_accounts_updated', 'External profiles updated.');
     await user.save();
 
     return sendUserResponse(res, 200, 'Linked accounts updated.', user);
@@ -1515,6 +2273,7 @@ exports.getActivity = async (req, res) => {
     return res.json({
       message: 'Activity loaded.',
       recentLogins: payload.recentLogins,
+      auditEvents: payload.auditEvents,
       lastLoginAt: payload.lastLoginAt,
       lastLoginIp: payload.lastLoginIp,
       summary: payload.activitySummary,
@@ -1556,6 +2315,7 @@ exports.updateSecurity = async (req, res) => {
       user.security.loginAlerts = req.body.loginAlerts;
     }
 
+    appendAuditEvent(user, req, 'security_updated', 'Security settings updated.');
     await user.save();
 
     return sendUserResponse(res, 200, 'Security settings updated.', user);
@@ -1573,9 +2333,16 @@ exports.getSessions = async (req, res) => {
     }
 
     const currentSid = sanitizeText(req.user?.sid, 120);
+    const knownDeviceMap = getKnownDeviceMap(user);
     const sessions = Array.isArray(user.refreshSessions)
       ? [...user.refreshSessions]
-          .map((session) => serializeSession(session, currentSid))
+          .map((session) =>
+            serializeSession(
+              session,
+              currentSid,
+              knownDeviceMap.get(sanitizeText(session?.deviceFingerprint, 128)) || null
+            )
+          )
           .sort((a, b) => {
             const aTime = new Date(a.lastUsedAt || a.createdAt || 0).getTime();
             const bTime = new Date(b.lastUsedAt || b.createdAt || 0).getTime();
@@ -1612,10 +2379,17 @@ exports.revokeSession = async (req, res) => {
       return res.status(404).json({ message: 'Session not found.' });
     }
 
-    await user.save();
-
     const currentSid = sanitizeText(req.user?.sid, 120);
     const revokedCurrentSession = targetSid === currentSid;
+    appendAuditEvent(
+      user,
+      req,
+      'session_revoked',
+      revokedCurrentSession ? 'Current session revoked.' : 'Session revoked.',
+      { currentSession: revokedCurrentSession }
+    );
+    await user.save();
+
     if (revokedCurrentSession) {
       clearRefreshCookie(res, req);
     }
@@ -1650,6 +2424,13 @@ exports.revokeAllSessions = async (req, res) => {
       clearRefreshCookie(res, req);
     }
 
+    appendAuditEvent(
+      user,
+      req,
+      'sessions_revoked',
+      exceptCurrent ? 'All other sessions were revoked.' : 'All sessions were revoked.',
+      { exceptCurrent }
+    );
     await user.save();
 
     return res.json({
@@ -1691,9 +2472,22 @@ exports.updatePassword = async (req, res) => {
     }
 
     user.password = newPassword;
+    clearPasswordReset(user);
     user.refreshTokenVersion += 1;
     user.refreshSessions = [];
+    appendAuditEvent(user, req, 'password_updated', 'Password updated.');
     await user.save();
+
+    await sendSecurityAlertEmail(
+      user,
+      'Your Continental ID password was changed',
+      'Password changed',
+      'Your Continental ID password was updated.',
+      [
+        `Time: ${new Date().toUTCString()}`,
+        `IP address: ${parseClientIp(req) || 'Unknown'}`,
+      ]
+    );
 
     clearRefreshCookie(res, req);
 
@@ -1715,9 +2509,19 @@ exports.exportAccountData = async (req, res) => {
     }
 
     const payload = buildUserPayload(user);
+    const knownDeviceMap = getKnownDeviceMap(user);
     const sessions = Array.isArray(user.refreshSessions)
-      ? user.refreshSessions.map((session) => serializeSession(session, req.user?.sid))
+      ? user.refreshSessions.map((session) =>
+          serializeSession(
+            session,
+            req.user?.sid,
+            knownDeviceMap.get(sanitizeText(session?.deviceFingerprint, 128)) || null
+          )
+        )
       : [];
+
+    appendAuditEvent(user, req, 'account_exported', 'Account export generated.');
+    await user.save();
 
     return res.json({
       message: 'Account export generated.',
@@ -1725,7 +2529,10 @@ exports.exportAccountData = async (req, res) => {
       data: {
         account: payload,
         sessions,
-        activitySummary: buildActivitySummary(Array.isArray(user.recentLogins) ? user.recentLogins : []),
+        activitySummary: buildActivitySummary(
+          Array.isArray(user.recentLogins) ? user.recentLogins : [],
+          Array.isArray(user.loginDayCounts) ? user.loginDayCounts : []
+        ),
       },
     });
   } catch (err) {
@@ -1752,6 +2559,14 @@ exports.deleteAccount = async (req, res) => {
     if (!matches) {
       return res.status(400).json({ message: 'Current password is incorrect.' });
     }
+
+    await sendSecurityAlertEmail(
+      user,
+      'Your Continental ID account was deleted',
+      'Account deleted',
+      'Your Continental ID account was permanently deleted.',
+      [`Time: ${new Date().toUTCString()}`]
+    );
 
     await User.deleteOne({ _id: req.user.id });
     clearRefreshCookie(res, req);

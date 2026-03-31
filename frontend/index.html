@@ -51,8 +51,9 @@
         <section class="profile-rail">
           <div class="profile-identity">
             <div id="hero-initials" class="identity-badge" aria-hidden="true">CI</div>
-            <div>
+            <div class="identity-meta">
               <p id="hero-display-name" class="identity-name">Continental User</p>
+              <p id="hero-username" class="identity-handle">@continental</p>
               <p id="hero-email" class="identity-email">Signed-out session</p>
             </div>
           </div>
@@ -179,8 +180,16 @@
 
               <dl class="glance-list">
                 <div>
+                  <dt>Username</dt>
+                  <dd id="summary-username">-</dd>
+                </div>
+                <div>
                   <dt>Display name</dt>
                   <dd id="summary-display-name">-</dd>
+                </div>
+                <div>
+                  <dt>Headline</dt>
+                  <dd id="summary-headline">-</dd>
                 </div>
                 <div>
                   <dt>Email status</dt>
@@ -354,9 +363,69 @@
               </div>
 
               <form id="profile-form" class="form-grid">
+                <div class="profile-avatar-card wide-field">
+                  <div class="profile-avatar-row">
+                    <div id="profile-avatar-preview" class="identity-badge profile-avatar-preview" aria-hidden="true">CI</div>
+                    <div class="profile-avatar-copy">
+                      <p class="eyebrow">Profile picture</p>
+                      <h3>Identity image</h3>
+                      <p id="profile-avatar-helper" class="helper-line">
+                        Upload an image or paste a direct image URL. Uploaded images are resized before saving.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="profile-avatar-actions">
+                    <button id="profile-avatar-upload-btn" class="secondary-btn" type="button">Upload Image</button>
+                    <button id="profile-avatar-remove-btn" class="ghost-btn" type="button">Remove Image</button>
+                  </div>
+                  <input
+                    id="profile-avatar-upload"
+                    name="avatarUpload"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    hidden
+                  />
+                  <label class="wide-field">
+                    Avatar image URL
+                    <input
+                      id="profile-avatar-url"
+                      name="avatar"
+                      type="text"
+                      maxlength="2400"
+                      placeholder="https://example.com/avatar.png"
+                    />
+                  </label>
+                </div>
+                <label>
+                  Username
+                  <input
+                    id="profile-username"
+                    name="username"
+                    type="text"
+                    minlength="3"
+                    maxlength="30"
+                    pattern="[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?"
+                    required
+                  />
+                  <small>Used for sign-in and account identity. Letters, numbers, dots, hyphens, and underscores only.</small>
+                </label>
                 <label>
                   Display name
                   <input id="profile-display-name" name="displayName" type="text" minlength="2" maxlength="60" required />
+                </label>
+                <label>
+                  Pronouns
+                  <input id="profile-pronouns" name="pronouns" type="text" maxlength="40" placeholder="she/her" />
+                </label>
+                <label>
+                  Headline
+                  <input
+                    id="profile-headline"
+                    name="headline"
+                    type="text"
+                    maxlength="100"
+                    placeholder="Building a cleaner account system"
+                  />
                 </label>
                 <label>
                   Email
@@ -400,6 +469,12 @@
                   Created
                   <input id="profile-created" type="text" disabled />
                 </label>
+                <label class="wide-field">
+                  Public profile
+                  <input id="profile-public-link" type="text" readonly />
+                  <small>Share this link when your profile is public. Search only includes profiles with discovery enabled.</small>
+                </label>
+                <button id="open-public-profile-btn" class="secondary-btn" type="button">Open Public Profile</button>
                 <button id="profile-save-btn" class="primary-btn" type="submit">Save Profile</button>
               </form>
             </article>
@@ -654,6 +729,12 @@
 
           <article class="section-card">
             <div class="activity-toolbar">
+              <select id="activity-kind" aria-label="Activity type filter">
+                <option value="all">All events</option>
+                <option value="logins">Logins</option>
+                <option value="account">Account changes</option>
+                <option value="security">Security events</option>
+              </select>
               <input id="activity-filter" type="search" placeholder="Filter by IP, browser, or date" />
               <button id="activity-refresh-btn" class="secondary-btn" type="button">Refresh Activity</button>
               <button id="activity-export-btn" class="secondary-btn" type="button">Export CSV</button>

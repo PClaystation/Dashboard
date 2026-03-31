@@ -26,9 +26,37 @@ const refreshSessionSchema = new mongoose.Schema(
     lastUsedAt: { type: Date, default: Date.now },
     ip: { type: String, default: '' },
     userAgent: { type: String, default: '' },
+    deviceFingerprint: { type: String, default: '' },
     currentRefreshTokenId: { type: String, default: '' },
     previousRefreshTokenId: { type: String, default: '' },
     previousRefreshTokenGraceUntil: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
+const knownDeviceSchema = new mongoose.Schema(
+  {
+    fingerprint: { type: String, required: true, trim: true, maxlength: 128 },
+    label: { type: String, default: '', trim: true, maxlength: 60 },
+    firstSeenAt: { type: Date, default: Date.now },
+    lastSeenAt: { type: Date, default: Date.now },
+    lastIp: { type: String, default: '' },
+    userAgent: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
+const auditEventSchema = new mongoose.Schema(
+  {
+    at: { type: Date, default: Date.now },
+    type: { type: String, required: true, trim: true, maxlength: 60 },
+    message: { type: String, default: '', trim: true, maxlength: 240 },
+    ip: { type: String, default: '' },
+    userAgent: { type: String, default: '' },
+    meta: {
+      type: Object,
+      default: {},
+    },
   },
   { _id: false }
 );
@@ -41,6 +69,17 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      index: true,
+    },
+    username: {
+      type: String,
+      unique: true,
+      sparse: true,
+      lowercase: true,
+      trim: true,
+      minlength: 3,
+      maxlength: 30,
+      match: /^[a-z0-9](?:[a-z0-9._-]{1,28}[a-z0-9])?$/,
       index: true,
     },
     displayName: {
@@ -58,6 +97,8 @@ const userSchema = new mongoose.Schema(
     isVerified: { type: Boolean, default: false },
     verificationToken: { type: String, default: '' },
     verificationTokenExpires: { type: Date, default: null },
+    passwordResetToken: { type: String, default: '' },
+    passwordResetTokenExpires: { type: Date, default: null },
     lastLoginAt: { type: Date },
     lastLoginIp: { type: String, default: '' },
     recentLogins: {
@@ -68,7 +109,18 @@ const userSchema = new mongoose.Schema(
       type: [loginDayCountSchema],
       default: [],
     },
+    knownDevices: {
+      type: [knownDeviceSchema],
+      default: [],
+    },
+    auditEvents: {
+      type: [auditEventSchema],
+      default: [],
+    },
     profile: {
+      avatar: { type: String, default: '', maxlength: 350000 },
+      headline: { type: String, default: '', maxlength: 100 },
+      pronouns: { type: String, default: '', maxlength: 40 },
       bio: { type: String, default: '', maxlength: 320 },
       location: { type: String, default: '', maxlength: 120 },
       website: { type: String, default: '', maxlength: 240 },

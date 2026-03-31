@@ -12,6 +12,7 @@ const cookieParser = require('cookie-parser');
 const ApiRateLimitBucket = require('./models/ApiRateLimitBucket');
 const authRoutes = require('./routes/authRoutes');
 const grimoireRoutes = require('./routes/grimoireRoutes');
+const { migrateUsersToLatestIdentity } = require('./utils/userIdentity');
 
 const app = express();
 
@@ -332,8 +333,9 @@ const startServer = async () => {
   try {
     await connectToDatabase();
     console.log('MongoDB connected');
+    await migrateUsersToLatestIdentity({ logger: console });
   } catch (err) {
-    console.error('MongoDB connection failed:', err);
+    console.error('Server startup failed:', err);
     process.exit(1);
   }
 

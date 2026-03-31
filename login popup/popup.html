@@ -29,7 +29,7 @@
       width: min(360px, 100%);
       text-align: center;
       position: relative;
-      min-height: 520px;
+      min-height: 590px;
       overflow: hidden;
     }
 
@@ -110,6 +110,18 @@
       text-align: left;
     }
 
+    .helper-link {
+      display: inline-block;
+      margin-top: 0.3rem;
+      color: #4d4d4d;
+      font-size: 0.86rem;
+      text-decoration: none;
+    }
+
+    .helper-link:hover {
+      text-decoration: underline;
+    }
+
     .submit-btn {
       width: 100%;
       padding: 12px 0;
@@ -153,15 +165,27 @@
     </div>
 
     <form id="login-form" novalidate>
-      <input type="email" id="login-email" placeholder="Email" autocomplete="email" required />
+      <input type="text" id="login-identifier" placeholder="Email or username" autocomplete="username" required />
       <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required />
+      <a id="forgot-password-link" class="helper-link" href="reset-password.html">Forgot password?</a>
       <button type="submit" id="login-btn" class="submit-btn">Login</button>
     </form>
 
     <form id="register-form" class="hidden" novalidate>
+      <input
+        type="text"
+        id="register-username"
+        placeholder="Username"
+        maxlength="30"
+        minlength="3"
+        pattern="[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?"
+        autocomplete="username"
+        required
+      />
       <input type="text" id="register-display-name" placeholder="Display name (optional)" maxlength="60" autocomplete="nickname" />
       <input type="email" id="register-email" placeholder="Email" autocomplete="email" required />
       <input type="password" id="register-password" placeholder="Password" autocomplete="new-password" required />
+      <p class="password-hint">Usernames are for sign-in. Display names are what people see.</p>
       <p class="password-hint">Use 8+ chars with uppercase, lowercase, and number.</p>
       <button type="submit" id="register-btn" class="submit-btn">Register</button>
     </form>
@@ -241,6 +265,7 @@
     const registerForm = document.getElementById('register-form');
     const loginBtn = document.getElementById('login-btn');
     const registerBtn = document.getElementById('register-btn');
+    const forgotPasswordLink = document.getElementById('forgot-password-link');
 
     const isTrustedAppOrigin = (origin) => {
       if (!origin) return false;
@@ -317,6 +342,14 @@
     loginToggle.addEventListener('click', switchToLogin);
     registerToggle.addEventListener('click', switchToRegister);
 
+    if (forgotPasswordLink) {
+      const resetUrl = new URL('reset-password.html', window.location.href);
+      if (params.get('origin')) resetUrl.searchParams.set('origin', params.get('origin'));
+      if (params.get('redirect')) resetUrl.searchParams.set('redirect', params.get('redirect'));
+      if (params.get('apiBaseUrl')) resetUrl.searchParams.set('apiBaseUrl', params.get('apiBaseUrl'));
+      forgotPasswordLink.href = resetUrl.toString();
+    }
+
     const finishAuth = (payload) => {
       if (window.opener && !window.opener.closed && targetOrigin) {
         window.opener.postMessage(
@@ -374,30 +407,31 @@
     loginForm.addEventListener('submit', async (event) => {
       event.preventDefault();
 
-      const email = document.getElementById('login-email').value.trim();
+      const identifier = document.getElementById('login-identifier').value.trim();
       const password = document.getElementById('login-password').value;
 
-      if (!email || !password) {
-        setStatus('Email and password are required.');
+      if (!identifier || !password) {
+        setStatus('Username/email and password are required.');
         return;
       }
 
-      await requestAuth('/login', { email, password }, loginBtn);
+      await requestAuth('/login', { identifier, password }, loginBtn);
     });
 
     registerForm.addEventListener('submit', async (event) => {
       event.preventDefault();
 
+      const username = document.getElementById('register-username').value.trim();
       const displayName = document.getElementById('register-display-name').value.trim();
       const email = document.getElementById('register-email').value.trim();
       const password = document.getElementById('register-password').value;
 
-      if (!email || !password) {
-        setStatus('Email and password are required.');
+      if (!username || !email || !password) {
+        setStatus('Username, email, and password are required.');
         return;
       }
 
-      await requestAuth('/register', { displayName, email, password }, registerBtn);
+      await requestAuth('/register', { username, displayName, email, password }, registerBtn);
     });
   </script>
 </body>

@@ -535,6 +535,10 @@ footer {
   gap: 0.9rem;
 }
 
+.identity-meta {
+  min-width: 0;
+}
+
 .identity-badge {
   width: 60px;
   height: 60px;
@@ -548,10 +552,24 @@ footer {
     linear-gradient(145deg, color-mix(in srgb, var(--primary) 76%, #ffffff), color-mix(in srgb, var(--secondary) 62%, #ffffff));
 }
 
+.identity-badge.has-image {
+  color: transparent;
+  background-size: cover;
+  background-position: center;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 78%, transparent);
+}
+
 .identity-name {
   margin: 0;
   font-weight: 800;
   font-size: 1rem;
+}
+
+.identity-handle {
+  margin: 0.16rem 0 0;
+  color: var(--primary-strong);
+  font-size: 0.88rem;
+  font-weight: 700;
 }
 
 .identity-email {
@@ -1006,6 +1024,43 @@ footer {
   grid-column: 1 / -1;
 }
 
+.profile-avatar-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+}
+
+.profile-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.profile-avatar-preview {
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  flex: 0 0 auto;
+}
+
+.profile-avatar-copy h3 {
+  margin: 0.16rem 0 0;
+  font-size: 1.05rem;
+}
+
+.profile-avatar-copy .helper-line {
+  margin: 0.45rem 0 0;
+}
+
+.profile-avatar-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
 .compact-form {
   grid-template-columns: 1fr;
 }
@@ -1308,6 +1363,7 @@ html[data-reduced-motion='true'] *::after {
 
   .header-actions,
   .hero-actions,
+  .profile-avatar-actions,
   .activity-toolbar,
   .session-actions,
   .inline-form,

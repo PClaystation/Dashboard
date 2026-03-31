@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Continental ID Profile</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eff2f6;
+      --panel: #ffffff;
+      --ink: #16202a;
+      --muted: #5d6b78;
+      --line: #d8e0e7;
+      --accent: #24415a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Manrope, system-ui, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(36, 65, 90, 0.14), transparent 32%),
+        linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+      color: var(--ink);
+      padding: 2rem 1rem 3rem;
+    }
+    .shell {
+      width: min(880px, 100%);
+      margin: 0 auto;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }
+    .hero {
+      padding: 2rem;
+      background: linear-gradient(135deg, #1f3548, #355c75);
+      color: #fff;
+    }
+    .hero h1 {
+      margin: 0.4rem 0 0.5rem;
+      font-size: clamp(2rem, 4vw, 3rem);
+    }
+    .hero p {
+      margin: 0;
+      max-width: 48rem;
+      color: rgba(255, 255, 255, 0.82);
+    }
+    .search-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.75rem;
+      padding: 1.25rem 2rem 0;
+    }
+    input, button {
+      font: inherit;
+      border-radius: 12px;
+      padding: 0.9rem 1rem;
+    }
+    input {
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+    button {
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .content {
+      padding: 1.5rem 2rem 2rem;
+    }
+    .profile-card {
+      display: grid;
+      gap: 1.25rem;
+      grid-template-columns: 120px 1fr;
+      align-items: start;
+      padding: 1.25rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .avatar {
+      width: 120px;
+      height: 120px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #294960, #4b718d);
+      color: #fff;
+      font-size: 2rem;
+      font-weight: 800;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .eyebrow {
+      margin: 0;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .meta h2 {
+      margin: 0.35rem 0 0.2rem;
+      font-size: 2rem;
+    }
+    .handle {
+      margin: 0 0 0.75rem;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .headline {
+      margin: 0 0 0.9rem;
+      font-size: 1.05rem;
+      color: var(--ink);
+    }
+    .bio {
+      margin: 0 0 1rem;
+      color: var(--muted);
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
+    .details, .links, .results {
+      display: grid;
+      gap: 0.8rem;
+    }
+    .details {
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 1rem;
+    }
+    .detail {
+      padding: 0.9rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fafbfd;
+    }
+    .detail strong {
+      display: block;
+      margin-bottom: 0.25rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .links a, .result-item a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .links a:hover, .result-item a:hover {
+      text-decoration: underline;
+    }
+    .results {
+      padding-top: 1.25rem;
+    }
+    .result-item {
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+    }
+    .result-item p {
+      margin: 0.35rem 0 0;
+      color: var(--muted);
+    }
+    .status {
+      margin: 1rem 0 0;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    @media (max-width: 720px) {
+      .search-row,
+      .content,
+      .hero {
+        padding-left: 1.25rem;
+        padding-right: 1.25rem;
+      }
+      .profile-card {
+        grid-template-columns: 1fr;
+      }
+      .avatar {
+        width: 96px;
+        height: 96px;
+      }
+      .search-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="panel">
+      <header class="hero">
+        <p class="eyebrow">Public Profile</p>
+        <h1 id="hero-title">Continental ID</h1>
+        <p id="hero-copy">Search public profiles or open a direct profile link.</p>
+      </header>
+
+      <div class="search-row">
+        <input id="search-input" type="search" placeholder="Search by username, display name, or headline" />
+        <button id="search-btn" type="button">Search</button>
+      </div>
+
+      <div class="content">
+        <div id="profile-region"></div>
+        <div id="results" class="results"></div>
+        <p id="status" class="status" aria-live="polite"></p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
+    const params = new URLSearchParams(window.location.search);
+
+    const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
+    const safeText = (value) => String(value || '').trim();
+    const formatDate = (value) => {
+      const date = new Date(value || '');
+      if (Number.isNaN(date.getTime())) return 'Unavailable';
+      return date.toLocaleDateString();
+    };
+
+    const getDefaultApiBaseUrl = () => {
+      if (LOCAL_HOSTS.has(window.location.hostname)) {
+        return 'http://localhost:5000';
+      }
+
+      if (
+        window.location.hostname === 'dashboard.continental-hub.com' ||
+        window.location.hostname === 'login.continental-hub.com'
+      ) {
+        return 'https://grimoire.continental-hub.com';
+      }
+
+      return window.location.origin;
+    };
+
+    const API_BASE_URL = trimTrailingSlash(window.__API_BASE_URL__ || getDefaultApiBaseUrl());
+    const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
+
+    const searchInput = document.getElementById('search-input');
+    const searchBtn = document.getElementById('search-btn');
+    const profileRegion = document.getElementById('profile-region');
+    const results = document.getElementById('results');
+    const status = document.getElementById('status');
+    const heroTitle = document.getElementById('hero-title');
+
+    const setStatus = (message) => {
+      status.textContent = message;
+    };
+
+    const avatarMarkup = (profile = {}) => {
+      const avatar = safeText(profile?.profile?.avatar);
+      const initials = safeText(profile?.displayName || profile?.username || 'CI')
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part.charAt(0))
+        .join('')
+        .slice(0, 2)
+        .toUpperCase();
+
+      return avatar
+        ? `<div class="avatar"><img src="${avatar}" alt="${safeText(profile.displayName)}" /></div>`
+        : `<div class="avatar">${initials || 'CI'}</div>`;
+    };
+
+    const renderProfile = (profile) => {
+      const links = Object.entries(profile?.linkedAccounts || {})
+        .map(([provider, value]) => `<a href="#" data-provider="${provider}">${provider}: ${safeText(value)}</a>`)
+        .join('');
+
+      const details = [
+        profile?.profile?.pronouns ? `<div class="detail"><strong>Pronouns</strong>${safeText(profile.profile.pronouns)}</div>` : '',
+        profile?.profile?.location ? `<div class="detail"><strong>Location</strong>${safeText(profile.profile.location)}</div>` : '',
+        profile?.profile?.website ? `<div class="detail"><strong>Website</strong><a href="${safeText(profile.profile.website)}" target="_blank" rel="noopener noreferrer">${safeText(profile.profile.website)}</a></div>` : '',
+        profile?.createdAt ? `<div class="detail"><strong>Joined</strong>${formatDate(profile.createdAt)}</div>` : '',
+      ]
+        .filter(Boolean)
+        .join('');
+
+      profileRegion.innerHTML = `
+        <article class="profile-card">
+          ${avatarMarkup(profile)}
+          <div class="meta">
+            <p class="eyebrow">Continental ID</p>
+            <h2>${safeText(profile.displayName)}</h2>
+            <p class="handle">${safeText(profile.handle)}</p>
+            <p class="headline">${safeText(profile.profile?.headline) || 'No headline added.'}</p>
+            <p class="bio">${safeText(profile.profile?.bio) || 'No public biography provided.'}</p>
+            ${details ? `<div class="details">${details}</div>` : ''}
+            ${links ? `<div class="links">${links}</div>` : ''}
+          </div>
+        </article>
+      `;
+    };
+
+    const renderResults = (items = []) => {
+      results.innerHTML = '';
+      if (!items.length) return;
+
+      for (const item of items) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('u', safeText(item.username));
+        const card = document.createElement('article');
+        card.className = 'result-item';
+        card.innerHTML = `
+          <a href="${url.toString()}">${safeText(item.displayName)} <span style="color:#5d6b78;font-weight:600;">${safeText(item.handle)}</span></a>
+          <p>${safeText(item.profile?.headline) || 'No headline added.'}</p>
+        `;
+        results.appendChild(card);
+      }
+    };
+
+    const loadProfile = async (username) => {
+      if (!safeText(username)) return;
+
+      setStatus('Loading profile...');
+      try {
+        const response = await fetch(`${AUTH_API_BASE}/public/${encodeURIComponent(safeText(username))}`);
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Profile not found.');
+        }
+
+        renderProfile(data.profile);
+        heroTitle.textContent = safeText(data.profile.displayName || data.profile.username || 'Continental ID');
+        setStatus('');
+      } catch (error) {
+        profileRegion.innerHTML = '';
+        setStatus(error.message || 'Profile not found.');
+      }
+    };
+
+    const runSearch = async () => {
+      const query = safeText(searchInput.value);
+      if (query.length < 2) {
+        results.innerHTML = '';
+        setStatus('Enter at least 2 characters to search.');
+        return;
+      }
+
+      setStatus('Searching...');
+      try {
+        const response = await fetch(`${AUTH_API_BASE}/public-search?q=${encodeURIComponent(query)}`);
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Search failed.');
+        }
+
+        renderResults(Array.isArray(data.results) ? data.results : []);
+        setStatus(data.results?.length ? '' : 'No public profiles matched that search.');
+      } catch (error) {
+        setStatus(error.message || 'Search failed.');
+      }
+    };
+
+    searchBtn.addEventListener('click', runSearch);
+    searchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        runSearch();
+      }
+    });
+
+    const username = safeText(params.get('u'));
+    if (username) {
+      searchInput.value = username;
+      loadProfile(username);
+    } else {
+      setStatus('Search public profiles or open a direct profile link.');
+    }
+  </script>
+</body>
+</html>

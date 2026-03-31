@@ -5,6 +5,10 @@ const ACTIVE_TAB_STORAGE_KEY = 'dashboard.activeTab';
 const SERVICE_FAVORITES_STORAGE_KEY = 'dashboard.serviceFavorites';
 const FAVORITE_SERVICES_ONLY_STORAGE_KEY = 'dashboard.favoriteServicesOnly';
 const OVERVIEW_ACTIVITY_LIMIT = 4;
+const AVATAR_UPLOAD_MAX_FILE_BYTES = 5 * 1024 * 1024;
+const AVATAR_UPLOAD_MAX_DIMENSION = 256;
+const AVATAR_DATA_URL_MAX_LENGTH = 350000;
+const AVATAR_ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
 const dom = {
   loadingScreen: document.getElementById('loading-screen'),
@@ -25,6 +29,7 @@ const dom = {
 
   heroInitials: document.getElementById('hero-initials'),
   heroDisplayName: document.getElementById('hero-display-name'),
+  heroUsername: document.getElementById('hero-username'),
   heroEmail: document.getElementById('hero-email'),
   heroGreeting: document.getElementById('hero-greeting'),
   heroStatusNote: document.getElementById('hero-status-note'),
@@ -38,7 +43,9 @@ const dom = {
   profileChecklist: document.getElementById('profile-checklist'),
 
   summaryId: document.getElementById('summary-id'),
+  summaryUsername: document.getElementById('summary-username'),
   summaryDisplayName: document.getElementById('summary-display-name'),
+  summaryHeadline: document.getElementById('summary-headline'),
   summaryLastLogin: document.getElementById('summary-last-login'),
   summaryVerified: document.getElementById('summary-verified'),
   summarySessions: document.getElementById('summary-sessions'),
@@ -51,9 +58,18 @@ const dom = {
 
   profileForm: document.getElementById('profile-form'),
   profileSaveBtn: document.getElementById('profile-save-btn'),
+  profileUsername: document.getElementById('profile-username'),
   profileDisplayName: document.getElementById('profile-display-name'),
+  profilePronouns: document.getElementById('profile-pronouns'),
+  profileHeadline: document.getElementById('profile-headline'),
   profileEmail: document.getElementById('profile-email'),
   profileEmailCurrentPassword: document.getElementById('profile-email-current-password'),
+  profileAvatarPreview: document.getElementById('profile-avatar-preview'),
+  profileAvatarHelper: document.getElementById('profile-avatar-helper'),
+  profileAvatarUrl: document.getElementById('profile-avatar-url'),
+  profileAvatarUpload: document.getElementById('profile-avatar-upload'),
+  profileAvatarUploadBtn: document.getElementById('profile-avatar-upload-btn'),
+  profileAvatarRemoveBtn: document.getElementById('profile-avatar-remove-btn'),
   profileLocation: document.getElementById('profile-location'),
   profileWebsite: document.getElementById('profile-website'),
   profileTimezone: document.getElementById('profile-timezone'),
@@ -61,6 +77,8 @@ const dom = {
   profileBio: document.getElementById('profile-bio'),
   profileId: document.getElementById('profile-id'),
   profileCreated: document.getElementById('profile-created'),
+  profilePublicLink: document.getElementById('profile-public-link'),
+  openPublicProfileBtn: document.getElementById('open-public-profile-btn'),
   profileProgressBar: document.getElementById('profile-progress-bar'),
   profileProgressBars: Array.from(document.querySelectorAll('.profile-progress-fill')),
   profileProgressLabel: document.getElementById('profile-progress-label'),
@@ -121,6 +139,7 @@ const dom = {
   sessionsRevokeAllBtn: document.getElementById('sessions-revoke-all-btn'),
 
   activityList: document.getElementById('activity-list'),
+  activityKind: document.getElementById('activity-kind'),
   activityFilter: document.getElementById('activity-filter'),
   activityRefreshBtn: document.getElementById('activity-refresh-btn'),
   activityExportBtn: document.getElementById('activity-export-btn'),
@@ -206,6 +225,7 @@ const loginPopupOrigin = (() => {
 const state = {
   user: null,
   activity: [],
+  auditEvents: [],
   activitySummary: {
     last7Days: 0,
     last30Days: 0,
@@ -223,6 +243,7 @@ const state = {
   lastSyncAt: null,
   favoriteServices: new Set(readStoredArray(SERVICE_FAVORITES_STORAGE_KEY)),
   favoriteServicesOnly: localStorage.getItem(FAVORITE_SERVICES_ONLY_STORAGE_KEY) === 'true',
+  profileAvatarDraft: '',
 };
 
 const trackedForms = [
@@ -252,8 +273,25 @@ const persistServicePreferences = () => {
 const getActiveSessionCount = () =>
   Number(state.user?.security?.activeSessions ?? state.sessions.length ?? 0);
 
+const updateSessionNote = () => {
+  if (!dom.sessionLimitNote) return;
+
+  const limitText = state.sessionLimit ? `${state.sessionLimit}` : '--';
+  const knownDevices = Number(state.user?.security?.knownDevices || 0);
+  dom.sessionLimitNote.textContent = knownDevices
+    ? `Session limit: ${limitText} | Known devices: ${knownDevices}`
+    : `Session limit: ${limitText}`;
+};
+
+const getUsername = (user = state.user) => safeText(user?.username).toLowerCase();
+const getUserHandle = (user = state.user) => {
+  const username = getUsername(user);
+  return username ? `@${username}` : '';
+};
+const getAvatarValue = (user = state.user) => safeText(user?.profile?.avatar);
+
 const getIdentityName = (user = state.user) =>
-  safeText(user?.displayName || user?.email || user?.continentalId || user?.userId || 'Continental User');
+  safeText(user?.displayName || getUsername(user) || user?.email || user?.continentalId || user?.userId || 'Continental User');
 
 const getIdentityInitials = (user = state.user) => {
   const source = getIdentityName(user);
@@ -267,8 +305,88 @@ const getIdentityInitials = (user = state.user) => {
 };
 
 const getFirstName = (user = state.user) => {
-  const source = safeText(user?.displayName || user?.email || 'there');
+  const source = safeText(user?.displayName || getUsername(user) || user?.email || 'there');
   return source.split(/[\s@._-]+/).filter(Boolean)[0] || 'there';
+};
+
+const normalizeAvatarInput = (value) => {
+  const raw = safeText(value);
+  if (!raw) return '';
+
+  if (/^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/i.test(raw)) {
+    return raw.length <= AVATAR_DATA_URL_MAX_LENGTH ? raw : null;
+  }
+
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const parsed = new URL(withProtocol);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
+
+const setAvatarElement = (element, avatarValue, fallbackText) => {
+  if (!element) return;
+
+  const normalized = normalizeAvatarInput(avatarValue);
+  const hasAvatar = Boolean(normalized);
+
+  element.textContent = fallbackText;
+  element.classList.toggle('has-image', hasAvatar);
+  element.style.backgroundImage = hasAvatar ? `url(${JSON.stringify(normalized)})` : '';
+};
+
+const updateProfileAvatarHelper = (avatarValue = state.profileAvatarDraft) => {
+  if (!dom.profileAvatarHelper) return;
+
+  if (!avatarValue) {
+    dom.profileAvatarHelper.textContent =
+      'Upload an image or paste a direct image URL. Uploaded images are resized before saving.';
+    return;
+  }
+
+  const normalized = normalizeAvatarInput(avatarValue);
+  if (!normalized) {
+    dom.profileAvatarHelper.textContent = 'Avatar must be a direct image URL or an uploaded image.';
+    return;
+  }
+
+  if (String(normalized).startsWith('data:image/')) {
+    dom.profileAvatarHelper.textContent =
+      'Uploaded image ready. It will be saved to your account when you save the profile.';
+    return;
+  }
+
+  dom.profileAvatarHelper.textContent = 'External avatar URL ready. Save the profile to apply it.';
+};
+
+const renderAvatarPreviews = (user = state.user) => {
+  const fallbackText = getIdentityInitials(user);
+  const heroAvatar = getAvatarValue(user);
+  const profileAvatar = state.profileAvatarDraft;
+
+  setAvatarElement(dom.heroInitials, heroAvatar, fallbackText);
+  setAvatarElement(dom.profileAvatarPreview, profileAvatar, fallbackText);
+  updateProfileAvatarHelper(profileAvatar);
+};
+
+const resetProfileAvatarDraft = (user = state.user) => {
+  const avatar = getAvatarValue(user);
+  state.profileAvatarDraft = avatar;
+
+  if (dom.profileAvatarUrl) {
+    dom.profileAvatarUrl.value = avatar && !String(avatar).startsWith('data:image/') ? avatar : '';
+  }
+
+  if (dom.profileAvatarUpload) {
+    dom.profileAvatarUpload.value = '';
+  }
+
+  renderAvatarPreviews(user);
 };
 
 const setProfileProgress = (completion) => {
@@ -297,6 +415,9 @@ const computeAccountHealth = (user = state.user) => {
 
   if (user.isVerified) score += 20;
   if (user.security?.loginAlerts) score += 15;
+  if (getUsername(user)) score += 6;
+  if (getAvatarValue(user)) score += 5;
+  if (safeText(user.profile?.headline)) score += 4;
   if (safeText(user.profile?.timezone)) score += 8;
   if (safeText(user.profile?.website)) score += 5;
   score += activeSessions <= 1 ? 10 : Math.max(0, 10 - (activeSessions - 1) * 3);
@@ -527,12 +648,16 @@ const isTrustedLoginOrigin = (origin) => {
 const clearDashboardUi = () => {
   state.user = null;
   state.activity = [];
+  state.auditEvents = [];
   state.activitySummary = normalizeActivitySummary();
   state.sessions = [];
   state.sessionLimit = null;
+  state.profileAvatarDraft = '';
 
   if (dom.summaryId) dom.summaryId.textContent = '-';
+  if (dom.summaryUsername) dom.summaryUsername.textContent = '-';
   if (dom.summaryDisplayName) dom.summaryDisplayName.textContent = '-';
+  if (dom.summaryHeadline) dom.summaryHeadline.textContent = '-';
   if (dom.summaryLastLogin) dom.summaryLastLogin.textContent = '-';
   if (dom.summaryVerified) dom.summaryVerified.textContent = 'Pending';
   if (dom.summarySessions) dom.summarySessions.textContent = '0';
@@ -554,8 +679,13 @@ const clearDashboardUi = () => {
 
   if (dom.profileId) dom.profileId.value = '';
   if (dom.profileCreated) dom.profileCreated.value = '';
+  if (dom.profilePublicLink) dom.profilePublicLink.value = '';
+  if (dom.openPublicProfileBtn) dom.openPublicProfileBtn.disabled = true;
+  if (dom.profileAvatarUrl) dom.profileAvatarUrl.value = '';
+  if (dom.profileAvatarUpload) dom.profileAvatarUpload.value = '';
 
   if (dom.activityFilter) dom.activityFilter.value = '';
+  if (dom.activityKind) dom.activityKind.value = 'all';
   if (dom.serviceFilter) dom.serviceFilter.value = '';
   if (dom.activityList) dom.activityList.innerHTML = '<li>No recent login activity found.</li>';
   if (dom.overviewActivityList) dom.overviewActivityList.innerHTML = '<li>Recent login activity will appear here.</li>';
@@ -570,6 +700,7 @@ const clearDashboardUi = () => {
   renderActionCenter(null);
   renderProfileChecklist(null);
   renderServices();
+  renderAvatarPreviews(null);
 
   applyAppearance({
     theme: 'system',
@@ -829,6 +960,64 @@ const updatePasswordStrengthUi = () => {
   dom.passwordStrengthText.textContent = `Password strength: ${strength.label}`;
 };
 
+const loadImageFromDataUrl = (dataUrl) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Selected image could not be loaded.'));
+    image.src = dataUrl;
+  });
+
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Selected file could not be read.'));
+    reader.readAsDataURL(file);
+  });
+
+const compressAvatarFile = async (file) => {
+  if (!file) {
+    throw new Error('Select an image to upload.');
+  }
+
+  if (!AVATAR_ALLOWED_MIME_TYPES.has(file.type)) {
+    throw new Error('Avatar must be a PNG, JPG, GIF, or WebP image.');
+  }
+
+  if (file.size > AVATAR_UPLOAD_MAX_FILE_BYTES) {
+    throw new Error('Avatar image is too large. Use a file under 5 MB.');
+  }
+
+  const rawDataUrl = await readFileAsDataUrl(file);
+  const image = await loadImageFromDataUrl(rawDataUrl);
+  const scale = Math.min(1, AVATAR_UPLOAD_MAX_DIMENSION / Math.max(image.width, image.height, 1));
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Avatar processing is not available in this browser.');
+  }
+
+  context.drawImage(image, 0, 0, width, height);
+
+  let compressed = canvas.toDataURL('image/webp', 0.82);
+  if (compressed.length > AVATAR_DATA_URL_MAX_LENGTH) {
+    compressed = canvas.toDataURL('image/jpeg', 0.8);
+  }
+
+  if (compressed.length > AVATAR_DATA_URL_MAX_LENGTH) {
+    throw new Error('Avatar image is still too large after resizing. Try a smaller source image.');
+  }
+
+  return compressed;
+};
+
 const applyAppearance = (appearance = {}) => {
   const theme = safeText(appearance.theme || 'system').toLowerCase() || 'system';
   const density = safeText(appearance.dashboardDensity || 'comfortable').toLowerCase() || 'comfortable';
@@ -847,8 +1036,8 @@ const applyAppearance = (appearance = {}) => {
 };
 
 const renderHero = (user = state.user) => {
-  if (dom.heroInitials) dom.heroInitials.textContent = getIdentityInitials(user);
   if (dom.heroDisplayName) dom.heroDisplayName.textContent = getIdentityName(user);
+  if (dom.heroUsername) dom.heroUsername.textContent = getUserHandle(user) || '@continental';
   if (dom.heroEmail) dom.heroEmail.textContent = safeText(user?.email) || 'Signed-out session';
   if (dom.heroGreeting) {
     dom.heroGreeting.textContent = user ? `Welcome back, ${getFirstName(user)}` : 'Welcome back';
@@ -866,6 +1055,8 @@ const renderHero = (user = state.user) => {
       user.isVerified ? 'email verified' : 'verification pending'
     }, ${sessionCount} active ${sessionCount === 1 ? 'session' : 'sessions'}.`;
   }
+
+  renderAvatarPreviews(user);
 };
 
 const renderAccountHealth = (user = state.user) => {
@@ -930,9 +1121,24 @@ const renderProfileChecklist = (user = state.user) => {
 
   const items = [
     {
+      title: 'Username claimed',
+      detail: getUserHandle(user) ? `${getUserHandle(user)} is active.` : 'Choose a sign-in handle.',
+      complete: Boolean(getUsername(user)),
+    },
+    {
       title: 'Display name added',
       detail: safeText(user.displayName) ? 'Looks good.' : 'Add a readable public name.',
       complete: Boolean(safeText(user.displayName)),
+    },
+    {
+      title: 'Profile picture added',
+      detail: getAvatarValue(user) ? 'Avatar is set.' : 'Add a picture so your account is easier to recognize.',
+      complete: Boolean(getAvatarValue(user)),
+    },
+    {
+      title: 'Headline added',
+      detail: safeText(user.profile?.headline) ? 'Headline is set.' : 'Add a short identity tagline.',
+      complete: Boolean(safeText(user.profile?.headline)),
     },
     {
       title: 'Email verified',
@@ -1049,6 +1255,16 @@ const renderActionCenter = (user = state.user) => {
     });
   }
 
+  if (!getAvatarValue(user)) {
+    actions.push({
+      tone: 'neutral',
+      title: 'Add a profile picture',
+      detail: 'A custom avatar makes the account easier to recognize across sessions and tools.',
+      actionLabel: 'Upload avatar',
+      onAction: () => switchTab('profile'),
+    });
+  }
+
   if (activeSessions > 1) {
     actions.push({
       tone: 'neutral',
@@ -1074,9 +1290,39 @@ const renderActionCenter = (user = state.user) => {
   }
 };
 
+const getPublicProfileUrl = (username = state.user?.username) => {
+  const handle = safeText(username);
+  if (!handle) return '';
+
+  const url = new URL('profile.html', window.location.href);
+  url.searchParams.set('u', handle);
+  return url.toString();
+};
+
+const updatePublicProfileLink = (user = state.user) => {
+  if (!dom.profilePublicLink) return;
+
+  const url = getPublicProfileUrl(user?.username);
+  const isPublic = Boolean(user?.preferences?.profilePublic);
+
+  if (!url) {
+    dom.profilePublicLink.value = 'Set a username to generate a public profile link.';
+  } else if (isPublic) {
+    dom.profilePublicLink.value = url;
+  } else {
+    dom.profilePublicLink.value = `${url} (currently private)`;
+  }
+
+  if (dom.openPublicProfileBtn) {
+    dom.openPublicProfileBtn.disabled = !url || !isPublic;
+  }
+};
+
 const fillSummary = (user) => {
   if (dom.summaryId) dom.summaryId.textContent = user.continentalId || user.userId || '-';
+  if (dom.summaryUsername) dom.summaryUsername.textContent = getUserHandle(user) || '-';
   if (dom.summaryDisplayName) dom.summaryDisplayName.textContent = user.displayName || '-';
+  if (dom.summaryHeadline) dom.summaryHeadline.textContent = safeText(user.profile?.headline) || '-';
   if (dom.summaryLastLogin) dom.summaryLastLogin.textContent = formatDate(user.lastLoginAt);
   if (dom.summarySessions) {
     dom.summarySessions.textContent = String(user.security?.activeSessions ?? state.sessions.length ?? 0);
@@ -1091,7 +1337,10 @@ const fillSummary = (user) => {
 };
 
 const fillProfile = (user) => {
+  if (dom.profileUsername) dom.profileUsername.value = user.username || '';
   if (dom.profileDisplayName) dom.profileDisplayName.value = user.displayName || '';
+  if (dom.profilePronouns) dom.profilePronouns.value = user.profile?.pronouns || '';
+  if (dom.profileHeadline) dom.profileHeadline.value = user.profile?.headline || '';
   if (dom.profileEmail) dom.profileEmail.value = user.email || '';
   if (dom.profileEmailCurrentPassword) dom.profileEmailCurrentPassword.value = '';
   if (dom.profileLocation) dom.profileLocation.value = user.profile?.location || '';
@@ -1104,6 +1353,8 @@ const fillProfile = (user) => {
 
   const completion = Number(user.profile?.completion || 0);
   setProfileProgress(completion);
+  resetProfileAvatarDraft(user);
+  updatePublicProfileLink(user);
 };
 
 const fillLinkedAccounts = (user) => {
@@ -1140,6 +1391,7 @@ const fillPreferences = (user) => {
   if (dom.dashboardTipsToggle) dom.dashboardTipsToggle.checked = isDashboardTipsEnabled();
 
   applyAppearance(appearance);
+  updatePublicProfileLink(user);
 };
 
 const fillSecurity = (user) => {
@@ -1149,6 +1401,39 @@ const fillSecurity = (user) => {
   renderProfileChecklist(user);
 };
 
+const normalizeAuditEvent = (event = {}) => ({
+  at: event?.at || null,
+  type: safeText(event?.type),
+  message: safeText(event?.message),
+  ip: safeText(event?.ip),
+  userAgent: safeText(event?.userAgent),
+  meta:
+    event?.meta && typeof event.meta === 'object' && !Array.isArray(event.meta)
+      ? event.meta
+      : {},
+});
+
+const prettifyAuditType = (type) =>
+  safeText(type)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase()) || 'Account event';
+
+const getAuditBucket = (event = {}) => {
+  const type = safeText(event?.type).toLowerCase();
+  if (
+    type.includes('password') ||
+    type.includes('security') ||
+    type.includes('session') ||
+    type.includes('login') ||
+    type.includes('email') ||
+    type.includes('verification')
+  ) {
+    return 'security';
+  }
+
+  return 'account';
+};
+
 const formatActivityLine = (entry) => {
   const at = formatDate(entry.at);
   const ip = safeText(entry.ip) || 'Unknown IP';
@@ -1156,7 +1441,25 @@ const formatActivityLine = (entry) => {
   return `${at} - Login from ${ip} (${ua})`;
 };
 
-const createActivityListItem = (entry) => {
+const formatAuditLine = (event) => {
+  const auditEvent = normalizeAuditEvent(event);
+  const metaText = Object.entries(auditEvent.meta)
+    .map(([key, value]) => `${safeText(key)} ${safeText(value)}`)
+    .join(' ');
+
+  return [
+    formatDate(auditEvent.at),
+    auditEvent.type,
+    auditEvent.message,
+    auditEvent.ip,
+    auditEvent.userAgent,
+    metaText,
+  ]
+    .join(' ')
+    .toLowerCase();
+};
+
+const createLoginActivityListItem = (entry) => {
   const li = document.createElement('li');
   li.className = 'activity-item';
 
@@ -1174,6 +1477,66 @@ const createActivityListItem = (entry) => {
   const meta = document.createElement('div');
   meta.className = 'activity-meta';
   meta.textContent = safeText(entry.userAgent) || 'Unknown browser or device';
+
+  head.appendChild(title);
+  head.appendChild(chip);
+  li.appendChild(head);
+  li.appendChild(meta);
+  return li;
+};
+
+const buildTimelineItems = () => {
+  const loginItems = state.activity.map((entry) => ({
+    bucket: 'logins',
+    chip: 'Login',
+    title: `Login from ${safeText(entry.ip) || 'Unknown IP'}`,
+    detail: safeText(entry.userAgent) || 'Unknown browser or device',
+    at: entry.at,
+    searchLine: formatActivityLine(entry).toLowerCase(),
+  }));
+
+  const auditItems = state.auditEvents.map((event) => {
+    const auditEvent = normalizeAuditEvent(event);
+    const metaParts = Object.entries(auditEvent.meta)
+      .map(([key, value]) => `${safeText(key)}: ${safeText(value)}`)
+      .filter(Boolean);
+    const bucket = getAuditBucket(auditEvent);
+
+    return {
+      bucket,
+      chip: bucket === 'security' ? 'Security' : 'Account',
+      title: auditEvent.message || prettifyAuditType(auditEvent.type),
+      detail: [auditEvent.ip, auditEvent.userAgent, ...metaParts].filter(Boolean).join(' | '),
+      at: auditEvent.at,
+      searchLine: formatAuditLine(auditEvent),
+    };
+  });
+
+  return [...loginItems, ...auditItems].sort((left, right) => {
+    const leftTime = new Date(left.at || 0).getTime();
+    const rightTime = new Date(right.at || 0).getTime();
+    return rightTime - leftTime;
+  });
+};
+
+const createTimelineListItem = (item) => {
+  const li = document.createElement('li');
+  li.className = 'activity-item';
+
+  const head = document.createElement('div');
+  head.className = 'activity-head';
+
+  const title = document.createElement('p');
+  title.className = 'activity-title';
+  title.textContent = item.title;
+
+  const chip = document.createElement('span');
+  chip.className = 'inline-chip';
+  chip.textContent = item.chip;
+
+  const meta = document.createElement('div');
+  meta.className = 'activity-meta';
+  meta.textContent = [formatDate(item.at), item.detail].filter(Boolean).join(' | ');
 
   head.appendChild(title);
   head.appendChild(chip);
@@ -1225,7 +1588,7 @@ const renderOverviewActivity = () => {
   }
 
   for (const entry of previewItems) {
-    dom.overviewActivityList.appendChild(createActivityListItem(entry));
+    dom.overviewActivityList.appendChild(createLoginActivityListItem(entry));
   }
 };
 
@@ -1233,22 +1596,26 @@ const renderActivity = () => {
   if (!dom.activityList) return;
 
   const query = safeText(dom.activityFilter?.value).toLowerCase();
+  const kind = safeText(dom.activityKind?.value).toLowerCase() || 'all';
   dom.activityList.innerHTML = '';
 
-  const filtered = state.activity.filter((entry) => {
-    if (!query) return true;
-    return formatActivityLine(entry).toLowerCase().includes(query);
+  const filtered = buildTimelineItems().filter((item) => {
+    const matchesKind = kind === 'all' ? true : item.bucket === kind;
+    const matchesQuery = !query || item.searchLine.includes(query);
+    return matchesKind && matchesQuery;
   });
 
   if (filtered.length === 0) {
     const li = document.createElement('li');
-    li.textContent = query ? 'No activity items match this filter.' : 'No recent login activity found.';
+    li.textContent = query || kind !== 'all'
+      ? 'No activity items match this filter.'
+      : 'No recent activity found.';
     dom.activityList.appendChild(li);
     return;
   }
 
-  for (const entry of filtered) {
-    dom.activityList.appendChild(createActivityListItem(entry));
+  for (const item of filtered) {
+    dom.activityList.appendChild(createTimelineListItem(item));
   }
 };
 
@@ -1275,6 +1642,14 @@ const renderSessions = () => {
     const label = document.createElement('strong');
     label.textContent = safeText(session.label) || 'Browser session';
     left.appendChild(label);
+
+    if (session.newDevice || session.recognized) {
+      left.appendChild(document.createTextNode(' '));
+      const deviceChip = document.createElement('span');
+      deviceChip.className = 'inline-chip';
+      deviceChip.textContent = session.newDevice ? 'New device' : 'Recognized';
+      left.appendChild(deviceChip);
+    }
 
     const right = document.createElement('div');
     right.className = 'session-actions';
@@ -1330,7 +1705,13 @@ const renderSessions = () => {
 
     const details = document.createElement('div');
     details.className = 'session-meta';
-    details.textContent = `IP: ${safeText(session.ip) || 'Unknown'} | ${safeText(session.userAgent) || 'Unknown device'}`;
+    details.textContent = [
+      `IP: ${safeText(session.ip) || 'Unknown'}`,
+      safeText(session.userAgent) || 'Unknown device',
+      session.newDevice ? 'First seen on this device' : session.recognized ? 'Known device' : '',
+    ]
+      .filter(Boolean)
+      .join(' | ');
 
     li.appendChild(head);
     li.appendChild(meta);
@@ -1405,6 +1786,7 @@ const syncUiWithUser = (user) => {
 
   state.user = user;
   state.activity = Array.isArray(user.recentLogins) ? user.recentLogins : [];
+  state.auditEvents = Array.isArray(user.auditEvents) ? user.auditEvents.map((event) => normalizeAuditEvent(event)) : [];
   state.activitySummary = normalizeActivitySummary(user.activitySummary);
 
   fillSummary(user);
@@ -1418,8 +1800,9 @@ const syncUiWithUser = (user) => {
   renderInsights();
   renderVerificationState(user);
   renderServices();
+  renderAvatarPreviews(user);
 
-  const statusText = `Logged in as: ${user.email || user.displayName || user.userId}`;
+  const statusText = `Logged in as: ${getUserHandle(user) || user.email || user.displayName || user.userId}`;
   setStatus(statusText, { clickable: false });
 
   if (dom.logoutBtn) {
@@ -1438,6 +1821,7 @@ const loadCurrentUser = async () => {
 const loadActivity = async () => {
   const data = await apiRequest('/activity', { method: 'GET', auth: true });
   state.activity = Array.isArray(data.recentLogins) ? data.recentLogins : [];
+  state.auditEvents = Array.isArray(data.auditEvents) ? data.auditEvents.map((event) => normalizeAuditEvent(event)) : [];
   state.activitySummary = normalizeActivitySummary(data.summary);
 
   renderActivity();
@@ -1467,10 +1851,7 @@ const loadSecurity = async () => {
   state.sessionLimit = data.sessionLimit || state.sessionLimit;
   fillSecurity(state.user);
 
-  if (dom.sessionLimitNote) {
-    const limitText = state.sessionLimit ? `${state.sessionLimit}` : '--';
-    dom.sessionLimitNote.textContent = `Session limit: ${limitText}`;
-  }
+  updateSessionNote();
 };
 
 const loadSessions = async () => {
@@ -1492,10 +1873,7 @@ const loadSessions = async () => {
 
   renderSessions();
 
-  if (dom.sessionLimitNote) {
-    const limitText = state.sessionLimit ? `${state.sessionLimit}` : '--';
-    dom.sessionLimitNote.textContent = `Session limit: ${limitText}`;
-  }
+  updateSessionNote();
 };
 
 const loadDashboardData = async ({ silent = false } = {}) => {
@@ -1587,16 +1965,25 @@ const doLogout = async () => {
 };
 
 const exportActivityCsv = () => {
-  if (!state.activity.length) {
+  const query = safeText(dom.activityFilter?.value).toLowerCase();
+  const kind = safeText(dom.activityKind?.value).toLowerCase() || 'all';
+  const items = buildTimelineItems().filter((item) => {
+    const matchesKind = kind === 'all' ? true : item.bucket === kind;
+    const matchesQuery = !query || item.searchLine.includes(query);
+    return matchesKind && matchesQuery;
+  });
+
+  if (!items.length) {
     showToast('No activity to export.', 'warn');
     return;
   }
 
-  const header = ['Timestamp', 'IP', 'User Agent'];
-  const rows = state.activity.map((entry) => [
-    formatDate(entry.at),
-    safeText(entry.ip),
-    safeText(entry.userAgent).replace(/\n/g, ' '),
+  const header = ['Timestamp', 'Category', 'Title', 'Detail'];
+  const rows = items.map((item) => [
+    formatDate(item.at),
+    item.chip,
+    item.title,
+    safeText(item.detail).replace(/\n/g, ' '),
   ]);
 
   const toCsvCell = (value) => `"${String(value || '').replaceAll('"', '""')}"`;
@@ -1642,15 +2029,29 @@ const exportAccountJson = async () => {
 const handleProfileSave = async (event) => {
   event.preventDefault();
 
+  const username = safeText(dom.profileUsername?.value).toLowerCase();
   const displayName = safeText(dom.profileDisplayName?.value);
+  const pronouns = safeText(dom.profilePronouns?.value);
+  const headline = safeText(dom.profileHeadline?.value);
   const email = safeText(dom.profileEmail?.value).toLowerCase();
+  const avatar = normalizeAvatarInput(state.profileAvatarDraft || dom.profileAvatarUrl?.value);
   const website = normalizeWebsiteInput(dom.profileWebsite?.value);
   const currentEmail = safeText(state.user?.email).toLowerCase();
   const emailChanged = email !== currentEmail;
   const currentPassword = dom.profileEmailCurrentPassword?.value || '';
 
+  if (!/^[a-z0-9](?:[a-z0-9._-]{1,28}[a-z0-9])?$/.test(username)) {
+    showToast('Username must be 3-30 characters and can only use letters, numbers, dots, hyphens, or underscores.', 'error');
+    return;
+  }
+
   if (displayName.length < 2) {
     showToast('Display name must be at least 2 characters.', 'error');
+    return;
+  }
+
+  if ((state.profileAvatarDraft || dom.profileAvatarUrl?.value) && avatar === null) {
+    showToast('Avatar must be a direct image URL or an uploaded image.', 'error');
     return;
   }
 
@@ -1668,9 +2069,13 @@ const handleProfileSave = async (event) => {
 
   try {
     const profilePayload = {
+      username,
       displayName,
+      pronouns,
+      headline,
       email,
       currentPassword,
+      avatar: avatar || '',
       location: safeText(dom.profileLocation?.value),
       website,
       timezone: safeText(dom.profileTimezone?.value),
@@ -1908,6 +2313,48 @@ const handleDeleteAccount = async (event) => {
   }
 };
 
+const syncProfileAvatarDraft = (value) => {
+  state.profileAvatarDraft = safeText(value);
+  renderAvatarPreviews(state.user);
+};
+
+const handleProfileAvatarUrlInput = () => {
+  syncProfileAvatarDraft(dom.profileAvatarUrl?.value || '');
+};
+
+const handleProfileAvatarUpload = async (event) => {
+  const file = event.target?.files?.[0];
+  if (!file) return;
+
+  try {
+    const avatarDataUrl = await compressAvatarFile(file);
+    state.profileAvatarDraft = avatarDataUrl;
+    if (dom.profileAvatarUrl) {
+      dom.profileAvatarUrl.value = '';
+    }
+    renderAvatarPreviews(state.user);
+    markFormDirty(dom.profileForm);
+    showToast('Avatar image ready to save.', 'success');
+  } catch (err) {
+    if (dom.profileAvatarUpload) {
+      dom.profileAvatarUpload.value = '';
+    }
+    showToast(err.message, 'error');
+  }
+};
+
+const handleProfileAvatarRemove = () => {
+  state.profileAvatarDraft = '';
+  if (dom.profileAvatarUrl) {
+    dom.profileAvatarUrl.value = '';
+  }
+  if (dom.profileAvatarUpload) {
+    dom.profileAvatarUpload.value = '';
+  }
+  renderAvatarPreviews(state.user);
+  markFormDirty(dom.profileForm);
+};
+
 const runManualRefresh = async () => {
   setButtonBusy(dom.refreshDataBtn, true, 'Refreshing...');
 
@@ -2062,7 +2509,7 @@ const setupEventHandlers = () => {
   if (dom.overviewJumpProfileBtn) {
     dom.overviewJumpProfileBtn.addEventListener('click', () => {
       switchTab('profile');
-      dom.profileDisplayName?.focus();
+      dom.profileUsername?.focus();
     });
   }
 
@@ -2080,7 +2527,30 @@ const setupEventHandlers = () => {
     });
   }
 
+  if (dom.profileAvatarUploadBtn && dom.profileAvatarUpload) {
+    dom.profileAvatarUploadBtn.addEventListener('click', () => {
+      dom.profileAvatarUpload.click();
+    });
+    dom.profileAvatarUpload.addEventListener('change', handleProfileAvatarUpload);
+  }
+
+  if (dom.profileAvatarUrl) {
+    dom.profileAvatarUrl.addEventListener('input', handleProfileAvatarUrlInput);
+    dom.profileAvatarUrl.addEventListener('change', handleProfileAvatarUrlInput);
+  }
+
+  if (dom.profileAvatarRemoveBtn) {
+    dom.profileAvatarRemoveBtn.addEventListener('click', handleProfileAvatarRemove);
+  }
+
   if (dom.profileForm) dom.profileForm.addEventListener('submit', handleProfileSave);
+  if (dom.openPublicProfileBtn) {
+    dom.openPublicProfileBtn.addEventListener('click', () => {
+      const url = getPublicProfileUrl(state.user?.username);
+      if (!url || !state.user?.preferences?.profilePublic) return;
+      window.open(url, '_blank', 'noopener');
+    });
+  }
   if (dom.verificationResendBtn) {
     dom.verificationResendBtn.addEventListener('click', handleResendVerification);
   }
@@ -2135,6 +2605,7 @@ const setupEventHandlers = () => {
 
   if (dom.activityExportBtn) dom.activityExportBtn.addEventListener('click', exportActivityCsv);
   if (dom.activityFilter) dom.activityFilter.addEventListener('input', renderActivity);
+  if (dom.activityKind) dom.activityKind.addEventListener('change', renderActivity);
 
   if (dom.sessionsRefreshBtn) {
     dom.sessionsRefreshBtn.addEventListener('click', async () => {

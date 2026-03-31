@@ -12,7 +12,8 @@ A full-stack account dashboard with hardened auth/session handling, profile and 
   - graceful shutdown
   - safer refresh-token lifecycle (`refreshTokenVersion` invalidation + tracked refresh sessions)
 - Expanded account model and endpoints for:
-  - profile and rich profile fields (bio, location, website, timezone, language)
+  - username-based identity with separate display names and login by email or username
+  - richer profile fields (avatar, headline, pronouns, bio, location, website, timezone, language)
   - external profile references
   - privacy/notification preferences and appearance settings
   - security settings
@@ -52,6 +53,11 @@ A full-stack account dashboard with hardened auth/session handling, profile and 
 4. Start backend:
    ```bash
    npm run start
+   ```
+   Startup now runs a user-identity migration so existing accounts get usernames and the new profile shape automatically.
+5. Run the migration manually if needed:
+   ```bash
+   npm run migrate:users
    ```
 
 ## Frontend Setup
@@ -98,6 +104,8 @@ Default behavior now assumes the frontend and `/api/*` are available on the same
 ## Resend Verification Flow
 
 - New registrations now create a verification token and send a verification email through Resend.
+- Accounts now carry a distinct `username` for sign-in and a separate `displayName` for presentation.
+- Existing users are migrated forward on backend startup, and the same migration can be run manually with `npm run migrate:users`.
 - Changing an account email resets `isVerified`, issues a new token, and sends a fresh verification email.
 - Signed-in users can request a new verification email with `POST /api/auth/resend-verification`.
 - Set `EMAIL_VERIFY_URL` to the public URL of the verification page, for example `/login/verify.html`, that loads the token and calls `/api/auth/verify-email`.
