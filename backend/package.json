@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "deploy": "bash ./deploy-backend.sh",
     "stop": "bash ./restart-backend.sh stop",
     "status": "bash ./restart-backend.sh status",
     "restart": "bash ./restart-backend.sh restart",
