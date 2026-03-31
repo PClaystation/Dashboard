@@ -98,6 +98,9 @@ const userSchema = new mongoose.Schema(
     isVerified: { type: Boolean, default: false },
     verificationToken: { type: String, default: '' },
     verificationTokenExpires: { type: Date, default: null },
+    emailDelivery: {
+      verificationLastSentAt: { type: Date, default: null },
+    },
     passwordResetToken: { type: String, default: '' },
     passwordResetTokenExpires: { type: Date, default: null },
     passwordResetRequestedAt: { type: Date, default: null },
@@ -122,6 +125,13 @@ const userSchema = new mongoose.Schema(
     profile: {
       avatar: { type: String, default: '', maxlength: 350000 },
       headline: { type: String, default: '', maxlength: 100 },
+      role: { type: String, default: '', maxlength: 100 },
+      organization: { type: String, default: '', maxlength: 100 },
+      currentFocus: { type: String, default: '', maxlength: 160 },
+      focusAreas: {
+        type: [String],
+        default: [],
+      },
       pronouns: { type: String, default: '', maxlength: 40 },
       bio: { type: String, default: '', maxlength: 320 },
       location: { type: String, default: '', maxlength: 120 },
@@ -166,7 +176,11 @@ const userSchema = new mongoose.Schema(
       },
       publicProfile: {
         headline: { type: Boolean, default: true },
+        role: { type: Boolean, default: true },
+        organization: { type: Boolean, default: true },
         bio: { type: Boolean, default: true },
+        currentFocus: { type: Boolean, default: true },
+        focusAreas: { type: Boolean, default: true },
         pronouns: { type: Boolean, default: false },
         location: { type: Boolean, default: true },
         website: { type: Boolean, default: true },

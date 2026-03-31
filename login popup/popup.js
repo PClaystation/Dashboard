@@ -4,8 +4,12 @@ const TRUSTED_APP_ORIGINS = new Set(AUTH_CONFIG.trustedAppOrigins || []);
 const TRUSTED_API_ORIGINS = new Set(AUTH_CONFIG.trustedApiOrigins || []);
 const DEFAULT_DASHBOARD_ORIGIN =
   AUTH_CONFIG.defaultDashboardOrigin || 'https://dashboard.continental-hub.com';
+const PREFERRED_API_ORIGINS = Array.isArray(AUTH_CONFIG.preferredApiOrigins)
+  ? AUTH_CONFIG.preferredApiOrigins
+  : [];
 const HOSTED_API_BASE_URL =
   AUTH_CONFIG.hostedApiBaseUrl || 'https://mpmc.ddns.net';
+const API_BASE_STORAGE_KEY = 'continental.authApiBaseUrl';
 const USERNAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const params = new URLSearchParams(window.location.search);
@@ -64,6 +68,8 @@ let activeMfaMethod = 'totp';
 let pendingVerificationIdentifier = '';
 let loginCooldownTimer = 0;
 let loginCooldownUntil = 0;
+let apiBaseValidated = false;
+let apiBaseResolutionPromise = null;
 
 const isTrustedApiOrigin = (origin) => {
   if (!origin) return false;
@@ -88,23 +94,107 @@ const resolveTrustedApiBaseUrl = (value) => {
   }
 };
 
-const getDefaultApiBaseUrl = () => {
-  if (LOCAL_HOSTS.has(window.location.hostname)) {
-    return 'http://localhost:5000';
+const readStoredApiBaseUrl = () => {
+  try {
+    return resolveTrustedApiBaseUrl(window.localStorage?.getItem(API_BASE_STORAGE_KEY));
+  } catch {
+    return '';
   }
-
-  if (HOSTED_APP_HOSTS.has(window.location.hostname)) {
-    return HOSTED_API_BASE_URL;
-  }
-
-  return window.location.origin;
 };
 
-const API_BASE_URL =
-  resolveTrustedApiBaseUrl(params.get('apiBaseUrl')) ||
-  resolveTrustedApiBaseUrl(window.__API_BASE_URL__) ||
-  trimTrailingSlash(getDefaultApiBaseUrl());
-const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
+const rememberApiBaseUrl = (value) => {
+  try {
+    if (value) {
+      window.localStorage?.setItem(API_BASE_STORAGE_KEY, trimTrailingSlash(value));
+    }
+  } catch {
+    // localStorage can be unavailable in some embedded contexts.
+  }
+};
+
+const getApiBaseCandidates = () => {
+  const rawCandidates = [
+    params.get('apiBaseUrl'),
+    window.__API_BASE_URL__,
+    readStoredApiBaseUrl(),
+  ];
+
+  if (LOCAL_HOSTS.has(window.location.hostname)) {
+    rawCandidates.push('http://localhost:5000', window.location.origin);
+  } else {
+    rawCandidates.push(window.location.origin);
+    rawCandidates.push(...PREFERRED_API_ORIGINS);
+    if (HOSTED_APP_HOSTS.has(window.location.hostname)) {
+      rawCandidates.push(HOSTED_API_BASE_URL);
+    }
+  }
+
+  const uniqueCandidates = [];
+  for (const candidate of rawCandidates) {
+    const resolved = resolveTrustedApiBaseUrl(candidate);
+    if (resolved && !uniqueCandidates.includes(resolved)) {
+      uniqueCandidates.push(resolved);
+    }
+  }
+
+  return uniqueCandidates;
+};
+
+let API_BASE_URL = getApiBaseCandidates()[0] || '';
+const getAuthApiBase = () => `${API_BASE_URL}/api/auth`;
+
+const looksLikeAuthHealthPayload = (payload) => {
+  const status = safeText(payload?.status).toLowerCase();
+  const timestamp = safeText(payload?.timestamp);
+  if (!timestamp || !['ok', 'degraded'].includes(status)) {
+    return false;
+  }
+
+  const service = safeText(payload?.service).toLowerCase();
+  return !service || service.includes('auth') || service.includes('continental') || service.includes('id');
+};
+
+const probeApiBaseUrl = async (candidate) => {
+  try {
+    const response = await fetch(`${candidate}/api/health`, {
+      cache: 'no-store',
+    });
+    const payload = await response.json().catch(() => null);
+    return looksLikeAuthHealthPayload(payload);
+  } catch {
+    return false;
+  }
+};
+
+const ensureApiBaseUrl = async () => {
+  if (apiBaseValidated && API_BASE_URL) {
+    return API_BASE_URL;
+  }
+
+  if (apiBaseResolutionPromise) {
+    return apiBaseResolutionPromise;
+  }
+
+  apiBaseResolutionPromise = (async () => {
+    const candidates = getApiBaseCandidates();
+    for (const candidate of candidates) {
+      if (await probeApiBaseUrl(candidate)) {
+        API_BASE_URL = candidate;
+        apiBaseValidated = true;
+        rememberApiBaseUrl(candidate);
+        return candidate;
+      }
+    }
+
+    throw new Error(
+      candidates.length
+        ? `No reachable Continental ID auth API was found. Checked: ${candidates.join(', ')}.`
+        : 'No trusted API base URL was configured for Continental ID.'
+    );
+  })();
+
+  return apiBaseResolutionPromise;
+};
 
 const isTrustedAppOrigin = (origin) => {
   if (!origin) return false;
@@ -163,10 +253,11 @@ const getRequestErrorMessage = (error, fallback) => {
     return message;
   }
 
-  return (
-    fallback ||
-    'Could not reach the sign-in service. Check that the API base URL points to a live backend.'
-  );
+  if (API_BASE_URL) {
+    return `Could not reach the sign-in service at ${API_BASE_URL}. Check that this origin is serving the Continental ID auth API.`;
+  }
+
+  return fallback || 'Could not determine a live Continental ID auth API.';
 };
 
 const getFieldGroup = (input) => input?.closest('.field-group') || null;
@@ -568,7 +659,8 @@ const handleResendVerification = async () => {
   setStatus('Sending a fresh verification link...', 'info');
 
   try {
-    const res = await fetch(`${AUTH_API_BASE}/resend-verification-public`, {
+    await ensureApiBaseUrl();
+    const res = await fetch(`${getAuthApiBase()}/resend-verification-public`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier }),
@@ -596,7 +688,8 @@ const requestAuth = async (endpoint, body, submitButton, labels) => {
   setStatus(endpoint === '/login' ? 'Checking your credentials...' : 'Creating your account...', 'info');
 
   try {
-    const res = await fetch(`${AUTH_API_BASE}${endpoint}`, {
+    await ensureApiBaseUrl();
+    const res = await fetch(`${getAuthApiBase()}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

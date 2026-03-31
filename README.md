@@ -71,7 +71,7 @@ Optional runtime globals:
 - `window.__LOGIN_POPUP_URL__`
 
 Default behavior now assumes the frontend and `/api/*` are available on the same HTTPS origin. That is the preferred deployment because it avoids exposing `:5000` to browsers and reduces cross-site cookie failures on restrictive networks.
-For the current hosted static domains (`dashboard.continental-hub.com`, `login.continental-hub.com`, `grimoire.continental-hub.com`, and `pclaystation.github.io`), the checked-in frontend defaults to `https://mpmc.ddns.net` as the backend API origin unless you override it explicitly.
+For the current hosted static domains (`dashboard.continental-hub.com`, `login.continental-hub.com`, `grimoire.continental-hub.com`, and `pclaystation.github.io`), the checked-in frontend now probes the same origin plus the known Continental auth/API hosts and only keeps a candidate that exposes the expected auth `/api/health` response. Set `window.__API_BASE_URL__` when you want a deterministic backend origin.
 
 ## GitHub Pages Hosting
 
@@ -116,7 +116,7 @@ For the current hosted static domains (`dashboard.continental-hub.com`, `login.c
 ## Notes
 
 - `ALLOWED_ORIGINS` is comma-separated. `localhost`/`127.0.0.1` are allowed automatically only in development, or when `ALLOW_LOCALHOST_ORIGINS=true`.
-- `https://mpmc.ddns.net` is trusted by default for production CORS and popup handshakes.
+- `https://mpmc.ddns.net` remains a legacy trusted candidate, but the frontend will no longer treat it as the auth API unless it exposes the expected Continental ID health payload.
 - Login anti-bruteforce guardrails are configurable via `LOGIN_RATE_WINDOW_MS`, `LOGIN_RATE_MAX_ATTEMPTS`, and `LOGIN_BLOCK_MS`.
 - Password updates invalidate existing refresh sessions and force re-login.
 - Logout invalidates refresh sessions and clears auth cookie.

@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const ApiRateLimitBucket = require('../models/ApiRateLimitBucket');
 const LoginThrottle = require('../models/LoginThrottle');
 const User = require('../models/User');
 const sendEmail = require('../utils/email');
@@ -37,6 +38,10 @@ const MAX_KNOWN_DEVICES = 24;
 const PASSWORD_RESET_TTL_MS = Number(process.env.PASSWORD_RESET_TTL_MS) || 60 * 60 * 1000;
 const PASSWORD_RESET_EMAIL_COOLDOWN_MS =
   Number(process.env.PASSWORD_RESET_EMAIL_COOLDOWN_MS) || 10 * 60 * 1000;
+const VERIFICATION_EMAIL_COOLDOWN_MS =
+  Number(process.env.VERIFICATION_EMAIL_COOLDOWN_MS) || 30 * 60 * 1000;
+const EMAIL_DAILY_LIMIT = Number(process.env.EMAIL_DAILY_LIMIT) || 100;
+const EMAIL_MONTHLY_LIMIT = Number(process.env.EMAIL_MONTHLY_LIMIT) || 3000;
 const NEW_DEVICE_SESSION_WINDOW_MS = 15 * 60 * 1000;
 
 const LINKED_PROVIDERS = [
@@ -70,7 +75,11 @@ const DEFAULT_APPEARANCE = {
 };
 const DEFAULT_PUBLIC_PROFILE = {
   headline: true,
+  role: true,
+  organization: true,
   bio: true,
+  currentFocus: true,
+  focusAreas: true,
   pronouns: false,
   location: true,
   website: true,
@@ -90,6 +99,7 @@ const PASSWORD_RESET_SUBJECT = 'Reset your Continental ID password';
 const AVATAR_DATA_URL_MAX_LENGTH = 350000;
 const AVATAR_DATA_URL_PATTERN = /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/i;
 const MFA_BACKUP_CODE_COUNT = 8;
+const MAX_FOCUS_AREAS = 8;
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
 
@@ -220,6 +230,28 @@ const resolveLoginPopupPageUrl = (req) => {
   return '';
 };
 
+const getUtcDayWindowStart = (value = Date.now()) => {
+  const date = new Date(value);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+};
+
+const getUtcMonthWindowStart = (value = Date.now()) => {
+  const date = new Date(value);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+};
+
+const addUtcDays = (value, days) => {
+  const date = new Date(value);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date;
+};
+
+const addUtcMonths = (value, months) => {
+  const date = new Date(value);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return date;
+};
+
 const escapeHtml = (value) =>
   String(value || '')
     .replace(/&/g, '&amp;')
@@ -273,6 +305,19 @@ const prepareEmailVerification = (user) => {
   user.verificationTokenExpires = verification.expiresAt;
 
   return verification;
+};
+
+const hasPendingEmailVerification = (user) =>
+  Boolean(
+    sanitizeText(user?.verificationToken, 160) &&
+      user?.verificationTokenExpires &&
+      new Date(user.verificationTokenExpires).getTime() > Date.now()
+  );
+
+const getVerificationEmailCooldownRemainingMs = (user) => {
+  const sentAt = new Date(user?.emailDelivery?.verificationLastSentAt || 0).getTime();
+  if (!sentAt) return 0;
+  return Math.max(0, sentAt + VERIFICATION_EMAIL_COOLDOWN_MS - Date.now());
 };
 
 const createPasswordResetToken = () => {
@@ -559,12 +604,197 @@ const buildPasswordResetEmailContent = (user, resetUrl, expiresAt) => {
   };
 };
 
-const serializeVerificationDelivery = (delivery) => ({
-  sent: Boolean(delivery?.sent),
-});
+const serializeVerificationDelivery = (delivery) => {
+  const payload = {
+    sent: Boolean(delivery?.sent),
+  };
 
-const getVerificationDeliveryMessage = (successMessage, failureMessage, delivery) => {
-  return delivery?.sent ? successMessage : failureMessage;
+  const reason = sanitizeText(delivery?.reason, 60);
+  if (reason) {
+    payload.reason = reason;
+  }
+
+  return payload;
+};
+
+const getVerificationDeliveryMessage = (
+  successMessage,
+  cooldownMessage,
+  failureMessage,
+  delivery
+) => {
+  if (delivery?.sent) {
+    return successMessage;
+  }
+
+  if (delivery?.reason === 'cooldown') {
+    return cooldownMessage;
+  }
+
+  return failureMessage;
+};
+
+const reserveEmailQuotaWindow = async ({ key, windowStart, expiresAt, limit, amount = 1 }) => {
+  const normalizedAmount = Math.max(1, Math.trunc(Number(amount || 1)));
+  const maxAllowedCount = limit - normalizedAmount;
+
+  if (maxAllowedCount < 0) {
+    return false;
+  }
+
+  const entry = await ApiRateLimitBucket.findOneAndUpdate(
+    {
+      key,
+      windowStart,
+      count: { $lte: maxAllowedCount },
+    },
+    {
+      $setOnInsert: {
+        expiresAt,
+      },
+      $inc: {
+        count: normalizedAmount,
+      },
+    },
+    {
+      upsert: true,
+      new: true,
+    }
+  ).lean();
+
+  return Boolean(entry);
+};
+
+const rollbackEmailQuotaWindow = async ({ key, windowStart, amount = 1 }) => {
+  const normalizedAmount = Math.max(1, Math.trunc(Number(amount || 1)));
+  await ApiRateLimitBucket.updateOne(
+    { key, windowStart },
+    {
+      $inc: {
+        count: -normalizedAmount,
+      },
+    }
+  );
+};
+
+const reserveEmailQuota = async (recipientCount = 1) => {
+  const amount = Math.max(1, Math.trunc(Number(recipientCount || 1)));
+  const now = Date.now();
+  const dayWindowStart = getUtcDayWindowStart(now);
+  const monthWindowStart = getUtcMonthWindowStart(now);
+  const dayKey = 'outbound-email:global:day';
+  const monthKey = 'outbound-email:global:month';
+
+  const reservedDay = await reserveEmailQuotaWindow({
+    key: dayKey,
+    windowStart: dayWindowStart,
+    expiresAt: addUtcDays(dayWindowStart, 2),
+    limit: EMAIL_DAILY_LIMIT,
+    amount,
+  });
+
+  if (!reservedDay) {
+    return { ok: false, reason: 'quota_daily_limit' };
+  }
+
+  const reservedMonth = await reserveEmailQuotaWindow({
+    key: monthKey,
+    windowStart: monthWindowStart,
+    expiresAt: addUtcMonths(monthWindowStart, 2),
+    limit: EMAIL_MONTHLY_LIMIT,
+    amount,
+  });
+
+  if (!reservedMonth) {
+    await rollbackEmailQuotaWindow({
+      key: dayKey,
+      windowStart: dayWindowStart,
+      amount,
+    });
+    return { ok: false, reason: 'quota_monthly_limit' };
+  }
+
+  return {
+    ok: true,
+    reservation: {
+      amount,
+      dayKey,
+      dayWindowStart,
+      monthKey,
+      monthWindowStart,
+    },
+  };
+};
+
+const deliverManagedEmail = async ({
+  user = null,
+  to,
+  subject,
+  text,
+  html,
+  onSent = null,
+} = {}) => {
+  const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean);
+  if (recipients.length === 0) {
+    return { sent: false, reason: 'missing_recipient' };
+  }
+
+  const quota = await reserveEmailQuota(recipients.length);
+  if (!quota.ok) {
+    return { sent: false, reason: quota.reason };
+  }
+
+  const rollbackReservation = async () => {
+    await rollbackEmailQuotaWindow({
+      key: quota.reservation.dayKey,
+      windowStart: quota.reservation.dayWindowStart,
+      amount: quota.reservation.amount,
+    });
+    await rollbackEmailQuotaWindow({
+      key: quota.reservation.monthKey,
+      windowStart: quota.reservation.monthWindowStart,
+      amount: quota.reservation.amount,
+    });
+  };
+
+  let response = null;
+  try {
+    response = await sendEmail({
+      to: recipients,
+      subject,
+      text,
+      html,
+    });
+
+    if (response?.skipped) {
+      await rollbackReservation();
+      return {
+        sent: false,
+        reason: sanitizeText(response.reason, 60) || 'email_skipped',
+      };
+    }
+  } catch (err) {
+    await rollbackReservation();
+    console.error('Managed email delivery error:', err);
+    return { sent: false, reason: 'delivery_error' };
+  }
+
+  try {
+    if (typeof onSent === 'function') {
+      onSent();
+    }
+
+    if (user?.isModified && user.isModified()) {
+      await user.save();
+    }
+  } catch (err) {
+    console.error('Email post-send persistence error:', err);
+  }
+
+  return {
+    sent: true,
+    id: sanitizeText(response?.id, 120),
+  };
 };
 
 const sendVerificationEmail = async (user, req, verification) => {
@@ -575,26 +805,21 @@ const sendVerificationEmail = async (user, req, verification) => {
   const verificationUrl = buildEmailVerificationUrl(req, verification.token);
   if (!verificationUrl) {
     console.warn('Verification email URL is not configured; skipping verification email.');
-    return { sent: false };
+    return { sent: false, reason: 'url_not_configured' };
   }
 
-  try {
-    const emailContent = buildVerificationEmailContent(user, verificationUrl, verification.expiresAt);
-    const response = await sendEmail({
-      to: user.email,
-      subject: emailContent.subject,
-      text: emailContent.text,
-      html: emailContent.html,
-    });
-
-    return {
-      sent: !response?.skipped,
-      id: sanitizeText(response?.id, 120),
-    };
-  } catch (err) {
-    console.error('Verification email delivery error:', err);
-    return { sent: false };
-  }
+  const emailContent = buildVerificationEmailContent(user, verificationUrl, verification.expiresAt);
+  return deliverManagedEmail({
+    user,
+    to: user.email,
+    subject: emailContent.subject,
+    text: emailContent.text,
+    html: emailContent.html,
+    onSent: () => {
+      user.emailDelivery = user.emailDelivery || {};
+      user.emailDelivery.verificationLastSentAt = new Date();
+    },
+  });
 };
 
 const sendPasswordResetEmail = async (user, req, reset) => {
@@ -605,26 +830,16 @@ const sendPasswordResetEmail = async (user, req, reset) => {
   const resetUrl = buildPasswordResetUrl(req, reset.token);
   if (!resetUrl) {
     console.warn('Password reset URL is not configured; skipping password reset email.');
-    return { sent: false };
+    return { sent: false, reason: 'url_not_configured' };
   }
 
-  try {
-    const emailContent = buildPasswordResetEmailContent(user, resetUrl, reset.expiresAt);
-    const response = await sendEmail({
-      to: user.email,
-      subject: emailContent.subject,
-      text: emailContent.text,
-      html: emailContent.html,
-    });
-
-    return {
-      sent: !response?.skipped,
-      id: sanitizeText(response?.id, 120),
-    };
-  } catch (err) {
-    console.error('Password reset email delivery error:', err);
-    return { sent: false };
-  }
+  const emailContent = buildPasswordResetEmailContent(user, resetUrl, reset.expiresAt);
+  return deliverManagedEmail({
+    to: user.email,
+    subject: emailContent.subject,
+    text: emailContent.text,
+    html: emailContent.html,
+  });
 };
 
 const buildSecurityEmailContent = ({ title, intro, details = [] }) => {
@@ -674,23 +889,13 @@ const sendSecurityAlertEmail = async (user, subject, title, intro, details = [],
     return { sent: false };
   }
 
-  try {
-    const emailContent = buildSecurityEmailContent({ title, intro, details });
-    const response = await sendEmail({
-      to: recipient,
-      subject,
-      text: emailContent.text,
-      html: emailContent.html,
-    });
-
-    return {
-      sent: !response?.skipped,
-      id: sanitizeText(response?.id, 120),
-    };
-  } catch (err) {
-    console.error('Security alert email delivery error:', err);
-    return { sent: false };
-  }
+  const emailContent = buildSecurityEmailContent({ title, intro, details });
+  return deliverManagedEmail({
+    to: recipient,
+    subject,
+    text: emailContent.text,
+    html: emailContent.html,
+  });
 };
 
 const sanitizeAuditMeta = (value = {}) => {
@@ -813,7 +1018,17 @@ const normalizePublicProfilePreferences = (incoming = {}, current = DEFAULT_PUBL
 
   return {
     headline: hasOwn(incoming, 'headline') ? Boolean(incoming.headline) : Boolean(source.headline),
+    role: hasOwn(incoming, 'role') ? Boolean(incoming.role) : Boolean(source.role),
+    organization: hasOwn(incoming, 'organization')
+      ? Boolean(incoming.organization)
+      : Boolean(source.organization),
     bio: hasOwn(incoming, 'bio') ? Boolean(incoming.bio) : Boolean(source.bio),
+    currentFocus: hasOwn(incoming, 'currentFocus')
+      ? Boolean(incoming.currentFocus)
+      : Boolean(source.currentFocus),
+    focusAreas: hasOwn(incoming, 'focusAreas')
+      ? Boolean(incoming.focusAreas)
+      : Boolean(source.focusAreas),
     pronouns: hasOwn(incoming, 'pronouns') ? Boolean(incoming.pronouns) : Boolean(source.pronouns),
     location: hasOwn(incoming, 'location') ? Boolean(incoming.location) : Boolean(source.location),
     website: hasOwn(incoming, 'website') ? Boolean(incoming.website) : Boolean(source.website),
@@ -959,7 +1174,31 @@ const sanitizeAvatar = (value, fallback = '') => {
 };
 
 const sanitizeHeadline = (value, fallback = '') => sanitizeText(value, 100) || fallback;
+const sanitizeRole = (value, fallback = '') => sanitizeText(value, 100) || fallback;
+const sanitizeOrganization = (value, fallback = '') => sanitizeText(value, 100) || fallback;
+const sanitizeCurrentFocus = (value, fallback = '') => sanitizeText(value, 160) || fallback;
 const sanitizePronouns = (value, fallback = '') => sanitizeText(value, 40) || fallback;
+const sanitizeFocusAreas = (value = []) => {
+  const rawValues = Array.isArray(value) ? value : String(value || '').split(/[,\n]/);
+  const next = [];
+  const seen = new Set();
+
+  for (const entry of rawValues) {
+    const cleaned = sanitizeText(entry, 32);
+    if (!cleaned) continue;
+
+    const dedupeKey = cleaned.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    next.push(cleaned);
+
+    if (next.length >= MAX_FOCUS_AREAS) {
+      break;
+    }
+  }
+
+  return next;
+};
 
 const sanitizeLanguage = (value, fallback = 'en') => {
   const raw = sanitizeText(value, 32).replace('_', '-');
@@ -988,10 +1227,22 @@ const normalizeProfile = (incoming = {}, current = {}) => {
       ? sanitizeAvatar(incoming.avatar, sanitizeAvatar(currentProfile.avatar, ''))
       : sanitizeAvatar(currentProfile.avatar, ''),
     headline: hasOwn(incoming, 'headline')
-      ? sanitizeHeadline(incoming.headline, sanitizeHeadline(currentProfile.headline, ''))
+      ? sanitizeHeadline(incoming.headline, '')
       : sanitizeHeadline(currentProfile.headline, ''),
+    role: hasOwn(incoming, 'role')
+      ? sanitizeRole(incoming.role, '')
+      : sanitizeRole(currentProfile.role, ''),
+    organization: hasOwn(incoming, 'organization')
+      ? sanitizeOrganization(incoming.organization, '')
+      : sanitizeOrganization(currentProfile.organization, ''),
+    currentFocus: hasOwn(incoming, 'currentFocus')
+      ? sanitizeCurrentFocus(incoming.currentFocus, '')
+      : sanitizeCurrentFocus(currentProfile.currentFocus, ''),
+    focusAreas: hasOwn(incoming, 'focusAreas')
+      ? sanitizeFocusAreas(incoming.focusAreas)
+      : sanitizeFocusAreas(currentProfile.focusAreas),
     pronouns: hasOwn(incoming, 'pronouns')
-      ? sanitizePronouns(incoming.pronouns, sanitizePronouns(currentProfile.pronouns, ''))
+      ? sanitizePronouns(incoming.pronouns, '')
       : sanitizePronouns(currentProfile.pronouns, ''),
     bio: hasOwn(incoming, 'bio') ? sanitizeText(incoming.bio, 320) : sanitizeText(currentProfile.bio, 320),
     location: hasOwn(incoming, 'location')
@@ -1464,13 +1715,16 @@ const applyUsernameChange = async (user, username) => {
 };
 
 const profileCompletion = (user) => {
+  const focusAreas = sanitizeFocusAreas(user?.profile?.focusAreas);
   const fields = [
     getDisplayableUsername(user),
     sanitizeText(user.displayName, 60),
     sanitizeText(user.email, 120),
     sanitizeAvatar(user.profile?.avatar, ''),
     sanitizeHeadline(user.profile?.headline, ''),
+    sanitizeRole(user.profile?.role, '') || sanitizeOrganization(user.profile?.organization, ''),
     sanitizeText(user.profile?.bio, 320),
+    sanitizeCurrentFocus(user.profile?.currentFocus, '') || (focusAreas.length ? 'focus-areas' : ''),
     sanitizeText(user.profile?.location, 120),
     sanitizeText(user.profile?.website, 240),
     sanitizeText(user.profile?.timezone, 80),
@@ -1513,6 +1767,10 @@ const buildUserPayload = (user) => {
     profile: {
       avatar: sanitizeAvatar(user.profile?.avatar, ''),
       headline: sanitizeHeadline(user.profile?.headline, ''),
+      role: sanitizeRole(user.profile?.role, ''),
+      organization: sanitizeOrganization(user.profile?.organization, ''),
+      currentFocus: sanitizeCurrentFocus(user.profile?.currentFocus, ''),
+      focusAreas: sanitizeFocusAreas(user.profile?.focusAreas),
       pronouns: sanitizePronouns(user.profile?.pronouns, ''),
       bio: sanitizeText(user.profile?.bio, 320),
       location: sanitizeText(user.profile?.location, 120),
@@ -1618,6 +1876,10 @@ const buildPublicProfilePayload = (user) => {
     profile: {
       avatar: sanitizeAvatar(user?.profile?.avatar, ''),
       headline: visibility.headline ? sanitizeHeadline(user?.profile?.headline, '') : '',
+      role: visibility.role ? sanitizeRole(user?.profile?.role, '') : '',
+      organization: visibility.organization ? sanitizeOrganization(user?.profile?.organization, '') : '',
+      currentFocus: visibility.currentFocus ? sanitizeCurrentFocus(user?.profile?.currentFocus, '') : '',
+      focusAreas: visibility.focusAreas ? sanitizeFocusAreas(user?.profile?.focusAreas) : [],
       pronouns: visibility.pronouns ? sanitizePronouns(user?.profile?.pronouns, '') : '',
       bio: visibility.bio ? sanitizeText(user?.profile?.bio, 320) : '',
       location: visibility.location ? sanitizeText(user?.profile?.location, 120) : '',
@@ -1626,6 +1888,104 @@ const buildPublicProfilePayload = (user) => {
       language: visibility.language ? sanitizeLanguage(user?.profile?.language, 'en') : '',
     },
     linkedAccounts: visibility.linkedAccounts ? buildPublicLinkedAccounts(user?.linkedAccounts) : {},
+  };
+};
+
+const buildPublicSearchFields = (user) => {
+  const visibility = normalizePublicProfilePreferences(
+    user?.preferences?.publicProfile || {},
+    DEFAULT_PUBLIC_PROFILE
+  );
+
+  return {
+    username: sanitizeText(getDisplayableUsername(user), 60).toLowerCase(),
+    displayName: sanitizeText(user?.displayName, 60).toLowerCase(),
+    headline: visibility.headline ? sanitizeHeadline(user?.profile?.headline, '').toLowerCase() : '',
+    role: visibility.role ? sanitizeRole(user?.profile?.role, '').toLowerCase() : '',
+    organization: visibility.organization ? sanitizeOrganization(user?.profile?.organization, '').toLowerCase() : '',
+    currentFocus: visibility.currentFocus ? sanitizeCurrentFocus(user?.profile?.currentFocus, '').toLowerCase() : '',
+    focusAreas: visibility.focusAreas
+      ? sanitizeFocusAreas(user?.profile?.focusAreas).map((entry) => entry.toLowerCase())
+      : [],
+    bio: visibility.bio ? sanitizeText(user?.profile?.bio, 320).toLowerCase() : '',
+    location: visibility.location ? sanitizeText(user?.profile?.location, 120).toLowerCase() : '',
+    linkedAccounts: visibility.linkedAccounts
+      ? Object.values(buildPublicLinkedAccounts(user?.linkedAccounts)).map((entry) =>
+          sanitizeText(entry, 120).toLowerCase()
+        )
+      : [],
+  };
+};
+
+const scoreTextField = (value, query, weights) => {
+  const text = sanitizeText(value, 320).toLowerCase();
+  if (!text || !query) return 0;
+  if (text === query) return weights.exact;
+  if (text.startsWith(query)) return weights.prefix;
+  if (text.includes(query)) return weights.contains;
+  return 0;
+};
+
+const scoreTextCollection = (values, query, weights) =>
+  values.reduce((best, value) => Math.max(best, scoreTextField(value, query, weights)), 0);
+
+const scorePublicProfileMatch = (user, rawQuery) => {
+  const query = sanitizeText(rawQuery, 60).toLowerCase();
+  if (query.length < 2) return 0;
+
+  const fields = buildPublicSearchFields(user);
+
+  let score = 0;
+  score += scoreTextField(fields.username, query, { exact: 160, prefix: 110, contains: 78 });
+  score += scoreTextField(fields.displayName, query, { exact: 120, prefix: 82, contains: 56 });
+  score += scoreTextField(fields.role, query, { exact: 88, prefix: 62, contains: 42 });
+  score += scoreTextField(fields.organization, query, { exact: 84, prefix: 58, contains: 40 });
+  score += scoreTextField(fields.headline, query, { exact: 72, prefix: 48, contains: 34 });
+  score += scoreTextField(fields.currentFocus, query, { exact: 68, prefix: 44, contains: 30 });
+  score += scoreTextCollection(fields.focusAreas, query, { exact: 64, prefix: 40, contains: 28 });
+  score += scoreTextField(fields.location, query, { exact: 32, prefix: 24, contains: 18 });
+  score += scoreTextCollection(fields.linkedAccounts, query, { exact: 28, prefix: 20, contains: 16 });
+  score += scoreTextField(fields.bio, query, { exact: 22, prefix: 16, contains: 12 });
+
+  return score;
+};
+
+const buildPublicSearchQuery = (regex) => {
+  const linkedClauses = LINKED_PROVIDERS.map((provider) => ({
+    [`linkedAccounts.${provider}`]: regex,
+  }));
+
+  return {
+    'preferences.profilePublic': true,
+    'preferences.searchable': true,
+    $or: [
+      { username: regex },
+      { displayName: regex },
+      {
+        $and: [{ 'preferences.publicProfile.headline': true }, { 'profile.headline': regex }],
+      },
+      {
+        $and: [{ 'preferences.publicProfile.role': true }, { 'profile.role': regex }],
+      },
+      {
+        $and: [{ 'preferences.publicProfile.organization': true }, { 'profile.organization': regex }],
+      },
+      {
+        $and: [{ 'preferences.publicProfile.currentFocus': true }, { 'profile.currentFocus': regex }],
+      },
+      {
+        $and: [{ 'preferences.publicProfile.focusAreas': true }, { 'profile.focusAreas': regex }],
+      },
+      {
+        $and: [{ 'preferences.publicProfile.bio': true }, { 'profile.bio': regex }],
+      },
+      {
+        $and: [{ 'preferences.publicProfile.location': true }, { 'profile.location': regex }],
+      },
+      {
+        $and: [{ 'preferences.publicProfile.linkedAccounts': true }, { $or: linkedClauses }],
+      },
+    ],
   };
 };
 
@@ -1712,7 +2072,7 @@ const buildActivitySummary = (recentLogins = [], dailyCounts = []) => {
 };
 
 const FULL_USER_SELECT_FIELDS =
-  'email username displayName isVerified verificationToken verificationTokenExpires passwordResetToken passwordResetTokenExpires passwordResetRequestedAt lastLoginAt lastLoginIp recentLogins loginDayCounts knownDevices auditEvents profile linkedAccounts preferences security refreshTokenVersion refreshSessions createdAt updatedAt password';
+  'email username displayName isVerified verificationToken verificationTokenExpires emailDelivery passwordResetToken passwordResetTokenExpires passwordResetRequestedAt lastLoginAt lastLoginIp recentLogins loginDayCounts knownDevices auditEvents profile linkedAccounts preferences security refreshTokenVersion refreshSessions createdAt updatedAt password';
 
 const getUserById = async (id, { ensureIdentity = true } = {}) => {
   const user = await User.findById(id).select(FULL_USER_SELECT_FIELDS);
@@ -2016,6 +2376,7 @@ exports.register = async (req, res) => {
     return res.status(201).json({
       message: getVerificationDeliveryMessage(
         'Registration successful. Check your inbox to verify your email before signing in.',
+        'Registration successful. Check your inbox for the verification email that was already sent.',
         'Registration successful, but the verification email could not be sent right now. Try signing in later to request another verification email.',
         verificationDelivery
       ),
@@ -2075,23 +2436,27 @@ exports.login = async (req, res) => {
     if (!user.isVerified) {
       await clearLoginFailures(rateKey);
 
-      const verification = prepareEmailVerification(user);
-      revokeAllTrackedSessions(user);
-      appendAuditEvent(
-        user,
-        req,
-        'login_blocked_unverified',
-        'Sign-in blocked until email verification is completed.',
-        { identifier }
-      );
-      await user.save();
+      let verificationDelivery = { sent: false, reason: 'cooldown' };
+      if (!(hasPendingEmailVerification(user) && getVerificationEmailCooldownRemainingMs(user) > 0)) {
+        const verification = prepareEmailVerification(user);
+        revokeAllTrackedSessions(user);
+        appendAuditEvent(
+          user,
+          req,
+          'login_blocked_unverified',
+          'Sign-in blocked until email verification is completed.',
+          { identifier }
+        );
+        await user.save();
+        verificationDelivery = await sendVerificationEmail(user, req, verification);
+      }
 
-      const verificationDelivery = await sendVerificationEmail(user, req, verification);
       clearRefreshCookie(res, req);
 
       return res.status(403).json({
         message: getVerificationDeliveryMessage(
           'Verify your email before signing in. A fresh verification link has been sent.',
+          'Verify your email before signing in. Check your inbox for the verification link that was already sent recently.',
           'Verify your email before signing in. We could not send a new verification email right now.',
           verificationDelivery
         ),
@@ -2249,17 +2614,19 @@ exports.publicResendVerificationEmail = async (req, res) => {
     }
 
     await ensureUserIdentityFields(user);
-    const verification = prepareEmailVerification(user);
-    revokeAllTrackedSessions(user);
-    appendAuditEvent(
-      user,
-      req,
-      'verification_resent_public',
-      'Verification email resent from the public sign-in flow.'
-    );
-    await user.save();
+    if (!(hasPendingEmailVerification(user) && getVerificationEmailCooldownRemainingMs(user) > 0)) {
+      const verification = prepareEmailVerification(user);
+      revokeAllTrackedSessions(user);
+      appendAuditEvent(
+        user,
+        req,
+        'verification_resent_public',
+        'Verification email resent from the public sign-in flow.'
+      );
+      await user.save();
+      await sendVerificationEmail(user, req, verification);
+    }
 
-    await sendVerificationEmail(user, req, verification);
     clearRefreshCookie(res, req);
 
     return res.status(200).json({ message: genericMessage });
@@ -2326,27 +2693,46 @@ exports.searchPublicProfiles = async (req, res) => {
 
   try {
     if (query.length < 2) {
-      return res.json({ message: 'Search loaded.', results: [] });
+      const users = await User.find({
+        'preferences.profilePublic': true,
+        'preferences.searchable': true,
+      })
+        .select('username displayName profile linkedAccounts preferences createdAt updatedAt')
+        .sort({ updatedAt: -1, _id: -1 })
+        .limit(12)
+        .lean();
+
+      return res.json({
+        message: 'Directory loaded.',
+        query: '',
+        isDirectory: true,
+        results: users.map((user) => buildPublicProfilePayload(user)),
+      });
     }
 
     const regex = new RegExp(escapeRegex(query), 'i');
-    const users = await User.find({
-      'preferences.profilePublic': true,
-      'preferences.searchable': true,
-      $or: [
-        { username: regex },
-        { displayName: regex },
-        { 'profile.headline': regex },
-      ],
-    })
+    const users = await User.find(buildPublicSearchQuery(regex))
       .select('username displayName profile linkedAccounts preferences createdAt updatedAt')
       .sort({ updatedAt: -1, _id: -1 })
-      .limit(12)
+      .limit(48)
       .lean();
+
+    const rankedUsers = users
+      .map((user) => ({
+        user,
+        score: scorePublicProfileMatch(user, query),
+        updatedAt: new Date(user?.updatedAt || user?.createdAt || 0).getTime(),
+      }))
+      .filter((entry) => entry.score > 0)
+      .sort((left, right) => right.score - left.score || right.updatedAt - left.updatedAt)
+      .slice(0, 12)
+      .map((entry) => entry.user);
 
     return res.json({
       message: 'Search loaded.',
-      results: users.map((user) => buildPublicProfilePayload(user)),
+      query,
+      isDirectory: false,
+      results: rankedUsers.map((user) => buildPublicProfilePayload(user)),
     });
   } catch (err) {
     console.error('Public profile search error:', err);
@@ -2511,6 +2897,7 @@ exports.updateProfile = async (req, res) => {
     const message = verification
       ? getVerificationDeliveryMessage(
           'Profile updated. Verify your new email before signing in again.',
+          'Profile updated. Check your inbox for the verification email that was already sent.',
           'Profile updated, but the verification email could not be sent right now.',
           verificationDelivery
         )
@@ -2582,6 +2969,7 @@ exports.updateEmail = async (req, res) => {
     const message = verification
       ? getVerificationDeliveryMessage(
           'Email updated. Verify your new email before signing in again.',
+          'Email updated. Check your inbox for the verification email that was already sent.',
           'Email updated, but the verification email could not be sent right now.',
           verificationDelivery
         )
@@ -2614,13 +3002,17 @@ exports.resendVerificationEmail = async (req, res) => {
       return res.status(400).json({ message: 'Email is already verified.' });
     }
 
-    const verification = prepareEmailVerification(user);
-    appendAuditEvent(user, req, 'verification_resent', 'Verification email resent.');
-    await user.save();
+    let verificationDelivery = { sent: false, reason: 'cooldown' };
+    if (!(hasPendingEmailVerification(user) && getVerificationEmailCooldownRemainingMs(user) > 0)) {
+      const verification = prepareEmailVerification(user);
+      appendAuditEvent(user, req, 'verification_resent', 'Verification email resent.');
+      await user.save();
+      verificationDelivery = await sendVerificationEmail(user, req, verification);
+    }
 
-    const verificationDelivery = await sendVerificationEmail(user, req, verification);
     const message = getVerificationDeliveryMessage(
       'Verification email sent.',
+      'A verification email was already sent recently. Check your inbox before requesting another one.',
       'Verification email could not be sent right now.',
       verificationDelivery
     );

@@ -3,219 +3,733 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Continental ID Profile</title>
+  <title>Continental ID Public Profiles</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap"
+    rel="stylesheet"
+  />
   <style>
     :root {
       color-scheme: light;
-      --bg: #eff2f6;
-      --panel: #ffffff;
-      --ink: #16202a;
-      --muted: #5d6b78;
-      --line: #d8e0e7;
-      --accent: #24415a;
+      --bg-1: #f8f0e5;
+      --bg-2: #e7eee8;
+      --bg-3: #d9e4ed;
+      --panel: rgba(255, 255, 255, 0.82);
+      --panel-strong: rgba(255, 255, 255, 0.94);
+      --panel-soft: rgba(249, 246, 240, 0.9);
+      --text: #17212b;
+      --muted: #61707d;
+      --line: rgba(23, 33, 43, 0.1);
+      --line-strong: rgba(23, 33, 43, 0.16);
+      --primary: #0f6f63;
+      --primary-strong: #0b5a50;
+      --primary-soft: rgba(15, 111, 99, 0.12);
+      --secondary: #bb7e41;
+      --secondary-soft: rgba(187, 126, 65, 0.14);
+      --shadow: 0 28px 80px rgba(18, 28, 39, 0.1);
+      --shadow-soft: 0 16px 36px rgba(18, 28, 39, 0.08);
+      --ring: rgba(15, 111, 99, 0.24);
+      --success: #17724f;
+      --warning: #b9772a;
     }
-    * { box-sizing: border-box; }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
     body {
       margin: 0;
-      min-height: 100vh;
-      font-family: Manrope, system-ui, sans-serif;
+      min-height: 100%;
+    }
+
+    body {
+      font-family: 'Manrope', sans-serif;
+      color: var(--text);
       background:
-        radial-gradient(circle at top left, rgba(36, 65, 90, 0.14), transparent 32%),
-        linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
-      color: var(--ink);
-      padding: 2rem 1rem 3rem;
+        radial-gradient(circle at 12% 10%, rgba(15, 111, 99, 0.14), transparent 26%),
+        radial-gradient(circle at 84% 18%, rgba(187, 126, 65, 0.14), transparent 24%),
+        linear-gradient(160deg, var(--bg-1), var(--bg-2) 54%, var(--bg-3));
+      background-attachment: fixed;
     }
-    .shell {
-      width: min(880px, 100%);
-      margin: 0 auto;
+
+    body::before,
+    body::after {
+      content: '';
+      position: fixed;
+      border-radius: 999px;
+      pointer-events: none;
+      filter: blur(34px);
+      opacity: 0.5;
+      z-index: -1;
     }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
-      overflow: hidden;
+
+    body::before {
+      width: 24vw;
+      height: 24vw;
+      top: -8vw;
+      left: -4vw;
+      background: rgba(15, 111, 99, 0.14);
     }
-    .hero {
-      padding: 2rem;
-      background: linear-gradient(135deg, #1f3548, #355c75);
-      color: #fff;
+
+    body::after {
+      width: 28vw;
+      height: 28vw;
+      right: -6vw;
+      bottom: -10vw;
+      background: rgba(187, 126, 65, 0.16);
     }
-    .hero h1 {
-      margin: 0.4rem 0 0.5rem;
-      font-size: clamp(2rem, 4vw, 3rem);
-    }
-    .hero p {
+
+    h1,
+    h2,
+    h3 {
       margin: 0;
-      max-width: 48rem;
-      color: rgba(255, 255, 255, 0.82);
+      font-family: 'Sora', sans-serif;
+      letter-spacing: -0.03em;
     }
-    .search-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 0.75rem;
-      padding: 1.25rem 2rem 0;
+
+    p {
+      line-height: 1.62;
     }
-    input, button {
-      font: inherit;
-      border-radius: 12px;
-      padding: 0.9rem 1rem;
+
+    a {
+      color: var(--primary-strong);
+      text-decoration: none;
     }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    button,
     input {
-      border: 1px solid var(--line);
-      background: #fff;
+      font: inherit;
     }
-    button {
-      border: none;
-      background: var(--accent);
-      color: #fff;
-      font-weight: 700;
+
+    button,
+    .button-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0.78rem 1rem;
+      border: 1px solid transparent;
+      border-radius: 16px;
+      text-decoration: none;
       cursor: pointer;
+      transition:
+        transform 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease,
+        color 160ms ease,
+        box-shadow 160ms ease;
     }
-    .content {
-      padding: 1.5rem 2rem 2rem;
+
+    button:hover,
+    .button-link:hover {
+      transform: translateY(-1px);
+      text-decoration: none;
     }
-    .profile-card {
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    a:focus-visible,
+    .button-link:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
+    }
+
+    .primary-btn {
+      background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+      color: #f8fffd;
+      box-shadow: 0 16px 28px rgba(15, 111, 99, 0.18);
+    }
+
+    .secondary-btn,
+    .button-link {
+      background: var(--panel-strong);
+      border-color: var(--line);
+      color: var(--text);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .skip-link {
+      position: absolute;
+      left: 1rem;
+      top: -3.5rem;
+      padding: 0.8rem 1rem;
+      border-radius: 14px;
+      background: var(--panel-strong);
+      color: var(--text);
+      z-index: 20;
+    }
+
+    .skip-link:focus {
+      top: 1rem;
+    }
+
+    .eyebrow {
+      margin: 0 0 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .helper-line {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .page-shell {
+      width: min(1180px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 1rem 0 3rem;
+    }
+
+    .masthead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.5rem 0 1rem;
+    }
+
+    .brand-lockup {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.9rem;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .brand-mark {
+      width: 56px;
+      height: 56px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--primary) 86%, #ffffff), color-mix(in srgb, var(--primary-strong) 82%, #0f1418));
+      box-shadow: 0 18px 32px rgba(15, 35, 33, 0.16);
+    }
+
+    .brand-mark img {
+      width: 30px;
+      height: 30px;
+      object-fit: contain;
+    }
+
+    .brand-copy p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .brand-copy strong {
+      display: block;
+      font-family: 'Sora', sans-serif;
+      font-size: 1.05rem;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+
+    .hero {
+      padding: clamp(1.3rem, 2.6vw, 2rem);
       display: grid;
       gap: 1.25rem;
-      grid-template-columns: 120px 1fr;
-      align-items: start;
-      padding: 1.25rem 0;
-      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.32), transparent 52%),
+        radial-gradient(circle at top right, rgba(187, 126, 65, 0.16), transparent 30%),
+        radial-gradient(circle at bottom left, rgba(15, 111, 99, 0.14), transparent 32%),
+        var(--panel-soft);
+      overflow: hidden;
     }
+
+    .hero-copy-wrap {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.2rem, 4.4vw, 4rem);
+      max-width: 11ch;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 62ch;
+      color: var(--muted);
+    }
+
+    .search-panel {
+      display: grid;
+      gap: 0.7rem;
+      padding: 1rem;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: var(--panel-strong);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .search-panel label {
+      display: grid;
+      gap: 0.45rem;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .search-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 0.65rem;
+    }
+
+    input[type='search'] {
+      width: 100%;
+      min-height: 52px;
+      padding: 0.9rem 1rem;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    }
+
+    input::placeholder {
+      color: color-mix(in srgb, var(--muted) 74%, transparent);
+    }
+
+    .status-line {
+      min-height: 1.4rem;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .content-grid {
+      display: grid;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .profile-placeholder,
+    .profile-sheet,
+    .directory-panel {
+      padding: clamp(1.1rem, 2.2vw, 1.6rem);
+    }
+
+    .profile-placeholder {
+      display: grid;
+      gap: 0.8rem;
+      border-style: dashed;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(250, 247, 241, 0.82));
+    }
+
+    .profile-sheet {
+      display: grid;
+      gap: 1.2rem;
+      background:
+        linear-gradient(160deg, rgba(255, 255, 255, 0.86), rgba(248, 244, 237, 0.82));
+    }
+
+    .profile-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .profile-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      min-width: 0;
+    }
+
     .avatar {
-      width: 120px;
-      height: 120px;
-      border-radius: 24px;
-      background: linear-gradient(135deg, #294960, #4b718d);
-      color: #fff;
-      font-size: 2rem;
-      font-weight: 800;
+      width: 108px;
+      height: 108px;
+      border-radius: 28px;
+      flex: 0 0 auto;
       display: grid;
       place-items: center;
       overflow: hidden;
+      color: #f8fffd;
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--primary) 88%, #ffffff), color-mix(in srgb, var(--primary-strong) 80%, #081014));
+      box-shadow: 0 22px 40px rgba(15, 35, 33, 0.16);
     }
+
+    .avatar.small {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      font-size: 1.2rem;
+      box-shadow: none;
+    }
+
     .avatar img {
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
-    .eyebrow {
+
+    .identity-copy {
+      min-width: 0;
+      display: grid;
+      gap: 0.55rem;
+    }
+
+    .identity-copy h2 {
+      font-size: clamp(1.8rem, 3vw, 2.5rem);
+    }
+
+    .identity-handle {
+      margin: -0.15rem 0 0;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .identity-summary {
+      margin: 0;
+      font-size: 1.05rem;
+      color: var(--text);
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.46rem 0.78rem;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+
+    .chip.accent {
+      border-color: color-mix(in srgb, var(--primary) 34%, var(--line));
+      background: color-mix(in srgb, var(--primary-soft) 90%, white);
+      color: var(--primary-strong);
+    }
+
+    .profile-actions {
+      display: flex;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .spotlight-card {
+      padding: 1rem 1.1rem;
+      border-radius: 22px;
+      border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--line));
+      background:
+        radial-gradient(circle at top right, rgba(15, 111, 99, 0.12), transparent 32%),
+        linear-gradient(140deg, rgba(255, 255, 255, 0.82), rgba(242, 249, 247, 0.86));
+    }
+
+    .spotlight-card p {
+      margin: 0.45rem 0 0;
+      font-size: 1.05rem;
+      color: var(--text);
+    }
+
+    .profile-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .section-card {
+      padding: 1rem 1.05rem;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: var(--panel-strong);
+      box-shadow: var(--shadow-soft);
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .section-card.wide {
+      grid-column: 1 / -1;
+    }
+
+    .section-card p {
       margin: 0;
       color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-size: 0.8rem;
-      font-weight: 700;
-    }
-    .meta h2 {
-      margin: 0.35rem 0 0.2rem;
-      font-size: 2rem;
-    }
-    .handle {
-      margin: 0 0 0.75rem;
-      color: var(--muted);
-      font-weight: 700;
-    }
-    .headline {
-      margin: 0 0 0.9rem;
-      font-size: 1.05rem;
-      color: var(--ink);
-    }
-    .bio {
-      margin: 0 0 1rem;
-      color: var(--muted);
-      line-height: 1.65;
       white-space: pre-wrap;
     }
-    .details, .links, .results {
+
+    .facts-grid,
+    .links-grid {
       display: grid;
-      gap: 0.8rem;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
     }
-    .details {
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      margin-top: 1rem;
-    }
-    .detail {
+
+    .fact-card,
+    .link-card {
       padding: 0.9rem 1rem;
+      border-radius: 18px;
       border: 1px solid var(--line);
-      border-radius: 14px;
-      background: #fafbfd;
+      background: var(--panel-soft);
+      display: grid;
+      gap: 0.25rem;
     }
-    .detail strong {
-      display: block;
-      margin-bottom: 0.25rem;
-      font-size: 0.85rem;
-      color: var(--muted);
+
+    .fact-card strong,
+    .link-card strong {
+      font-size: 0.82rem;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
+      color: var(--muted);
     }
-    .links a, .result-item a {
-      color: var(--accent);
-      text-decoration: none;
+
+    .fact-card span,
+    .link-card span,
+    .link-card a {
       font-weight: 700;
+      color: var(--text);
+      overflow-wrap: anywhere;
     }
-    .links a:hover, .result-item a:hover {
-      text-decoration: underline;
+
+    .directory-panel {
+      display: grid;
+      gap: 1rem;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(250, 247, 241, 0.84));
     }
-    .results {
-      padding-top: 1.25rem;
+
+    .directory-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 1rem;
     }
-    .result-item {
+
+    .directory-copy {
+      margin: 0.45rem 0 0;
+      color: var(--muted);
+      max-width: 54ch;
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 0.9rem;
+    }
+
+    .result-card {
+      display: grid;
+      gap: 0.85rem;
       padding: 1rem;
+      border-radius: 22px;
       border: 1px solid var(--line);
-      border-radius: 14px;
-      background: #fff;
+      background: var(--panel-strong);
+      box-shadow: var(--shadow-soft);
+      transition:
+        transform 180ms ease,
+        border-color 180ms ease,
+        box-shadow 180ms ease;
     }
-    .result-item p {
-      margin: 0.35rem 0 0;
-      color: var(--muted);
+
+    .result-card:hover {
+      transform: translateY(-2px);
+      border-color: color-mix(in srgb, var(--primary) 28%, var(--line));
+      box-shadow: 0 20px 36px rgba(18, 28, 39, 0.1);
+      text-decoration: none;
     }
-    .status {
-      margin: 1rem 0 0;
+
+    .result-head {
+      display: flex;
+      gap: 0.8rem;
+      align-items: flex-start;
+    }
+
+    .result-copy {
+      min-width: 0;
+      display: grid;
+      gap: 0.25rem;
+    }
+
+    .result-copy strong,
+    .result-copy span {
+      overflow-wrap: anywhere;
+    }
+
+    .result-copy span {
       color: var(--muted);
       font-weight: 700;
     }
-    @media (max-width: 720px) {
-      .search-row,
-      .content,
-      .hero {
-        padding-left: 1.25rem;
-        padding-right: 1.25rem;
+
+    .result-summary {
+      margin: 0;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .result-headline {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .empty-state {
+      padding: 1rem 1.1rem;
+      border-radius: 20px;
+      border: 1px dashed var(--line-strong);
+      background: rgba(255, 255, 255, 0.68);
+      color: var(--muted);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
       }
-      .profile-card {
+    }
+
+    @media (max-width: 880px) {
+      .profile-top,
+      .profile-grid,
+      .facts-grid,
+      .links-grid {
         grid-template-columns: 1fr;
       }
+
+      .profile-actions,
+      .directory-head {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .page-shell {
+        width: min(100% - 1rem, 1180px);
+      }
+
+      .masthead,
+      .search-controls,
+      .profile-head,
+      .profile-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .search-controls {
+        grid-template-columns: 1fr;
+      }
+
       .avatar {
-        width: 96px;
-        height: 96px;
+        width: 92px;
+        height: 92px;
+        border-radius: 24px;
       }
-      .search-row {
-        grid-template-columns: 1fr;
+
+      .directory-head,
+      .brand-lockup {
+        align-items: flex-start;
       }
     }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <section class="panel">
-      <header class="hero">
-        <p class="eyebrow">Public Profile</p>
-        <h1 id="hero-title">Continental ID</h1>
-        <p id="hero-copy">Search public profiles or open a direct profile link.</p>
-      </header>
+  <a class="skip-link" href="#main">Skip to content</a>
 
-      <div class="search-row">
-        <input id="search-input" type="search" placeholder="Search by username, display name, or headline" />
-        <button id="search-btn" type="button">Search</button>
-      </div>
+  <div class="page-shell">
+    <header class="masthead" aria-label="Site navigation">
+      <a class="brand-lockup" href="index.html">
+        <div class="brand-mark" aria-hidden="true">
+          <img src="images/Continental-ID-nbg-w.png" alt="" />
+        </div>
+        <div class="brand-copy">
+          <p>Public directory</p>
+          <strong>Continental ID</strong>
+        </div>
+      </a>
 
-      <div class="content">
-        <div id="profile-region"></div>
-        <div id="results" class="results"></div>
-        <p id="status" class="status" aria-live="polite"></p>
-      </div>
-    </section>
+      <a class="button-link" href="index.html">Open Dashboard</a>
+    </header>
+
+    <main id="main" class="content-grid">
+      <section class="hero panel">
+        <div class="hero-copy-wrap">
+          <div>
+            <p class="eyebrow">Public profiles</p>
+            <h1 id="hero-title">People on Continental ID</h1>
+          </div>
+          <p id="hero-copy">
+            Search by handle, name, role, organization, or focus area to browse public profiles.
+          </p>
+          <p id="status" class="status-line" aria-live="polite"></p>
+        </div>
+
+        <form id="search-form" class="search-panel" role="search">
+          <label for="search-input">
+            Search the public directory
+            <input
+              id="search-input"
+              type="search"
+              placeholder="Search by username, display name, role, organization, or focus"
+              autocomplete="off"
+            />
+          </label>
+          <div class="search-controls">
+            <button id="search-btn" class="primary-btn" type="submit">Search</button>
+            <button id="browse-btn" class="secondary-btn" type="button">Browse Latest</button>
+            <button id="clear-btn" class="secondary-btn" type="button">Clear</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="profile-region" class="panel" aria-live="polite"></section>
+
+      <section class="directory-panel panel" aria-labelledby="results-title">
+        <div class="directory-head">
+          <div>
+            <p class="eyebrow">Directory</p>
+            <h2 id="results-title">Recently updated profiles</h2>
+            <p id="results-copy" class="directory-copy">
+              Browse the latest public profiles across the Continental ID directory.
+            </p>
+          </div>
+          <span id="results-count" class="chip accent">0 profiles</span>
+        </div>
+
+        <div id="results" class="results-grid"></div>
+        <div id="empty-state" class="empty-state" hidden></div>
+      </section>
+    </main>
   </div>
 
   <script>
@@ -227,15 +741,69 @@
       'pclaystation.github.io',
       'mpmc.ddns.net',
     ]);
+    const PREFERRED_API_BASE_URLS = [
+      'https://api.continental-hub.com',
+      'https://auth.continental-hub.com',
+      'https://id.continental-hub.com',
+      'https://backend.continental-hub.com',
+      'https://continental-hub.com',
+      'https://login.continental-hub.com',
+    ];
     const HOSTED_API_BASE_URL = 'https://mpmc.ddns.net';
+    const API_BASE_STORAGE_KEY = 'continental.authApiBaseUrl';
+    const PROFILE_HANDLE_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{1,28}[a-z0-9])?$/;
     const params = new URLSearchParams(window.location.search);
+
+    const dom = {
+      heroTitle: document.getElementById('hero-title'),
+      heroCopy: document.getElementById('hero-copy'),
+      status: document.getElementById('status'),
+      searchForm: document.getElementById('search-form'),
+      searchInput: document.getElementById('search-input'),
+      browseBtn: document.getElementById('browse-btn'),
+      clearBtn: document.getElementById('clear-btn'),
+      profileRegion: document.getElementById('profile-region'),
+      resultsTitle: document.getElementById('results-title'),
+      resultsCopy: document.getElementById('results-copy'),
+      resultsCount: document.getElementById('results-count'),
+      results: document.getElementById('results'),
+      emptyState: document.getElementById('empty-state'),
+    };
+
+    const state = {
+      currentProfile: null,
+      currentQuery: '',
+    };
 
     const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
     const safeText = (value) => String(value || '').trim();
-    const formatDate = (value) => {
-      const date = new Date(value || '');
-      if (Number.isNaN(date.getTime())) return 'Unavailable';
-      return date.toLocaleDateString();
+    const safeArray = (value) => (Array.isArray(value) ? value : []);
+    const normalizeApiBaseUrl = (value) => {
+      if (!value) return '';
+
+      try {
+        return trimTrailingSlash(new URL(value, window.location.origin).origin);
+      } catch {
+        return '';
+      }
+    };
+
+    const readStoredApiBaseUrl = () => {
+      try {
+        return normalizeApiBaseUrl(window.localStorage?.getItem(API_BASE_STORAGE_KEY));
+      } catch {
+        return '';
+      }
+    };
+
+    const rememberApiBaseUrl = (value) => {
+      try {
+        if (value) {
+          window.localStorage?.setItem(API_BASE_STORAGE_KEY, trimTrailingSlash(value));
+        }
+      } catch {
+        // localStorage can be unavailable in some embedded contexts.
+      }
     };
 
     const getDefaultApiBaseUrl = () => {
@@ -250,142 +818,668 @@
       return window.location.origin;
     };
 
-    const API_BASE_URL = trimTrailingSlash(window.__API_BASE_URL__ || getDefaultApiBaseUrl());
-    const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
+    const getApiBaseCandidates = () => {
+      const rawCandidates = [window.__API_BASE_URL__, readStoredApiBaseUrl()];
 
-    const searchInput = document.getElementById('search-input');
-    const searchBtn = document.getElementById('search-btn');
-    const profileRegion = document.getElementById('profile-region');
-    const results = document.getElementById('results');
-    const status = document.getElementById('status');
-    const heroTitle = document.getElementById('hero-title');
+      if (LOCAL_HOSTS.has(window.location.hostname)) {
+        rawCandidates.push('http://localhost:5000', window.location.origin);
+      } else {
+        rawCandidates.push(window.location.origin);
+        rawCandidates.push(...PREFERRED_API_BASE_URLS);
+        if (HOSTED_STATIC_HOSTS.has(window.location.hostname)) {
+          rawCandidates.push(HOSTED_API_BASE_URL);
+        }
+      }
 
-    const setStatus = (message) => {
-      status.textContent = message;
+      const uniqueCandidates = [];
+      for (const candidate of rawCandidates) {
+        const normalized = normalizeApiBaseUrl(candidate);
+        if (normalized && !uniqueCandidates.includes(normalized)) {
+          uniqueCandidates.push(normalized);
+        }
+      }
+
+      return uniqueCandidates;
     };
 
-    const avatarMarkup = (profile = {}) => {
-      const avatar = safeText(profile?.profile?.avatar);
-      const initials = safeText(profile?.displayName || profile?.username || 'CI')
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((part) => part.charAt(0))
-        .join('')
-        .slice(0, 2)
-        .toUpperCase();
+    let API_BASE_URL = getApiBaseCandidates()[0] || trimTrailingSlash(getDefaultApiBaseUrl());
+    let apiBaseValidated = false;
+    let apiBaseResolutionPromise = null;
+    const getAuthApiBase = () => `${API_BASE_URL}/api/auth`;
 
-      return avatar
-        ? `<div class="avatar"><img src="${avatar}" alt="${safeText(profile.displayName)}" /></div>`
-        : `<div class="avatar">${initials || 'CI'}</div>`;
+    const looksLikeAuthHealthPayload = (payload) => {
+      const status = safeText(payload?.status).toLowerCase();
+      const timestamp = safeText(payload?.timestamp);
+      if (!timestamp || !['ok', 'degraded'].includes(status)) {
+        return false;
+      }
+
+      const service = safeText(payload?.service).toLowerCase();
+      return !service || service.includes('auth') || service.includes('continental') || service.includes('id');
     };
 
-    const renderProfile = (profile) => {
-      const links = Object.entries(profile?.linkedAccounts || {})
-        .map(([provider, value]) => `<a href="#" data-provider="${provider}">${provider}: ${safeText(value)}</a>`)
-        .join('');
-
-      const details = [
-        profile?.profile?.pronouns ? `<div class="detail"><strong>Pronouns</strong>${safeText(profile.profile.pronouns)}</div>` : '',
-        profile?.profile?.location ? `<div class="detail"><strong>Location</strong>${safeText(profile.profile.location)}</div>` : '',
-        profile?.profile?.website ? `<div class="detail"><strong>Website</strong><a href="${safeText(profile.profile.website)}" target="_blank" rel="noopener noreferrer">${safeText(profile.profile.website)}</a></div>` : '',
-        profile?.createdAt ? `<div class="detail"><strong>Joined</strong>${formatDate(profile.createdAt)}</div>` : '',
-      ]
-        .filter(Boolean)
-        .join('');
-
-      profileRegion.innerHTML = `
-        <article class="profile-card">
-          ${avatarMarkup(profile)}
-          <div class="meta">
-            <p class="eyebrow">Continental ID</p>
-            <h2>${safeText(profile.displayName)}</h2>
-            <p class="handle">${safeText(profile.handle)}</p>
-            <p class="headline">${safeText(profile.profile?.headline) || 'No headline added.'}</p>
-            <p class="bio">${safeText(profile.profile?.bio) || 'No public biography provided.'}</p>
-            ${details ? `<div class="details">${details}</div>` : ''}
-            ${links ? `<div class="links">${links}</div>` : ''}
-          </div>
-        </article>
-      `;
-    };
-
-    const renderResults = (items = []) => {
-      results.innerHTML = '';
-      if (!items.length) return;
-
-      for (const item of items) {
-        const url = new URL(window.location.href);
-        url.searchParams.set('u', safeText(item.username));
-        const card = document.createElement('article');
-        card.className = 'result-item';
-        card.innerHTML = `
-          <a href="${url.toString()}">${safeText(item.displayName)} <span style="color:#5d6b78;font-weight:600;">${safeText(item.handle)}</span></a>
-          <p>${safeText(item.profile?.headline) || 'No headline added.'}</p>
-        `;
-        results.appendChild(card);
+    const probeApiBaseUrl = async (candidate) => {
+      try {
+        const response = await fetch(`${candidate}/api/health`, { cache: 'no-store' });
+        const payload = await response.json().catch(() => null);
+        return looksLikeAuthHealthPayload(payload);
+      } catch {
+        return false;
       }
     };
 
-    const loadProfile = async (username) => {
-      if (!safeText(username)) return;
+    const ensureApiBaseUrl = async () => {
+      if (apiBaseValidated && API_BASE_URL) {
+        return API_BASE_URL;
+      }
 
-      setStatus('Loading profile...');
-      try {
-        const response = await fetch(`${AUTH_API_BASE}/public/${encodeURIComponent(safeText(username))}`);
-        const data = await response.json().catch(() => ({}));
+      if (apiBaseResolutionPromise) {
+        return apiBaseResolutionPromise;
+      }
 
-        if (!response.ok) {
-          throw new Error(data.message || 'Profile not found.');
+      apiBaseResolutionPromise = (async () => {
+        const candidates = getApiBaseCandidates();
+        for (const candidate of candidates) {
+          if (await probeApiBaseUrl(candidate)) {
+            API_BASE_URL = candidate;
+            apiBaseValidated = true;
+            rememberApiBaseUrl(candidate);
+            return candidate;
+          }
         }
 
-        renderProfile(data.profile);
-        heroTitle.textContent = safeText(data.profile.displayName || data.profile.username || 'Continental ID');
-        setStatus('');
-      } catch (error) {
-        profileRegion.innerHTML = '';
-        setStatus(error.message || 'Profile not found.');
-      }
+        throw new Error(
+          candidates.length
+            ? `No reachable Continental ID auth API was found. Checked: ${candidates.join(', ')}.`
+            : 'No API base URL was configured for Continental ID.'
+        );
+      })();
+
+      return apiBaseResolutionPromise;
     };
 
-    const runSearch = async () => {
-      const query = safeText(searchInput.value);
-      if (query.length < 2) {
-        results.innerHTML = '';
-        setStatus('Enter at least 2 characters to search.');
+    const setStatus = (message) => {
+      dom.status.textContent = safeText(message);
+    };
+
+    const formatDate = (value) => {
+      const date = new Date(value || '');
+      if (Number.isNaN(date.getTime())) return 'Unavailable';
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
+    const createElement = (tag, className, text) => {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (typeof text === 'string') node.textContent = text;
+      return node;
+    };
+
+    const appendChildren = (parent, children) => {
+      for (const child of children) {
+        if (child) parent.appendChild(child);
+      }
+      return parent;
+    };
+
+    const getProfileInitials = (profile = {}) => {
+      const source = safeText(profile?.displayName || profile?.username || 'CI');
+      const parts = source.split(/[\s@._-]+/).filter(Boolean).slice(0, 2);
+      return (parts.length ? parts.map((part) => part.charAt(0).toUpperCase()).join('') : 'CI').slice(0, 2);
+    };
+
+    const createAvatar = (profile = {}, small = false) => {
+      const avatar = safeText(profile?.profile?.avatar);
+      const displayName = safeText(profile?.displayName || profile?.username || 'Continental ID');
+      const wrapper = createElement('div', `avatar${small ? ' small' : ''}`);
+
+      if (avatar) {
+        const image = document.createElement('img');
+        image.src = avatar;
+        image.alt = `${displayName} avatar`;
+        wrapper.appendChild(image);
+      } else {
+        wrapper.textContent = getProfileInitials(profile);
+      }
+
+      return wrapper;
+    };
+
+    const normalizeUsername = (value) => safeText(value).replace(/^@+/, '').toLowerCase();
+
+    const buildPageUrl = ({ username = '', query = '' } = {}) => {
+      const url = new URL(window.location.href);
+      url.search = '';
+
+      const normalizedUsername = normalizeUsername(username);
+      if (normalizedUsername) {
+        url.searchParams.set('u', normalizedUsername);
+      }
+
+      const trimmedQuery = safeText(query);
+      if (trimmedQuery) {
+        url.searchParams.set('q', trimmedQuery);
+      }
+
+      return url;
+    };
+
+    const replacePageState = ({ username = '', query = '' } = {}) => {
+      window.history.replaceState({}, '', buildPageUrl({ username, query }).toString());
+    };
+
+    const copyToClipboard = async (value) => {
+      const text = safeText(value);
+      if (!text) {
+        throw new Error('Nothing to copy.');
+      }
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
         return;
       }
 
-      setStatus('Searching...');
+      const input = document.createElement('input');
+      input.value = text;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      input.remove();
+    };
+
+    const normalizeFocusAreas = (value) =>
+      safeArray(value)
+        .map((entry) => safeText(entry).slice(0, 32))
+        .filter(Boolean);
+
+    const PROFILE_LINK_LABELS = {
+      google: 'Google',
+      facebook: 'Facebook',
+      github: 'GitHub',
+      twitter: 'Twitter / X',
+      linkedin: 'LinkedIn',
+      discord: 'Discord',
+      apple: 'Apple',
+      microsoft: 'Microsoft',
+    };
+
+    const normalizePotentialUrl = (value) => {
+      const raw = safeText(value);
+      if (!raw) return '';
+
+      const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
       try {
-        const response = await fetch(`${AUTH_API_BASE}/public-search?q=${encodeURIComponent(query)}`);
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          throw new Error(data.message || 'Search failed.');
-        }
-
-        renderResults(Array.isArray(data.results) ? data.results : []);
-        setStatus(data.results?.length ? '' : 'No public profiles matched that search.');
-      } catch (error) {
-        setStatus(error.message || 'Search failed.');
+        const url = new URL(withProtocol);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+        return url.toString();
+      } catch {
+        return '';
       }
     };
 
-    searchBtn.addEventListener('click', runSearch);
-    searchInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        runSearch();
+    const buildLinkedAccountHref = (provider, value) => {
+      const raw = safeText(value);
+      if (!raw) return '';
+
+      const directUrl = normalizePotentialUrl(raw);
+      if (directUrl) return directUrl;
+
+      const handle = raw.replace(/^@/, '').trim();
+      if (!handle) return '';
+
+      if (provider === 'github') return `https://github.com/${encodeURIComponent(handle)}`;
+      if (provider === 'twitter') return `https://x.com/${encodeURIComponent(handle)}`;
+      if (provider === 'linkedin') return `https://www.linkedin.com/in/${encodeURIComponent(handle)}`;
+      if (provider === 'facebook') return `https://www.facebook.com/${encodeURIComponent(handle)}`;
+      if (provider === 'google' && raw.includes('@')) return `mailto:${raw}`;
+      if (provider === 'microsoft' && raw.includes('@')) return `mailto:${raw}`;
+      if (provider === 'apple' && raw.includes('@')) return `mailto:${raw}`;
+
+      return '';
+    };
+
+    const getProfileSummary = (profile) => {
+      const parts = [
+        safeText(profile?.profile?.role),
+        safeText(profile?.profile?.organization) ? `at ${safeText(profile.profile.organization)}` : '',
+      ].filter(Boolean);
+
+      if (parts.length) return parts.join(' ');
+      return safeText(profile?.profile?.headline) || 'Public Continental ID profile';
+    };
+
+    const renderProfilePlaceholder = ({
+      title = 'Browse public profiles',
+      body = 'Search by handle, name, role, organization, or focus area to explore the public directory.',
+    } = {}) => {
+      state.currentProfile = null;
+      dom.profileRegion.innerHTML = '';
+
+      const panel = createElement('article', 'profile-placeholder');
+      const eyebrow = createElement('p', 'eyebrow', 'Profile view');
+      const heading = createElement('h2', '', title);
+      const copy = createElement('p', '', body);
+      copy.className = 'helper-line';
+
+      appendChildren(panel, [eyebrow, heading, copy]);
+      dom.profileRegion.appendChild(panel);
+
+      dom.heroTitle.textContent = 'People on Continental ID';
+      dom.heroCopy.textContent =
+        'Search by handle, name, role, organization, or focus area to browse public profiles.';
+      document.title = 'Continental ID Public Profiles';
+    };
+
+    const createChip = (value, accent = false) => {
+      const text = safeText(value);
+      if (!text) return null;
+      return createElement('span', `chip${accent ? ' accent' : ''}`, text);
+    };
+
+    const createFactCard = (label, value) => {
+      const text = safeText(value);
+      if (!text) return null;
+
+      const card = createElement('article', 'fact-card');
+      appendChildren(card, [createElement('strong', '', label), createElement('span', '', text)]);
+      return card;
+    };
+
+    const createLinkCard = (label, value, href) => {
+      const text = safeText(value);
+      if (!text) return null;
+
+      const card = createElement('article', 'link-card');
+      const heading = createElement('strong', '', label);
+      let body;
+
+      if (href) {
+        body = createElement('a', '', text);
+        body.href = href;
+        body.target = '_blank';
+        body.rel = 'noopener noreferrer';
+      } else {
+        body = createElement('span', '', text);
       }
+
+      appendChildren(card, [heading, body]);
+      return card;
+    };
+
+    const renderProfile = (profile) => {
+      if (!profile) {
+        renderProfilePlaceholder({
+          title: 'Profile not available',
+          body: 'That public profile could not be found. Browse the directory below or try another search.',
+        });
+        return;
+      }
+
+      state.currentProfile = profile;
+      dom.profileRegion.innerHTML = '';
+
+      const article = createElement('article', 'profile-sheet');
+      const top = createElement('div', 'profile-top');
+      const head = createElement('div', 'profile-head');
+      const identityCopy = createElement('div', 'identity-copy');
+      const actions = createElement('div', 'profile-actions');
+
+      const eyebrow = createElement('p', 'eyebrow', 'Public profile');
+      const heading = createElement('h2', '', safeText(profile.displayName || profile.username || 'Continental ID'));
+      const handle = createElement('p', 'identity-handle', safeText(profile.handle || `@${profile.username}`));
+      const summary = createElement('p', 'identity-summary', getProfileSummary(profile));
+
+      const chipRow = createElement('div', 'chip-row');
+      const joined = profile.createdAt ? `Joined ${formatDate(profile.createdAt)}` : '';
+      const chipValues = [
+        safeText(profile?.profile?.role),
+        safeText(profile?.profile?.organization),
+        safeText(profile?.profile?.location),
+        safeText(profile?.profile?.pronouns),
+        safeText(profile?.profile?.language),
+        safeText(profile?.profile?.timezone),
+        joined,
+      ];
+
+      for (const value of chipValues) {
+        const chip = createChip(value, value === joined);
+        if (chip) chipRow.appendChild(chip);
+      }
+
+      appendChildren(identityCopy, [eyebrow, heading, handle, summary, chipRow]);
+      appendChildren(head, [createAvatar(profile), identityCopy]);
+
+      const profileUrl = buildPageUrl({ username: profile.username, query: state.currentQuery }).toString();
+      const copyButton = createElement('button', 'secondary-btn', 'Copy Profile Link');
+      copyButton.type = 'button';
+      copyButton.addEventListener('click', async () => {
+        try {
+          await copyToClipboard(profileUrl);
+          setStatus('Public profile link copied.');
+        } catch (error) {
+          setStatus(error.message || 'Failed to copy the public profile link.');
+        }
+      });
+
+      const browseLink = createElement('a', 'button-link', 'Browse Directory');
+      browseLink.href = buildPageUrl({ query: state.currentQuery }).toString();
+
+      appendChildren(actions, [copyButton, browseLink]);
+
+      const websiteUrl = normalizePotentialUrl(profile?.profile?.website);
+      if (websiteUrl) {
+        const websiteLink = createElement('a', 'button-link', 'Open Website');
+        websiteLink.href = websiteUrl;
+        websiteLink.target = '_blank';
+        websiteLink.rel = 'noopener noreferrer';
+        actions.appendChild(websiteLink);
+      }
+
+      appendChildren(top, [head, actions]);
+      article.appendChild(top);
+
+      if (safeText(profile?.profile?.currentFocus)) {
+        const spotlight = createElement('section', 'spotlight-card');
+        appendChildren(spotlight, [
+          createElement('p', 'eyebrow', 'Current focus'),
+          createElement('p', '', safeText(profile.profile.currentFocus)),
+        ]);
+        article.appendChild(spotlight);
+      }
+
+      const grid = createElement('div', 'profile-grid');
+
+      if (safeText(profile?.profile?.bio)) {
+        const bioCard = createElement('section', 'section-card wide');
+        appendChildren(bioCard, [
+          createElement('p', 'eyebrow', 'About'),
+          createElement('p', '', safeText(profile.profile.bio)),
+        ]);
+        grid.appendChild(bioCard);
+      }
+
+      const focusAreas = normalizeFocusAreas(profile?.profile?.focusAreas);
+      if (focusAreas.length) {
+        const focusCard = createElement('section', 'section-card');
+        const chips = createElement('div', 'chip-row');
+        for (const area of focusAreas) {
+          const chip = createChip(area, true);
+          if (chip) chips.appendChild(chip);
+        }
+        appendChildren(focusCard, [createElement('p', 'eyebrow', 'Focus areas'), chips]);
+        grid.appendChild(focusCard);
+      }
+
+      const facts = [
+        createFactCard('Role', safeText(profile?.profile?.role)),
+        createFactCard('Organization', safeText(profile?.profile?.organization)),
+        createFactCard('Location', safeText(profile?.profile?.location)),
+        createFactCard('Pronouns', safeText(profile?.profile?.pronouns)),
+        createFactCard('Language', safeText(profile?.profile?.language)),
+        createFactCard('Timezone', safeText(profile?.profile?.timezone)),
+      ].filter(Boolean);
+
+      if (facts.length) {
+        const factsCard = createElement('section', 'section-card');
+        const factsGrid = createElement('div', 'facts-grid');
+        appendChildren(factsGrid, facts);
+        appendChildren(factsCard, [createElement('p', 'eyebrow', 'Quick facts'), factsGrid]);
+        grid.appendChild(factsCard);
+      }
+
+      const links = [];
+      const websiteLinkCard = createLinkCard('Website', safeText(profile?.profile?.website), websiteUrl);
+      if (websiteLinkCard) links.push(websiteLinkCard);
+
+      for (const [provider, value] of Object.entries(profile?.linkedAccounts || {})) {
+        const href = buildLinkedAccountHref(provider, value);
+        const card = createLinkCard(PROFILE_LINK_LABELS[provider] || provider, value, href);
+        if (card) links.push(card);
+      }
+
+      if (links.length) {
+        const linksCard = createElement('section', 'section-card');
+        const linksGrid = createElement('div', 'links-grid');
+        appendChildren(linksGrid, links);
+        appendChildren(linksCard, [createElement('p', 'eyebrow', 'Links'), linksGrid]);
+        grid.appendChild(linksCard);
+      }
+
+      if (!grid.childNodes.length) {
+        const fallbackCard = createElement('section', 'section-card wide');
+        appendChildren(fallbackCard, [
+          createElement('p', 'eyebrow', 'Profile details'),
+          createElement('p', '', 'This profile is public, but only a small set of details is currently visible.'),
+        ]);
+        grid.appendChild(fallbackCard);
+      }
+
+      article.appendChild(grid);
+      dom.profileRegion.appendChild(article);
+
+      dom.heroTitle.textContent = safeText(profile.displayName || profile.username || 'Continental ID');
+      dom.heroCopy.textContent =
+        safeText(profile?.profile?.currentFocus) ||
+        safeText(profile?.profile?.headline) ||
+        'Public profile on Continental ID.';
+      document.title = `${safeText(profile.displayName || profile.username || 'Continental ID')} • Continental ID`;
+    };
+
+    const createResultCard = (profile) => {
+      const card = createElement('a', 'result-card');
+      card.href = buildPageUrl({ username: profile.username, query: state.currentQuery }).toString();
+
+      const head = createElement('div', 'result-head');
+      const copy = createElement('div', 'result-copy');
+      const title = createElement('strong', '', safeText(profile.displayName || profile.username || 'Continental ID'));
+      const handle = createElement('span', '', safeText(profile.handle || `@${profile.username}`));
+      const summary = createElement('p', 'result-summary', getProfileSummary(profile));
+
+      appendChildren(copy, [title, handle, summary]);
+      appendChildren(head, [createAvatar(profile, true), copy]);
+      card.appendChild(head);
+
+      const headline = safeText(profile?.profile?.headline);
+      if (headline && headline !== summary.textContent) {
+        card.appendChild(createElement('p', 'result-headline', headline));
+      }
+
+      const focusAreas = normalizeFocusAreas(profile?.profile?.focusAreas);
+      if (focusAreas.length) {
+        const chips = createElement('div', 'chip-row');
+        for (const area of focusAreas.slice(0, 3)) {
+          const chip = createChip(area);
+          if (chip) chips.appendChild(chip);
+        }
+        card.appendChild(chips);
+      }
+
+      return card;
+    };
+
+    const renderResults = (
+      profiles,
+      {
+        title = 'Recently updated profiles',
+        copy = 'Browse the latest public profiles across the Continental ID directory.',
+        emptyMessage = 'No public profiles matched that search yet.',
+      } = {}
+    ) => {
+      const items = Array.isArray(profiles) ? profiles : [];
+      dom.results.innerHTML = '';
+      dom.resultsTitle.textContent = title;
+      dom.resultsCopy.textContent = copy;
+      dom.resultsCount.textContent = `${items.length} ${items.length === 1 ? 'profile' : 'profiles'}`;
+
+      if (!items.length) {
+        dom.emptyState.hidden = false;
+        dom.emptyState.textContent = emptyMessage;
+        return;
+      }
+
+      dom.emptyState.hidden = true;
+      for (const profile of items) {
+        dom.results.appendChild(createResultCard(profile));
+      }
+    };
+
+    const fetchPublicJson = async (path) => {
+      await ensureApiBaseUrl();
+      const response = await fetch(`${getAuthApiBase()}${path}`);
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Public profile request failed.');
+      }
+
+      return data;
+    };
+
+    const loadProfile = async (username, { updateUrl = true } = {}) => {
+      const handle = normalizeUsername(username);
+      if (!PROFILE_HANDLE_PATTERN.test(handle)) {
+        renderProfile(null);
+        return null;
+      }
+
+      const data = await fetchPublicJson(`/public/${encodeURIComponent(handle)}`);
+      renderProfile(data.profile);
+
+      if (updateUrl) {
+        replacePageState({ username: data.profile.username, query: state.currentQuery });
+      }
+
+      return data.profile;
+    };
+
+    const loadDirectory = async (query = '', { updateUrl = true } = {}) => {
+      const trimmedQuery = safeText(query);
+      const data = await fetchPublicJson(`/public-search?q=${encodeURIComponent(trimmedQuery)}`);
+      state.currentQuery = trimmedQuery;
+
+      renderResults(data.results, trimmedQuery
+        ? {
+            title: 'Search results',
+            copy: `Showing public profiles that match “${trimmedQuery}”. Search includes names, handles, roles, organizations, and other visible public fields.`,
+            emptyMessage: `No public profiles matched “${trimmedQuery}”.`,
+          }
+        : {
+            title: 'Recently updated profiles',
+            copy: 'Browse the latest public profiles across the Continental ID directory.',
+            emptyMessage: 'No public profiles are available right now.',
+          });
+
+      if (updateUrl) {
+        replacePageState({ username: state.currentProfile?.username || '', query: trimmedQuery });
+      }
+
+      return data.results || [];
+    };
+
+    const runSearch = async () => {
+      const query = safeText(dom.searchInput.value);
+      const directHandle = normalizeUsername(query);
+      const looksLikeHandle = PROFILE_HANDLE_PATTERN.test(directHandle);
+
+      setStatus(query ? 'Searching public profiles...' : 'Loading directory...');
+
+      try {
+        if (looksLikeHandle) {
+          try {
+            await loadProfile(directHandle, { updateUrl: false });
+          } catch {
+            renderProfilePlaceholder({
+              title: 'Profile not found',
+              body: 'That handle is not public right now. Search results below may still help you find the right profile.',
+            });
+          }
+        } else if (!query) {
+          renderProfilePlaceholder();
+        }
+
+        await loadDirectory(query, { updateUrl: false });
+        replacePageState({ username: state.currentProfile?.username || '', query });
+        setStatus('');
+      } catch (error) {
+        setStatus(error.message || 'Failed to load public profiles.');
+        if (!state.currentProfile) {
+          renderProfilePlaceholder({
+            title: 'Directory unavailable',
+            body: 'The public directory could not be loaded right now. Try again in a moment.',
+          });
+        }
+      }
+    };
+
+    const browseLatest = async () => {
+      dom.searchInput.value = '';
+      renderProfilePlaceholder();
+      setStatus('Loading latest public profiles...');
+
+      try {
+        await loadDirectory('', { updateUrl: false });
+        replacePageState({ username: '', query: '' });
+        setStatus('');
+      } catch (error) {
+        setStatus(error.message || 'Failed to load the public directory.');
+      }
+    };
+
+    const initialize = async () => {
+      renderProfilePlaceholder();
+
+      const requestedQuery = safeText(params.get('q'));
+      const requestedUser = normalizeUsername(params.get('u'));
+
+      if (requestedQuery) {
+        dom.searchInput.value = requestedQuery;
+      } else if (requestedUser) {
+        dom.searchInput.value = requestedUser;
+      }
+
+      try {
+        if (requestedUser) {
+          setStatus('Loading profile...');
+          try {
+            await loadProfile(requestedUser, { updateUrl: false });
+          } catch (error) {
+            renderProfilePlaceholder({
+              title: 'Profile not available',
+              body: error.message || 'That public profile could not be found. Browse the directory below for other people.',
+            });
+          }
+          await loadDirectory(requestedQuery, { updateUrl: false });
+          replacePageState({ username: state.currentProfile?.username || '', query: requestedQuery });
+          setStatus('');
+          return;
+        }
+
+        if (requestedQuery) {
+          await runSearch();
+          return;
+        }
+
+        await browseLatest();
+      } catch (error) {
+        setStatus(error.message || 'Failed to load the public directory.');
+      }
+    };
+
+    dom.searchForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      runSearch();
     });
 
-    const username = safeText(params.get('u'));
-    if (username) {
-      searchInput.value = username;
-      loadProfile(username);
-    } else {
-      setStatus('Search public profiles or open a direct profile link.');
-    }
+    dom.browseBtn.addEventListener('click', () => {
+      browseLatest();
+    });
+
+    dom.clearBtn.addEventListener('click', () => {
+      dom.searchInput.value = '';
+      browseLatest();
+    });
+
+    initialize();
   </script>
 </body>
 </html>

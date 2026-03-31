@@ -6,7 +6,16 @@ const HOSTED_STATIC_HOSTS = new Set([
   'pclaystation.github.io',
   'mpmc.ddns.net',
 ]);
+const PREFERRED_API_BASE_URLS = [
+  'https://api.continental-hub.com',
+  'https://auth.continental-hub.com',
+  'https://id.continental-hub.com',
+  'https://backend.continental-hub.com',
+  'https://continental-hub.com',
+  'https://login.continental-hub.com',
+];
 const HOSTED_API_BASE_URL = 'https://mpmc.ddns.net';
+const API_BASE_STORAGE_KEY = 'continental.authApiBaseUrl';
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const ACTIVE_TAB_STORAGE_KEY = 'dashboard.activeTab';
@@ -73,6 +82,8 @@ const dom = {
   profileDisplayName: document.getElementById('profile-display-name'),
   profilePronouns: document.getElementById('profile-pronouns'),
   profileHeadline: document.getElementById('profile-headline'),
+  profileRole: document.getElementById('profile-role'),
+  profileOrganization: document.getElementById('profile-organization'),
   profileEmail: document.getElementById('profile-email'),
   profileEmailCurrentPassword: document.getElementById('profile-email-current-password'),
   profileAvatarPreview: document.getElementById('profile-avatar-preview'),
@@ -85,10 +96,16 @@ const dom = {
   profileWebsite: document.getElementById('profile-website'),
   profileTimezone: document.getElementById('profile-timezone'),
   profileLanguage: document.getElementById('profile-language'),
+  profileCurrentFocus: document.getElementById('profile-current-focus'),
   profileBio: document.getElementById('profile-bio'),
+  profileFocusAreas: document.getElementById('profile-focus-areas'),
   profileId: document.getElementById('profile-id'),
   profileCreated: document.getElementById('profile-created'),
   profilePublicLink: document.getElementById('profile-public-link'),
+  publicProfileStatusBadge: document.getElementById('public-profile-status-badge'),
+  publicProfileDiscoveryBadge: document.getElementById('public-profile-discovery-badge'),
+  publicProfileLinkHelper: document.getElementById('public-profile-link-helper'),
+  copyPublicProfileLinkBtn: document.getElementById('copy-public-profile-btn'),
   openPublicProfileBtn: document.getElementById('open-public-profile-btn'),
   profileProgressBar: document.getElementById('profile-progress-bar'),
   profileProgressBars: Array.from(document.querySelectorAll('.profile-progress-fill')),
@@ -137,7 +154,11 @@ const dom = {
   privacyPublic: document.getElementById('privacy-public'),
   privacySearchable: document.getElementById('privacy-searchable'),
   publicFieldHeadline: document.getElementById('public-field-headline'),
+  publicFieldRole: document.getElementById('public-field-role'),
+  publicFieldOrganization: document.getElementById('public-field-organization'),
   publicFieldBio: document.getElementById('public-field-bio'),
+  publicFieldCurrentFocus: document.getElementById('public-field-current-focus'),
+  publicFieldFocusAreas: document.getElementById('public-field-focus-areas'),
   publicFieldPronouns: document.getElementById('public-field-pronouns'),
   publicFieldLocation: document.getElementById('public-field-location'),
   publicFieldWebsite: document.getElementById('public-field-website'),
@@ -145,6 +166,8 @@ const dom = {
   publicFieldLanguage: document.getElementById('public-field-language'),
   publicFieldLinked: document.getElementById('public-field-linked'),
   publicFieldMemberSince: document.getElementById('public-field-member-since'),
+  publicProfileSummary: document.getElementById('public-profile-summary'),
+  publicProfileVisibleCount: document.getElementById('public-profile-visible-count'),
   publicProfilePreviewBtn: document.getElementById('public-profile-preview-btn'),
   publicProfileDirectoryBtn: document.getElementById('public-profile-directory-btn'),
 
@@ -198,6 +221,31 @@ const dom = {
 
 const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
 const safeText = (value) => String(value || '').trim();
+const normalizeApiBaseUrl = (value) => {
+  if (!value) return '';
+
+  try {
+    return trimTrailingSlash(new URL(value, window.location.origin).origin);
+  } catch {
+    return '';
+  }
+};
+const readStoredApiBaseUrl = () => {
+  try {
+    return normalizeApiBaseUrl(window.localStorage?.getItem(API_BASE_STORAGE_KEY));
+  } catch {
+    return '';
+  }
+};
+const rememberApiBaseUrl = (value) => {
+  try {
+    if (value) {
+      window.localStorage?.setItem(API_BASE_STORAGE_KEY, trimTrailingSlash(value));
+    }
+  } catch {
+    // localStorage can be unavailable in some embedded contexts.
+  }
+};
 const readStoredArray = (key) => {
   try {
     const parsed = JSON.parse(localStorage.getItem(key) || '[]');
@@ -220,7 +268,11 @@ const normalizeActivitySummary = (summary = {}) => ({
 
 const normalizePublicProfileSettings = (settings = {}) => ({
   headline: Boolean(settings?.headline),
+  role: Boolean(settings?.role),
+  organization: Boolean(settings?.organization),
   bio: Boolean(settings?.bio),
+  currentFocus: Boolean(settings?.currentFocus),
+  focusAreas: Boolean(settings?.focusAreas),
   pronouns: Boolean(settings?.pronouns),
   location: Boolean(settings?.location),
   website: Boolean(settings?.website),
@@ -229,6 +281,28 @@ const normalizePublicProfileSettings = (settings = {}) => ({
   linkedAccounts: Boolean(settings?.linkedAccounts),
   memberSince: Boolean(settings?.memberSince),
 });
+
+const normalizeFocusAreas = (value) => {
+  const rawValues = Array.isArray(value) ? value : String(value || '').split(/[,\n]/);
+  const next = [];
+  const seen = new Set();
+
+  for (const entry of rawValues) {
+    const cleaned = safeText(entry).slice(0, 32);
+    if (!cleaned) continue;
+
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(cleaned);
+
+    if (next.length >= 8) {
+      break;
+    }
+  }
+
+  return next;
+};
 
 const normalizeMfaState = (mfa = {}) => ({
   enabled: Boolean(mfa?.enabled),
@@ -250,10 +324,87 @@ const getDefaultApiBaseUrl = () => {
   return window.location.origin;
 };
 
-const API_BASE_URL = trimTrailingSlash(
-  window.__API_BASE_URL__ || getDefaultApiBaseUrl()
-);
-const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
+const getApiBaseCandidates = () => {
+  const rawCandidates = [window.__API_BASE_URL__, readStoredApiBaseUrl()];
+
+  if (LOCAL_HOSTS.has(window.location.hostname)) {
+    rawCandidates.push('http://localhost:5000', window.location.origin);
+  } else {
+    rawCandidates.push(window.location.origin);
+    rawCandidates.push(...PREFERRED_API_BASE_URLS);
+    if (HOSTED_STATIC_HOSTS.has(window.location.hostname)) {
+      rawCandidates.push(HOSTED_API_BASE_URL);
+    }
+  }
+
+  const uniqueCandidates = [];
+  for (const candidate of rawCandidates) {
+    const normalized = normalizeApiBaseUrl(candidate);
+    if (normalized && !uniqueCandidates.includes(normalized)) {
+      uniqueCandidates.push(normalized);
+    }
+  }
+
+  return uniqueCandidates;
+};
+
+let API_BASE_URL = getApiBaseCandidates()[0] || trimTrailingSlash(getDefaultApiBaseUrl());
+let apiBaseValidated = false;
+let apiBaseResolutionPromise = null;
+const getAuthApiBase = () => `${API_BASE_URL}/api/auth`;
+
+const looksLikeAuthHealthPayload = (payload) => {
+  const status = safeText(payload?.status).toLowerCase();
+  const timestamp = safeText(payload?.timestamp);
+  if (!timestamp || !['ok', 'degraded'].includes(status)) {
+    return false;
+  }
+
+  const service = safeText(payload?.service).toLowerCase();
+  return !service || service.includes('auth') || service.includes('continental') || service.includes('id');
+};
+
+const probeApiBaseUrl = async (candidate) => {
+  try {
+    const response = await fetch(`${candidate}/api/health`, {
+      cache: 'no-store',
+    });
+    const payload = await response.json().catch(() => null);
+    return looksLikeAuthHealthPayload(payload);
+  } catch {
+    return false;
+  }
+};
+
+const ensureApiBaseUrl = async () => {
+  if (apiBaseValidated && API_BASE_URL) {
+    return API_BASE_URL;
+  }
+
+  if (apiBaseResolutionPromise) {
+    return apiBaseResolutionPromise;
+  }
+
+  apiBaseResolutionPromise = (async () => {
+    const candidates = getApiBaseCandidates();
+    for (const candidate of candidates) {
+      if (await probeApiBaseUrl(candidate)) {
+        API_BASE_URL = candidate;
+        apiBaseValidated = true;
+        rememberApiBaseUrl(candidate);
+        return candidate;
+      }
+    }
+
+    throw new Error(
+      candidates.length
+        ? `No reachable Continental ID auth API was found. Checked: ${candidates.join(', ')}.`
+        : 'No API base URL was configured for Continental ID.'
+    );
+  })();
+
+  return apiBaseResolutionPromise;
+};
 
 const getDefaultLoginPopupUrl = () => {
   if (LOCAL_HOSTS.has(window.location.hostname)) {
@@ -857,7 +1008,8 @@ const refreshSession = async () => {
     const authEpoch = state.authEpoch;
 
     try {
-      const res = await fetchWithTimeout(`${AUTH_API_BASE}/refresh_token`, {
+      await ensureApiBaseUrl();
+      const res = await fetchWithTimeout(`${getAuthApiBase()}/refresh_token`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -894,7 +1046,7 @@ const refreshSession = async () => {
             : error instanceof TypeError
               ? 'network'
               : 'error',
-        message: '',
+        message: safeText(error?.message),
       };
     } finally {
       state.refreshPromise = null;
@@ -911,7 +1063,9 @@ const toApiError = (err) => {
 
   if (err instanceof TypeError) {
     return new Error(
-      'Could not reach the account service. Check that the API base URL points to a live backend.'
+      API_BASE_URL
+        ? `Could not reach the account service at ${API_BASE_URL}. Check that this origin is serving the Continental ID auth API.`
+        : 'Could not determine a live Continental ID auth API.'
     );
   }
 
@@ -935,7 +1089,8 @@ const apiRequest = async (path, options = {}) => {
 
   let response;
   try {
-    response = await fetchWithTimeout(`${AUTH_API_BASE}${path}`, {
+    await ensureApiBaseUrl();
+    response = await fetchWithTimeout(`${getAuthApiBase()}${path}`, {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -1226,6 +1381,22 @@ const renderProfileChecklist = (user = state.user) => {
       complete: Boolean(safeText(user.profile?.headline)),
     },
     {
+      title: 'Public context added',
+      detail:
+        safeText(user.profile?.role) ||
+        safeText(user.profile?.organization) ||
+        safeText(user.profile?.currentFocus) ||
+        normalizeFocusAreas(user.profile?.focusAreas).length
+          ? 'Role, organization, or focus details are ready.'
+          : 'Add role, organization, or focus areas so the public profile is more useful.',
+      complete: Boolean(
+        safeText(user.profile?.role) ||
+          safeText(user.profile?.organization) ||
+          safeText(user.profile?.currentFocus) ||
+          normalizeFocusAreas(user.profile?.focusAreas).length
+      ),
+    },
+    {
       title: 'Email verified',
       detail: user.isVerified ? 'Verification complete.' : 'Verify to reduce lockout risk.',
       complete: Boolean(user.isVerified),
@@ -1239,6 +1410,15 @@ const renderProfileChecklist = (user = state.user) => {
       title: 'Timezone added',
       detail: safeText(user.profile?.timezone) ? 'Timezone is set.' : 'Set a timezone for accurate scheduling.',
       complete: Boolean(safeText(user.profile?.timezone)),
+    },
+    {
+      title: 'Public profile ready',
+      detail: user.preferences?.profilePublic
+        ? user.preferences?.searchable
+          ? 'Public page is live and discoverable.'
+          : 'Public page is live by direct link only.'
+        : 'Enable the public profile once the page is ready to share.',
+      complete: Boolean(user.preferences?.profilePublic),
     },
     {
       title: 'Security alerts enabled',
@@ -1335,6 +1515,33 @@ const renderActionCenter = (user = state.user) => {
     });
   }
 
+  if (!user.preferences?.profilePublic || !user.preferences?.searchable) {
+    actions.push({
+      tone: 'neutral',
+      title: 'Tune your public profile',
+      detail: user.preferences?.profilePublic
+        ? 'Your page is live, but directory discovery is off. Turn search on if people should be able to find you.'
+        : 'Your public page is still private. Review visibility settings before sharing it.',
+      actionLabel: 'Open preferences',
+      onAction: () => switchTab('preferences'),
+    });
+  }
+
+  if (
+    !safeText(user.profile?.role) &&
+    !safeText(user.profile?.organization) &&
+    !safeText(user.profile?.currentFocus) &&
+    !normalizeFocusAreas(user.profile?.focusAreas).length
+  ) {
+    actions.push({
+      tone: 'neutral',
+      title: 'Add public context',
+      detail: 'Role, organization, focus, and tags make the public profile more useful to scan and search.',
+      actionLabel: 'Edit profile',
+      onAction: () => switchTab('profile'),
+    });
+  }
+
   if (!user.security?.loginAlerts) {
     actions.push({
       tone: 'neutral',
@@ -1399,22 +1606,145 @@ const getPublicProfileUrl = (username = state.user?.username) => {
   return url.toString();
 };
 
+const getPublicVisibilityInputs = () =>
+  [
+    dom.publicFieldHeadline,
+    dom.publicFieldRole,
+    dom.publicFieldOrganization,
+    dom.publicFieldBio,
+    dom.publicFieldCurrentFocus,
+    dom.publicFieldFocusAreas,
+    dom.publicFieldPronouns,
+    dom.publicFieldLocation,
+    dom.publicFieldWebsite,
+    dom.publicFieldTimezone,
+    dom.publicFieldLanguage,
+    dom.publicFieldLinked,
+    dom.publicFieldMemberSince,
+  ].filter(Boolean);
+
+const getDraftPublicProfileState = (user = state.user) => {
+  const username = safeText(dom.profileUsername?.value || user?.username).toLowerCase();
+  const savedUsername = safeText(user?.username).toLowerCase();
+  const url = getPublicProfileUrl(username);
+  const isPublic = dom.privacyPublic
+    ? Boolean(dom.privacyPublic.checked)
+    : Boolean(user?.preferences?.profilePublic);
+  const searchable = dom.privacySearchable
+    ? Boolean(dom.privacySearchable.checked)
+    : Boolean(user?.preferences?.searchable);
+  const visibleCount = getPublicVisibilityInputs().filter((input) => Boolean(input?.checked)).length;
+  const hasPendingLinkChange = Boolean(username && savedUsername && username !== savedUsername);
+  const hasPendingVisibilityChange = Boolean(
+    user &&
+      dom.privacyPublic &&
+      Boolean(dom.privacyPublic.checked) !== Boolean(user?.preferences?.profilePublic)
+  );
+
+  return {
+    username,
+    url,
+    isPublic,
+    searchable,
+    visibleCount,
+    hasPendingLinkChange,
+    hasPendingVisibilityChange,
+  };
+};
+
 const updatePublicProfileLink = (user = state.user) => {
-  if (!dom.profilePublicLink) return;
+  const { url, isPublic, searchable, visibleCount, hasPendingLinkChange, hasPendingVisibilityChange } =
+    getDraftPublicProfileState(user);
+  const savedUrl = getPublicProfileUrl(user?.username);
 
-  const url = getPublicProfileUrl(user?.username);
-  const isPublic = Boolean(user?.preferences?.profilePublic);
+  if (dom.profilePublicLink) {
+    if (!url) {
+      dom.profilePublicLink.value = 'Set a username to generate a public profile link.';
+    } else if (isPublic) {
+      dom.profilePublicLink.value = url;
+    } else {
+      dom.profilePublicLink.value = `${url} (currently private)`;
+    }
+  }
 
-  if (!url) {
-    dom.profilePublicLink.value = 'Set a username to generate a public profile link.';
-  } else if (isPublic) {
-    dom.profilePublicLink.value = url;
-  } else {
-    dom.profilePublicLink.value = `${url} (currently private)`;
+  if (dom.publicProfileStatusBadge) {
+    dom.publicProfileStatusBadge.textContent = isPublic ? 'Public' : 'Private';
+  }
+
+  if (dom.publicProfileDiscoveryBadge) {
+    dom.publicProfileDiscoveryBadge.textContent = searchable ? 'Directory enabled' : 'Hidden from search';
+  }
+
+  if (dom.publicProfileVisibleCount) {
+    dom.publicProfileVisibleCount.textContent = `${visibleCount} sections visible`;
+  }
+
+  const helperMessage = !url
+    ? 'Choose a username to generate a shareable public link.'
+    : hasPendingLinkChange || hasPendingVisibilityChange
+      ? 'Save your latest username or visibility changes before sharing or opening the live public page.'
+    : !isPublic
+      ? 'Your profile link is reserved, but the page stays private until public mode is enabled and saved.'
+      : !searchable
+        ? 'Your public page is live through its direct link, but it will not appear in directory search.'
+        : 'Your public page is live and discoverable in the public directory.';
+
+  if (dom.publicProfileLinkHelper) {
+    dom.publicProfileLinkHelper.textContent = helperMessage;
+  }
+
+  if (dom.publicProfileSummary) {
+    dom.publicProfileSummary.textContent = isPublic
+      ? searchable
+        ? `People can find this profile in search, and ${visibleCount} sections are ready to show.`
+        : `The profile is public by direct link only, with ${visibleCount} visible sections configured.`
+      : 'Keep your profile private until the public version is ready to share.';
   }
 
   if (dom.openPublicProfileBtn) {
-    dom.openPublicProfileBtn.disabled = !url || !isPublic;
+    dom.openPublicProfileBtn.disabled =
+      !savedUrl ||
+      !Boolean(user?.preferences?.profilePublic) ||
+      hasPendingLinkChange ||
+      hasPendingVisibilityChange;
+  }
+
+  if (dom.copyPublicProfileLinkBtn) {
+    dom.copyPublicProfileLinkBtn.disabled = !url;
+  }
+};
+
+const copyTextToClipboard = async (value) => {
+  const text = safeText(value);
+  if (!text) {
+    throw new Error('Nothing to copy yet.');
+  }
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const input = document.createElement('input');
+  input.value = text;
+  document.body.appendChild(input);
+  input.select();
+  document.execCommand('copy');
+  input.remove();
+};
+
+const handleCopyPublicProfileLink = async () => {
+  const { url } = getDraftPublicProfileState(state.user);
+  if (!url) {
+    showToast('Set a username before copying your public profile link.', 'error');
+    return;
+  }
+
+  try {
+    await copyTextToClipboard(url);
+    showToast('Public profile link copied.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Failed to copy the public profile link.', 'error');
   }
 };
 
@@ -1441,13 +1771,19 @@ const fillProfile = (user) => {
   if (dom.profileDisplayName) dom.profileDisplayName.value = user.displayName || '';
   if (dom.profilePronouns) dom.profilePronouns.value = user.profile?.pronouns || '';
   if (dom.profileHeadline) dom.profileHeadline.value = user.profile?.headline || '';
+  if (dom.profileRole) dom.profileRole.value = user.profile?.role || '';
+  if (dom.profileOrganization) dom.profileOrganization.value = user.profile?.organization || '';
   if (dom.profileEmail) dom.profileEmail.value = user.email || '';
   if (dom.profileEmailCurrentPassword) dom.profileEmailCurrentPassword.value = '';
   if (dom.profileLocation) dom.profileLocation.value = user.profile?.location || '';
   if (dom.profileWebsite) dom.profileWebsite.value = user.profile?.website || '';
   if (dom.profileTimezone) dom.profileTimezone.value = user.profile?.timezone || '';
   if (dom.profileLanguage) dom.profileLanguage.value = user.profile?.language || '';
+  if (dom.profileCurrentFocus) dom.profileCurrentFocus.value = user.profile?.currentFocus || '';
   if (dom.profileBio) dom.profileBio.value = user.profile?.bio || '';
+  if (dom.profileFocusAreas) {
+    dom.profileFocusAreas.value = normalizeFocusAreas(user.profile?.focusAreas).join(', ');
+  }
   if (dom.profileId) dom.profileId.value = user.continentalId || user.userId || '';
   if (dom.profileCreated) dom.profileCreated.value = formatDate(user.createdAt);
 
@@ -1478,7 +1814,11 @@ const fillPreferences = (user) => {
   if (dom.privacyPublic) dom.privacyPublic.checked = Boolean(prefs.profilePublic);
   if (dom.privacySearchable) dom.privacySearchable.checked = Boolean(prefs.searchable);
   if (dom.publicFieldHeadline) dom.publicFieldHeadline.checked = publicProfile.headline;
+  if (dom.publicFieldRole) dom.publicFieldRole.checked = publicProfile.role;
+  if (dom.publicFieldOrganization) dom.publicFieldOrganization.checked = publicProfile.organization;
   if (dom.publicFieldBio) dom.publicFieldBio.checked = publicProfile.bio;
+  if (dom.publicFieldCurrentFocus) dom.publicFieldCurrentFocus.checked = publicProfile.currentFocus;
+  if (dom.publicFieldFocusAreas) dom.publicFieldFocusAreas.checked = publicProfile.focusAreas;
   if (dom.publicFieldPronouns) dom.publicFieldPronouns.checked = publicProfile.pronouns;
   if (dom.publicFieldLocation) dom.publicFieldLocation.checked = publicProfile.location;
   if (dom.publicFieldWebsite) dom.publicFieldWebsite.checked = publicProfile.website;
@@ -2342,9 +2682,12 @@ const handleProfileSave = async (event) => {
   const displayName = safeText(dom.profileDisplayName?.value);
   const pronouns = safeText(dom.profilePronouns?.value);
   const headline = safeText(dom.profileHeadline?.value);
+  const role = safeText(dom.profileRole?.value);
+  const organization = safeText(dom.profileOrganization?.value);
   const email = safeText(dom.profileEmail?.value).toLowerCase();
   const avatar = normalizeAvatarInput(state.profileAvatarDraft || dom.profileAvatarUrl?.value);
   const website = normalizeWebsiteInput(dom.profileWebsite?.value);
+  const focusAreas = normalizeFocusAreas(dom.profileFocusAreas?.value);
   const currentEmail = safeText(state.user?.email).toLowerCase();
   const emailChanged = email !== currentEmail;
   const currentPassword = dom.profileEmailCurrentPassword?.value || '';
@@ -2382,6 +2725,8 @@ const handleProfileSave = async (event) => {
       displayName,
       pronouns,
       headline,
+      role,
+      organization,
       email,
       currentPassword,
       avatar: avatar || '',
@@ -2389,6 +2734,8 @@ const handleProfileSave = async (event) => {
       website,
       timezone: safeText(dom.profileTimezone?.value),
       language: safeText(dom.profileLanguage?.value),
+      currentFocus: safeText(dom.profileCurrentFocus?.value),
+      focusAreas,
       bio: safeText(dom.profileBio?.value),
     };
 
@@ -2662,7 +3009,11 @@ const buildPreferencesPayload = () => ({
   searchable: Boolean(dom.privacySearchable?.checked),
   publicProfile: {
     headline: Boolean(dom.publicFieldHeadline?.checked),
+    role: Boolean(dom.publicFieldRole?.checked),
+    organization: Boolean(dom.publicFieldOrganization?.checked),
     bio: Boolean(dom.publicFieldBio?.checked),
+    currentFocus: Boolean(dom.publicFieldCurrentFocus?.checked),
+    focusAreas: Boolean(dom.publicFieldFocusAreas?.checked),
     pronouns: Boolean(dom.publicFieldPronouns?.checked),
     location: Boolean(dom.publicFieldLocation?.checked),
     website: Boolean(dom.publicFieldWebsite?.checked),
@@ -2997,7 +3348,14 @@ const setupEventHandlers = () => {
     dom.profileAvatarRemoveBtn.addEventListener('click', handleProfileAvatarRemove);
   }
 
+  if (dom.profileUsername) {
+    dom.profileUsername.addEventListener('input', () => updatePublicProfileLink(state.user));
+  }
+
   if (dom.profileForm) dom.profileForm.addEventListener('submit', handleProfileSave);
+  if (dom.copyPublicProfileLinkBtn) {
+    dom.copyPublicProfileLinkBtn.addEventListener('click', handleCopyPublicProfileLink);
+  }
   if (dom.openPublicProfileBtn) {
     dom.openPublicProfileBtn.addEventListener('click', () => {
       const url = getPublicProfileUrl(state.user?.username);
@@ -3017,9 +3375,19 @@ const setupEventHandlers = () => {
   if (dom.mfaBackupBtn) dom.mfaBackupBtn.addEventListener('click', handleMfaBackupCodes);
   if (dom.publicProfilePreviewBtn) {
     dom.publicProfilePreviewBtn.addEventListener('click', () => {
+      const draftState = getDraftPublicProfileState(state.user);
+      if (draftState.hasPendingLinkChange || draftState.hasPendingVisibilityChange) {
+        showToast('Save your latest public profile changes before previewing the live page.', 'warn');
+        return;
+      }
+
       const url = getPublicProfileUrl(state.user?.username);
       if (!url) {
         showToast('Set a username before previewing your public profile.', 'error');
+        return;
+      }
+      if (!state.user?.preferences?.profilePublic) {
+        showToast('Turn on public mode in Preferences before previewing the public page.', 'error');
         return;
       }
       window.open(url, '_blank', 'noopener');
@@ -3027,6 +3395,27 @@ const setupEventHandlers = () => {
   }
   if (dom.publicProfileDirectoryBtn) {
     dom.publicProfileDirectoryBtn.addEventListener('click', openPublicProfileDirectory);
+  }
+
+  for (const input of [
+    dom.privacyPublic,
+    dom.privacySearchable,
+    dom.publicFieldHeadline,
+    dom.publicFieldRole,
+    dom.publicFieldOrganization,
+    dom.publicFieldBio,
+    dom.publicFieldCurrentFocus,
+    dom.publicFieldFocusAreas,
+    dom.publicFieldPronouns,
+    dom.publicFieldLocation,
+    dom.publicFieldWebsite,
+    dom.publicFieldTimezone,
+    dom.publicFieldLanguage,
+    dom.publicFieldLinked,
+    dom.publicFieldMemberSince,
+  ]) {
+    if (!input) continue;
+    input.addEventListener('change', () => updatePublicProfileLink(state.user));
   }
 
   if (dom.newPassword) {
@@ -3243,6 +3632,7 @@ window.addEventListener('load', async () => {
   setConnectionStatus();
   setSyncStatus(null);
 
+  await ensureApiBaseUrl().catch(() => {});
   setupEventHandlers();
   updatePasswordStrengthUi();
 

@@ -425,6 +425,20 @@
                   />
                 </label>
                 <label>
+                  Role / title
+                  <input id="profile-role" name="role" type="text" maxlength="100" placeholder="Product designer" />
+                </label>
+                <label>
+                  Organization
+                  <input
+                    id="profile-organization"
+                    name="organization"
+                    type="text"
+                    maxlength="100"
+                    placeholder="Continental Studio"
+                  />
+                </label>
+                <label>
                   Email
                   <input id="profile-email" name="email" type="email" required />
                 </label>
@@ -455,8 +469,29 @@
                   <input id="profile-language" name="language" type="text" maxlength="32" placeholder="en" />
                 </label>
                 <label class="wide-field">
+                  Current focus
+                  <input
+                    id="profile-current-focus"
+                    name="currentFocus"
+                    type="text"
+                    maxlength="160"
+                    placeholder="Improving the public profile experience and account accessibility"
+                  />
+                </label>
+                <label class="wide-field">
                   Bio
                   <textarea id="profile-bio" name="bio" rows="4" maxlength="320" placeholder="Tell us about you"></textarea>
+                </label>
+                <label class="wide-field">
+                  Focus areas
+                  <input
+                    id="profile-focus-areas"
+                    name="focusAreas"
+                    type="text"
+                    maxlength="240"
+                    placeholder="Identity, accessibility, design systems, security"
+                  />
+                  <small>Comma-separated topics shown as tags on your public profile.</small>
                 </label>
                 <label>
                   Continental ID
@@ -466,12 +501,29 @@
                   Created
                   <input id="profile-created" type="text" disabled />
                 </label>
-                <label class="wide-field">
-                  Public profile
-                  <input id="profile-public-link" type="text" readonly />
-                  <small>Shown when your profile is public.</small>
-                </label>
-                <button id="open-public-profile-btn" class="secondary-btn" type="button">Open Public Profile</button>
+                <div class="public-link-card wide-field">
+                  <div class="section-heading compact-heading">
+                    <div>
+                      <p class="eyebrow">Public presence</p>
+                      <h3>Your public link</h3>
+                    </div>
+                    <div class="public-status-chips" aria-live="polite">
+                      <span id="public-profile-status-badge" class="inline-chip">Private</span>
+                      <span id="public-profile-discovery-badge" class="inline-chip">Hidden from search</span>
+                    </div>
+                  </div>
+                  <label class="public-link-field">
+                    Public profile URL
+                    <input id="profile-public-link" type="text" readonly />
+                  </label>
+                  <p id="public-profile-link-helper" class="helper-line">
+                    Choose a username to generate a shareable public link.
+                  </p>
+                  <div class="public-profile-actions">
+                    <button id="copy-public-profile-btn" class="secondary-btn" type="button">Copy Public Link</button>
+                    <button id="open-public-profile-btn" class="secondary-btn" type="button">Open Public Profile</button>
+                  </div>
+                </div>
                 <button id="profile-save-btn" class="primary-btn" type="submit">Save Profile</button>
               </form>
             </article>
@@ -543,6 +595,18 @@
               </div>
 
               <form id="privacy-form" class="form-grid compact-form">
+                <div class="public-profile-summary-card wide-field">
+                  <div class="section-heading compact-heading">
+                    <div>
+                      <p class="eyebrow">Public profile</p>
+                      <h3>Visibility controls</h3>
+                    </div>
+                    <span id="public-profile-visible-count" class="inline-chip">0 sections visible</span>
+                  </div>
+                  <p id="public-profile-summary" class="helper-line">
+                    Keep your profile private until the public version is ready to share.
+                  </p>
+                </div>
                 <label class="toggle-label" for="privacy-public">
                   <input id="privacy-public" type="checkbox" />
                   Make my profile public
@@ -552,43 +616,101 @@
                   Allow account discovery in search
                 </label>
                 <div class="public-profile-visibility wide-field">
-                  <p class="mini-label">Show on public profile</p>
+                  <div class="public-profile-visibility-head">
+                    <p class="mini-label">Show on public profile</p>
+                    <p class="helper-line">Choose which parts of your profile appear on the public page and in search.</p>
+                  </div>
                   <div class="public-profile-grid">
-                    <label class="toggle-label" for="public-field-headline">
+                    <label class="visibility-toggle" for="public-field-headline">
+                      <span>
+                        <strong>Headline</strong>
+                        <small>Your short one-line introduction.</small>
+                      </span>
                       <input id="public-field-headline" type="checkbox" />
-                      Headline
                     </label>
-                    <label class="toggle-label" for="public-field-bio">
+                    <label class="visibility-toggle" for="public-field-role">
+                      <span>
+                        <strong>Role / title</strong>
+                        <small>Explain what you do in a few words.</small>
+                      </span>
+                      <input id="public-field-role" type="checkbox" />
+                    </label>
+                    <label class="visibility-toggle" for="public-field-organization">
+                      <span>
+                        <strong>Organization</strong>
+                        <small>Show the team, company, or community you represent.</small>
+                      </span>
+                      <input id="public-field-organization" type="checkbox" />
+                    </label>
+                    <label class="visibility-toggle" for="public-field-bio">
+                      <span>
+                        <strong>Bio</strong>
+                        <small>Longer personal summary and context.</small>
+                      </span>
                       <input id="public-field-bio" type="checkbox" />
-                      Bio
                     </label>
-                    <label class="toggle-label" for="public-field-pronouns">
+                    <label class="visibility-toggle" for="public-field-current-focus">
+                      <span>
+                        <strong>Current focus</strong>
+                        <small>Highlight what you are working on right now.</small>
+                      </span>
+                      <input id="public-field-current-focus" type="checkbox" />
+                    </label>
+                    <label class="visibility-toggle" for="public-field-focus-areas">
+                      <span>
+                        <strong>Focus areas</strong>
+                        <small>Surface tags people can search and scan quickly.</small>
+                      </span>
+                      <input id="public-field-focus-areas" type="checkbox" />
+                    </label>
+                    <label class="visibility-toggle" for="public-field-pronouns">
+                      <span>
+                        <strong>Pronouns</strong>
+                        <small>Personal identity and address preference.</small>
+                      </span>
                       <input id="public-field-pronouns" type="checkbox" />
-                      Pronouns
                     </label>
-                    <label class="toggle-label" for="public-field-location">
+                    <label class="visibility-toggle" for="public-field-location">
+                      <span>
+                        <strong>Location</strong>
+                        <small>Add geographic context for collaboration.</small>
+                      </span>
                       <input id="public-field-location" type="checkbox" />
-                      Location
                     </label>
-                    <label class="toggle-label" for="public-field-website">
+                    <label class="visibility-toggle" for="public-field-website">
+                      <span>
+                        <strong>Website</strong>
+                        <small>Link to a homepage, portfolio, or project hub.</small>
+                      </span>
                       <input id="public-field-website" type="checkbox" />
-                      Website
                     </label>
-                    <label class="toggle-label" for="public-field-timezone">
+                    <label class="visibility-toggle" for="public-field-timezone">
+                      <span>
+                        <strong>Timezone</strong>
+                        <small>Useful for async teamwork and scheduling.</small>
+                      </span>
                       <input id="public-field-timezone" type="checkbox" />
-                      Timezone
                     </label>
-                    <label class="toggle-label" for="public-field-language">
+                    <label class="visibility-toggle" for="public-field-language">
+                      <span>
+                        <strong>Language</strong>
+                        <small>Show your preferred language code.</small>
+                      </span>
                       <input id="public-field-language" type="checkbox" />
-                      Language
                     </label>
-                    <label class="toggle-label" for="public-field-linked">
+                    <label class="visibility-toggle" for="public-field-linked">
+                      <span>
+                        <strong>External profiles</strong>
+                        <small>Linked accounts and contact surfaces.</small>
+                      </span>
                       <input id="public-field-linked" type="checkbox" />
-                      External profiles
                     </label>
-                    <label class="toggle-label" for="public-field-member-since">
+                    <label class="visibility-toggle" for="public-field-member-since">
+                      <span>
+                        <strong>Join date</strong>
+                        <small>Show how long you have been on Continental ID.</small>
+                      </span>
                       <input id="public-field-member-since" type="checkbox" />
-                      Join date
                     </label>
                   </div>
                 </div>

@@ -2,8 +2,12 @@ const AUTH_CONFIG = window.__AUTH_CONFIG__ || {};
 const LOCAL_HOSTS = new Set(AUTH_CONFIG.localHosts || ['localhost', '127.0.0.1']);
 const TRUSTED_APP_ORIGINS = new Set(AUTH_CONFIG.trustedAppOrigins || []);
 const TRUSTED_API_ORIGINS = new Set(AUTH_CONFIG.trustedApiOrigins || []);
+const PREFERRED_API_ORIGINS = Array.isArray(AUTH_CONFIG.preferredApiOrigins)
+  ? AUTH_CONFIG.preferredApiOrigins
+  : [];
 const HOSTED_API_BASE_URL =
   AUTH_CONFIG.hostedApiBaseUrl || 'https://mpmc.ddns.net';
+const API_BASE_STORAGE_KEY = 'continental.authApiBaseUrl';
 const params = new URLSearchParams(window.location.search);
 const token = String(params.get('token') || '').trim();
 const HOSTED_APP_HOSTS = new Set(
@@ -45,27 +49,113 @@ function resolveTrustedApiBaseUrl(value) {
   }
 }
 
-function getDefaultApiBaseUrl() {
-  if (LOCAL_HOSTS.has(window.location.hostname)) {
-    return 'http://localhost:5000';
+function readStoredApiBaseUrl() {
+  try {
+    return resolveTrustedApiBaseUrl(window.localStorage?.getItem(API_BASE_STORAGE_KEY));
+  } catch {
+    return '';
   }
-
-  if (HOSTED_APP_HOSTS.has(window.location.hostname)) {
-    return HOSTED_API_BASE_URL;
-  }
-
-  return window.location.origin;
 }
 
-const API_BASE_URL =
-  resolveTrustedApiBaseUrl(params.get('apiBaseUrl')) ||
-  resolveTrustedApiBaseUrl(window.__API_BASE_URL__) ||
-  trimTrailingSlash(getDefaultApiBaseUrl());
-const AUTH_API_BASE = `${API_BASE_URL}/api/auth`;
+function rememberApiBaseUrl(value) {
+  try {
+    if (value) {
+      window.localStorage?.setItem(API_BASE_STORAGE_KEY, trimTrailingSlash(value));
+    }
+  } catch {
+    // localStorage can be unavailable in some embedded contexts.
+  }
+}
+
+function getApiBaseCandidates() {
+  const rawCandidates = [
+    params.get('apiBaseUrl'),
+    window.__API_BASE_URL__,
+    readStoredApiBaseUrl(),
+  ];
+
+  if (LOCAL_HOSTS.has(window.location.hostname)) {
+    rawCandidates.push('http://localhost:5000', window.location.origin);
+  } else {
+    rawCandidates.push(window.location.origin);
+    rawCandidates.push(...PREFERRED_API_ORIGINS);
+    if (HOSTED_APP_HOSTS.has(window.location.hostname)) {
+      rawCandidates.push(HOSTED_API_BASE_URL);
+    }
+  }
+
+  const uniqueCandidates = [];
+  for (const candidate of rawCandidates) {
+    const resolved = resolveTrustedApiBaseUrl(candidate);
+    if (resolved && !uniqueCandidates.includes(resolved)) {
+      uniqueCandidates.push(resolved);
+    }
+  }
+
+  return uniqueCandidates;
+}
+
+let API_BASE_URL = getApiBaseCandidates()[0] || '';
+let apiBaseValidated = false;
+let apiBaseResolutionPromise = null;
+const getAuthApiBase = () => `${API_BASE_URL}/api/auth`;
 const heading = document.getElementById('heading');
 const description = document.getElementById('description');
 const status = document.getElementById('status');
 const loginLink = document.getElementById('login-link');
+
+function looksLikeAuthHealthPayload(payload) {
+  const status = String(payload?.status || '').trim().toLowerCase();
+  const timestamp = String(payload?.timestamp || '').trim();
+  if (!timestamp || !['ok', 'degraded'].includes(status)) {
+    return false;
+  }
+
+  const service = String(payload?.service || '').trim().toLowerCase();
+  return !service || service.includes('auth') || service.includes('continental') || service.includes('id');
+}
+
+async function probeApiBaseUrl(candidate) {
+  try {
+    const response = await fetch(`${candidate}/api/health`, {
+      cache: 'no-store',
+    });
+    const payload = await response.json().catch(() => null);
+    return looksLikeAuthHealthPayload(payload);
+  } catch {
+    return false;
+  }
+}
+
+async function ensureApiBaseUrl() {
+  if (apiBaseValidated && API_BASE_URL) {
+    return API_BASE_URL;
+  }
+
+  if (apiBaseResolutionPromise) {
+    return apiBaseResolutionPromise;
+  }
+
+  apiBaseResolutionPromise = (async () => {
+    const candidates = getApiBaseCandidates();
+    for (const candidate of candidates) {
+      if (await probeApiBaseUrl(candidate)) {
+        API_BASE_URL = candidate;
+        apiBaseValidated = true;
+        rememberApiBaseUrl(candidate);
+        return candidate;
+      }
+    }
+
+    throw new Error(
+      candidates.length
+        ? `No reachable Continental ID auth API was found. Checked: ${candidates.join(', ')}.`
+        : 'No trusted API base URL was configured for Continental ID.'
+    );
+  })();
+
+  return apiBaseResolutionPromise;
+}
 
 function setStatus(message, tone) {
   status.textContent = message;
@@ -79,10 +169,11 @@ function getRequestErrorMessage(error, fallback) {
     return message;
   }
 
-  return (
-    fallback ||
-    'Could not reach the verification service. Check that the API base URL points to a live backend.'
-  );
+  if (API_BASE_URL) {
+    return `Could not reach the verification service at ${API_BASE_URL}. Check that this origin is serving the Continental ID auth API.`;
+  }
+
+  return fallback || 'Could not determine a live Continental ID auth API.';
 }
 
 const popupUrl = new URL('popup.html', window.location.href);
@@ -102,7 +193,8 @@ async function verify() {
   setStatus('Checking your verification token...', 'info');
 
   try {
-    const verifyUrl = `${AUTH_API_BASE}/verify-email?token=${encodeURIComponent(token)}`;
+    await ensureApiBaseUrl();
+    const verifyUrl = `${getAuthApiBase()}/verify-email?token=${encodeURIComponent(token)}`;
     const res = await fetch(verifyUrl, { method: 'GET', credentials: 'include' });
     const data = await res.json().catch(() => ({}));
 
