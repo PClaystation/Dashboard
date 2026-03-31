@@ -1,4 +1,12 @@
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
+const HOSTED_STATIC_HOSTS = new Set([
+  'dashboard.continental-hub.com',
+  'grimoire.continental-hub.com',
+  'login.continental-hub.com',
+  'pclaystation.github.io',
+  'mpmc.ddns.net',
+]);
+const HOSTED_API_BASE_URL = 'https://mpmc.ddns.net';
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const ACTIVE_TAB_STORAGE_KEY = 'dashboard.activeTab';
@@ -233,6 +241,10 @@ const normalizeMfaState = (mfa = {}) => ({
 const getDefaultApiBaseUrl = () => {
   if (LOCAL_HOSTS.has(window.location.hostname)) {
     return 'http://localhost:5000';
+  }
+
+  if (HOSTED_STATIC_HOSTS.has(window.location.hostname)) {
+    return HOSTED_API_BASE_URL;
   }
 
   return window.location.origin;
@@ -898,7 +910,9 @@ const toApiError = (err) => {
   }
 
   if (err instanceof TypeError) {
-    return new Error('Network error. Check your connection and try again.');
+    return new Error(
+      'Could not reach the account service. Check that the API base URL points to a live backend.'
+    );
   }
 
   return err instanceof Error ? err : new Error('Unexpected request error.');

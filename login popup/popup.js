@@ -5,13 +5,24 @@ const TRUSTED_API_ORIGINS = new Set(AUTH_CONFIG.trustedApiOrigins || []);
 const DEFAULT_DASHBOARD_ORIGIN =
   AUTH_CONFIG.defaultDashboardOrigin || 'https://dashboard.continental-hub.com';
 const HOSTED_API_BASE_URL =
-  AUTH_CONFIG.hostedApiBaseUrl || 'https://dashboard.continental-hub.com';
+  AUTH_CONFIG.hostedApiBaseUrl || 'https://mpmc.ddns.net';
 const USERNAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const params = new URLSearchParams(window.location.search);
 
 const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
 const safeText = (value) => String(value || '').trim();
+const HOSTED_APP_HOSTS = new Set(
+  [...TRUSTED_APP_ORIGINS]
+    .map((origin) => {
+      try {
+        return new URL(origin).hostname;
+      } catch {
+        return '';
+      }
+    })
+    .filter(Boolean)
+);
 const statusBanner = document.getElementById('status-banner');
 const loginToggle = document.getElementById('login-toggle');
 const registerToggle = document.getElementById('register-toggle');
@@ -82,10 +93,7 @@ const getDefaultApiBaseUrl = () => {
     return 'http://localhost:5000';
   }
 
-  if (
-    window.location.hostname === 'dashboard.continental-hub.com' ||
-    window.location.hostname === 'login.continental-hub.com'
-  ) {
+  if (HOSTED_APP_HOSTS.has(window.location.hostname)) {
     return HOSTED_API_BASE_URL;
   }
 
@@ -147,6 +155,18 @@ const setStatus = (message, tone = 'error') => {
   statusBanner.textContent = text;
   statusBanner.dataset.status = tone;
   statusBanner.classList.toggle('is-visible', Boolean(text));
+};
+
+const getRequestErrorMessage = (error, fallback) => {
+  const message = safeText(error?.message);
+  if (message && message !== 'Failed to fetch') {
+    return message;
+  }
+
+  return (
+    fallback ||
+    'Could not reach the sign-in service. Check that the API base URL points to a live backend.'
+  );
 };
 
 const getFieldGroup = (input) => input?.closest('.field-group') || null;
@@ -559,7 +579,13 @@ const handleResendVerification = async () => {
       'success'
     );
   } catch (error) {
-    setStatus(error.message || 'Could not resend the verification link right now.', 'error');
+    setStatus(
+      getRequestErrorMessage(
+        error,
+        'Could not reach the verification service. Check that the API base URL points to a live backend.'
+      ),
+      'error'
+    );
   } finally {
     resendVerificationBtn.disabled = false;
   }
@@ -635,7 +661,7 @@ const requestAuth = async (endpoint, body, submitButton, labels) => {
     setStatus('Success. Continuing...', 'success');
     finishAuth(data);
   } catch (error) {
-    setStatus(error.message || 'Authentication failed.', 'error');
+    setStatus(getRequestErrorMessage(error, 'Authentication failed.'), 'error');
   } finally {
     if (!loginCooldownTimer) {
       setBusy(submitButton, false, labels.idle, labels.busy);

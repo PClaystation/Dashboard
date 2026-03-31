@@ -1,12 +1,24 @@
 const AUTH_CONFIG = window.__AUTH_CONFIG__ || {};
 const LOCAL_HOSTS = new Set(AUTH_CONFIG.localHosts || ['localhost', '127.0.0.1']);
+const TRUSTED_APP_ORIGINS = new Set(AUTH_CONFIG.trustedAppOrigins || []);
 const TRUSTED_API_ORIGINS = new Set(AUTH_CONFIG.trustedApiOrigins || []);
 const HOSTED_API_BASE_URL =
-  AUTH_CONFIG.hostedApiBaseUrl || 'https://dashboard.continental-hub.com';
+  AUTH_CONFIG.hostedApiBaseUrl || 'https://mpmc.ddns.net';
 const USERNAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const params = new URLSearchParams(window.location.search);
 const token = safeText(params.get('token'));
+const HOSTED_APP_HOSTS = new Set(
+  [...TRUSTED_APP_ORIGINS]
+    .map((origin) => {
+      try {
+        return new URL(origin).hostname;
+      } catch {
+        return '';
+      }
+    })
+    .filter(Boolean)
+);
 
 function trimTrailingSlash(value) {
   return String(value || '').replace(/\/+$/, '');
@@ -59,10 +71,7 @@ function getDefaultApiBaseUrl() {
     return 'http://localhost:5000';
   }
 
-  if (
-    window.location.hostname === 'dashboard.continental-hub.com' ||
-    window.location.hostname === 'login.continental-hub.com'
-  ) {
+  if (HOSTED_APP_HOSTS.has(window.location.hostname)) {
     return HOSTED_API_BASE_URL;
   }
 
@@ -85,6 +94,18 @@ function setStatus(message, tone = 'error') {
 function setBusy(button, busy, idleLabel, busyLabel) {
   button.disabled = busy;
   button.textContent = busy ? busyLabel : idleLabel;
+}
+
+function getRequestErrorMessage(error, fallback) {
+  const message = safeText(error?.message);
+  if (message && message !== 'Failed to fetch') {
+    return message;
+  }
+
+  return (
+    fallback ||
+    'Could not reach the password reset service. Check that the API base URL points to a live backend.'
+  );
 }
 
 function setFieldError(input, message) {
@@ -209,7 +230,13 @@ requestForm.addEventListener('submit', async (event) => {
       'success'
     );
   } catch (error) {
-    setStatus(error.message || 'Could not request a password reset.', 'error');
+    setStatus(
+      getRequestErrorMessage(
+        error,
+        'Could not reach the password reset service. Check that the API base URL points to a live backend.'
+      ),
+      'error'
+    );
   } finally {
     setBusy(requestBtn, false, 'Send reset link', 'Sending...');
   }
@@ -262,7 +289,13 @@ resetForm.addEventListener('submit', async (event) => {
 
     setStatus(data.message || 'Password reset complete. You can sign in now.', 'success');
   } catch (error) {
-    setStatus(error.message || 'Could not reset your password.', 'error');
+    setStatus(
+      getRequestErrorMessage(
+        error,
+        'Could not reach the password reset service. Check that the API base URL points to a live backend.'
+      ),
+      'error'
+    );
   } finally {
     setBusy(resetBtn, false, 'Reset password', 'Resetting...');
   }

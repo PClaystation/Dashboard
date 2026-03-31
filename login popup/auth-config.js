@@ -3,6 +3,7 @@ window.__AUTH_CONFIG__ = {
   trustedAppOrigins: [
     'https://dashboard.continental-hub.com',
     'https://grimoire.continental-hub.com',
+    'https://login.continental-hub.com',
     'https://pclaystation.github.io',
     'https://mpmc.ddns.net',
   ],
@@ -13,5 +14,5 @@ window.__AUTH_CONFIG__ = {
     'https://mpmc.ddns.net',
   ],
   defaultDashboardOrigin: 'https://dashboard.continental-hub.com',
-  hostedApiBaseUrl: 'https://dashboard.continental-hub.com',
+  hostedApiBaseUrl: 'https://mpmc.ddns.net',
 };

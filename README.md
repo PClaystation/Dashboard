@@ -71,6 +71,7 @@ Optional runtime globals:
 - `window.__LOGIN_POPUP_URL__`
 
 Default behavior now assumes the frontend and `/api/*` are available on the same HTTPS origin. That is the preferred deployment because it avoids exposing `:5000` to browsers and reduces cross-site cookie failures on restrictive networks.
+For the current hosted static domains (`dashboard.continental-hub.com`, `login.continental-hub.com`, `grimoire.continental-hub.com`, and `pclaystation.github.io`), the checked-in frontend defaults to `https://mpmc.ddns.net` as the backend API origin unless you override it explicitly.
 
 ## GitHub Pages Hosting
 

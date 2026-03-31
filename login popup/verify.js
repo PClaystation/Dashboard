@@ -1,10 +1,22 @@
 const AUTH_CONFIG = window.__AUTH_CONFIG__ || {};
 const LOCAL_HOSTS = new Set(AUTH_CONFIG.localHosts || ['localhost', '127.0.0.1']);
+const TRUSTED_APP_ORIGINS = new Set(AUTH_CONFIG.trustedAppOrigins || []);
 const TRUSTED_API_ORIGINS = new Set(AUTH_CONFIG.trustedApiOrigins || []);
 const HOSTED_API_BASE_URL =
-  AUTH_CONFIG.hostedApiBaseUrl || 'https://dashboard.continental-hub.com';
+  AUTH_CONFIG.hostedApiBaseUrl || 'https://mpmc.ddns.net';
 const params = new URLSearchParams(window.location.search);
 const token = String(params.get('token') || '').trim();
+const HOSTED_APP_HOSTS = new Set(
+  [...TRUSTED_APP_ORIGINS]
+    .map((origin) => {
+      try {
+        return new URL(origin).hostname;
+      } catch {
+        return '';
+      }
+    })
+    .filter(Boolean)
+);
 
 function trimTrailingSlash(value) {
   return String(value || '').replace(/\/+$/, '');
@@ -38,10 +50,7 @@ function getDefaultApiBaseUrl() {
     return 'http://localhost:5000';
   }
 
-  if (
-    window.location.hostname === 'dashboard.continental-hub.com' ||
-    window.location.hostname === 'login.continental-hub.com'
-  ) {
+  if (HOSTED_APP_HOSTS.has(window.location.hostname)) {
     return HOSTED_API_BASE_URL;
   }
 
@@ -62,6 +71,18 @@ function setStatus(message, tone) {
   status.textContent = message;
   status.dataset.status = tone;
   status.classList.toggle('is-visible', Boolean(message));
+}
+
+function getRequestErrorMessage(error, fallback) {
+  const message = String(error?.message || '').trim();
+  if (message && message !== 'Failed to fetch') {
+    return message;
+  }
+
+  return (
+    fallback ||
+    'Could not reach the verification service. Check that the API base URL points to a live backend.'
+  );
 }
 
 const popupUrl = new URL('popup.html', window.location.href);
@@ -98,7 +119,13 @@ async function verify() {
   } catch (error) {
     heading.textContent = 'Verification failed';
     description.textContent = 'The request could not be completed.';
-    setStatus(error.message || 'Network error while verifying email.', 'error');
+    setStatus(
+      getRequestErrorMessage(
+        error,
+        'Could not reach the verification service. Check that the API base URL points to a live backend.'
+      ),
+      'error'
+    );
   }
 }
 
