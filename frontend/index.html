@@ -27,9 +27,15 @@
         <div class="brand-mark">
           <img src="images/Continental-ID-nbg-w.png" alt="Continental ID logo" />
         </div>
-        <div>
+        <div class="brand-copy">
           <p class="eyebrow">Identity workspace</p>
           <h1>Continental ID Dashboard</h1>
+          <p class="brand-subline">Secure access and profile management for the Continental network.</p>
+          <div class="brand-signals" aria-label="Brand highlights">
+            <span class="brand-signal">Continental Studios</span>
+            <span class="brand-signal">Unified launch</span>
+            <span class="brand-signal">Trusted identity</span>
+          </div>
         </div>
       </div>
 
@@ -75,6 +81,19 @@
               Finish your setup to keep your account in good shape.
             </p>
           </div>
+
+          <div class="brand-story-card">
+            <p class="eyebrow">Continental standard</p>
+            <h2>Made for the Continental toolset.</h2>
+            <p class="helper-line">
+              One identity layer for your profile, security settings, and the services that sit at the center of the network.
+            </p>
+            <div class="brand-story-meta" aria-label="Continental workspace pillars">
+              <span class="brand-signal">Studios</span>
+              <span class="brand-signal">Archives</span>
+              <span class="brand-signal">Broadcast</span>
+            </div>
+          </div>
         </section>
 
         <nav class="tabs" aria-label="Dashboard sections">
@@ -119,18 +138,39 @@
       <main class="dashboard-main tab-panels">
         <section id="overview" class="tab-content active">
           <div class="hero-panel">
-            <div>
-              <p class="eyebrow">At a glance</p>
-              <h2 id="hero-greeting">Welcome back</h2>
-              <p class="hero-copy">
-                Keep your identity settings tidy, review security posture, and jump into your services without the usual dashboard clutter.
+            <div class="hero-panel-main">
+              <div>
+                <p class="eyebrow">At a glance</p>
+                <h2 id="hero-greeting">Welcome back</h2>
+                <p class="hero-copy">
+                  Keep your identity settings tidy, review security posture, and jump into your services without the usual dashboard clutter.
+                </p>
+              </div>
+              <div class="hero-actions">
+                <button id="overview-jump-profile-btn" class="secondary-btn" type="button">Edit profile</button>
+                <button id="overview-jump-security-btn" class="secondary-btn" type="button">Review security</button>
+                <button id="overview-jump-activity-btn" class="primary-btn" type="button">Open activity</button>
+              </div>
+            </div>
+            <aside class="hero-brand-card" aria-label="Continental network summary">
+              <div class="hero-brand-head">
+                <div class="hero-brand-mark" aria-hidden="true">
+                  <img src="images/C2-new-white.png" alt="" />
+                </div>
+                <div>
+                  <p class="eyebrow">Continental network</p>
+                  <h3>Built to keep the core suite connected.</h3>
+                </div>
+              </div>
+              <p class="hero-brand-copy">
+                A quieter front door for profiles, secure access, and the member tools people use most.
               </p>
-            </div>
-            <div class="hero-actions">
-              <button id="overview-jump-profile-btn" class="secondary-btn" type="button">Edit profile</button>
-              <button id="overview-jump-security-btn" class="secondary-btn" type="button">Review security</button>
-              <button id="overview-jump-activity-btn" class="primary-btn" type="button">Open activity</button>
-            </div>
+              <div class="hero-brand-tags" aria-label="Brand attributes">
+                <span class="brand-signal">Member access</span>
+                <span class="brand-signal">Shared profile</span>
+                <span class="brand-signal">Service launchpad</span>
+              </div>
+            </aside>
           </div>
 
           <section class="metrics-grid" aria-label="Account summary">
@@ -556,6 +596,53 @@
                   <input id="privacy-searchable" type="checkbox" />
                   Allow account discovery in search
                 </label>
+                <div class="public-profile-visibility wide-field">
+                  <p class="helper-line">
+                    Choose what public visitors can see when your profile is enabled.
+                  </p>
+                  <div class="public-profile-grid">
+                    <label class="toggle-label" for="public-field-headline">
+                      <input id="public-field-headline" type="checkbox" />
+                      Headline
+                    </label>
+                    <label class="toggle-label" for="public-field-bio">
+                      <input id="public-field-bio" type="checkbox" />
+                      Bio
+                    </label>
+                    <label class="toggle-label" for="public-field-pronouns">
+                      <input id="public-field-pronouns" type="checkbox" />
+                      Pronouns
+                    </label>
+                    <label class="toggle-label" for="public-field-location">
+                      <input id="public-field-location" type="checkbox" />
+                      Location
+                    </label>
+                    <label class="toggle-label" for="public-field-website">
+                      <input id="public-field-website" type="checkbox" />
+                      Website
+                    </label>
+                    <label class="toggle-label" for="public-field-timezone">
+                      <input id="public-field-timezone" type="checkbox" />
+                      Timezone
+                    </label>
+                    <label class="toggle-label" for="public-field-language">
+                      <input id="public-field-language" type="checkbox" />
+                      Language
+                    </label>
+                    <label class="toggle-label" for="public-field-linked">
+                      <input id="public-field-linked" type="checkbox" />
+                      External profiles
+                    </label>
+                    <label class="toggle-label" for="public-field-member-since">
+                      <input id="public-field-member-since" type="checkbox" />
+                      Join date
+                    </label>
+                  </div>
+                </div>
+                <div class="public-profile-actions wide-field">
+                  <button id="public-profile-preview-btn" class="secondary-btn" type="button">Preview Public Profile</button>
+                  <button id="public-profile-directory-btn" class="secondary-btn" type="button">Open Profile Directory</button>
+                </div>
                 <button id="privacy-save-btn" class="primary-btn" type="submit">Save Privacy Settings</button>
               </form>
             </article>
@@ -684,6 +771,46 @@
             <article class="section-card">
               <div class="section-heading">
                 <div>
+                  <p class="eyebrow">Verification</p>
+                  <h3>Multi-factor authentication</h3>
+                </div>
+              </div>
+
+              <div class="stack-grid">
+                <div class="mfa-status-card">
+                  <p id="mfa-status-copy" class="helper-line">MFA is not enabled.</p>
+                  <div class="mfa-actions">
+                    <button id="mfa-setup-btn" class="secondary-btn" type="button">Set Up MFA</button>
+                    <button id="mfa-disable-btn" class="danger-btn" type="button">Disable MFA</button>
+                    <button id="mfa-backup-btn" class="secondary-btn" type="button">Regenerate Backup Codes</button>
+                  </div>
+                </div>
+
+                <div id="mfa-setup-panel" class="mfa-setup-panel" hidden>
+                  <p class="helper-line">
+                    Add the secret below to your authenticator app, then confirm with a code to enable MFA.
+                  </p>
+                  <label class="wide-field">
+                    Authenticator secret
+                    <input id="mfa-secret" type="text" readonly />
+                  </label>
+                  <label class="wide-field">
+                    OTPAuth URL
+                    <input id="mfa-otpauth-url" type="text" readonly />
+                  </label>
+                  <label>
+                    6-digit code
+                    <input id="mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+                  </label>
+                  <button id="mfa-enable-btn" class="primary-btn" type="button">Enable MFA</button>
+                  <div id="mfa-backup-codes" class="backup-code-list"></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
                   <p class="eyebrow">Monitoring</p>
                   <h3>Security settings</h3>
                 </div>
@@ -713,6 +840,22 @@
 
               <ul id="sessions-list" class="activity-list">
                 <li>Loading sessions...</li>
+              </ul>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Hardware</p>
+                  <h3>Known devices</h3>
+                </div>
+                <div class="activity-toolbar">
+                  <button id="devices-refresh-btn" class="secondary-btn" type="button">Refresh Devices</button>
+                </div>
+              </div>
+
+              <ul id="devices-list" class="activity-list">
+                <li>Loading devices...</li>
               </ul>
             </article>
           </div>

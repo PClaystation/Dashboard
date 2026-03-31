@@ -38,6 +38,7 @@ const knownDeviceSchema = new mongoose.Schema(
   {
     fingerprint: { type: String, required: true, trim: true, maxlength: 128 },
     label: { type: String, default: '', trim: true, maxlength: 60 },
+    trusted: { type: Boolean, default: false },
     firstSeenAt: { type: Date, default: Date.now },
     lastSeenAt: { type: Date, default: Date.now },
     lastIp: { type: String, default: '' },
@@ -162,10 +163,37 @@ const userSchema = new mongoose.Schema(
           default: 'comfortable',
         },
       },
+      publicProfile: {
+        headline: { type: Boolean, default: true },
+        bio: { type: Boolean, default: true },
+        pronouns: { type: Boolean, default: false },
+        location: { type: Boolean, default: true },
+        website: { type: Boolean, default: true },
+        timezone: { type: Boolean, default: false },
+        language: { type: Boolean, default: false },
+        linkedAccounts: { type: Boolean, default: false },
+        memberSince: { type: Boolean, default: true },
+      },
     },
     security: {
       loginAlerts: { type: Boolean, default: true },
       passwordChangedAt: { type: Date, default: null },
+      mfa: {
+        enabled: { type: Boolean, default: false },
+        secret: { type: String, default: '' },
+        backupCodes: {
+          type: [String],
+          default: [],
+        },
+        pendingSecret: { type: String, default: '' },
+        pendingBackupCodes: {
+          type: [String],
+          default: [],
+        },
+        pendingCreatedAt: { type: Date, default: null },
+        enrolledAt: { type: Date, default: null },
+        lastUsedAt: { type: Date, default: null },
+      },
     },
   },
   {

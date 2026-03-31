@@ -5,6 +5,12 @@ const User = require('../models/User');
 const sendEmail = require('../utils/email');
 const { createEmailVerificationToken } = require('../utils/emailVerification');
 const {
+  buildOtpAuthUrl,
+  generateBackupCodes,
+  generateMfaSecret,
+  verifyTotp,
+} = require('../utils/mfa');
+const {
   USERNAME_VALIDATION_MESSAGE,
   ensureStoredUsername,
   ensureUserIdentityFields,
@@ -60,6 +66,17 @@ const DEFAULT_APPEARANCE = {
   highContrast: false,
   dashboardDensity: 'comfortable',
 };
+const DEFAULT_PUBLIC_PROFILE = {
+  headline: true,
+  bio: true,
+  pronouns: false,
+  location: true,
+  website: true,
+  timezone: false,
+  language: false,
+  linkedAccounts: false,
+  memberSince: true,
+};
 
 const DEFAULT_EMAIL_VERIFY_PATH = '/login/verify.html';
 const DEFAULT_PASSWORD_RESET_PATH = '/login/reset-password.html';
@@ -67,6 +84,7 @@ const EMAIL_VERIFICATION_SUBJECT = 'Verify your Continental ID email';
 const PASSWORD_RESET_SUBJECT = 'Reset your Continental ID password';
 const AVATAR_DATA_URL_MAX_LENGTH = 350000;
 const AVATAR_DATA_URL_PATTERN = /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/i;
+const MFA_BACKUP_CODE_COUNT = 8;
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
 
@@ -241,38 +259,183 @@ const clearPasswordReset = (user) => {
 
 const buildVerificationEmailContent = (user, verificationUrl, expiresAt) => {
   const displayName = sanitizeText(user?.displayName || user?.email, 60) || 'there';
+  const emailAddress = sanitizeText(user?.email, 160);
   const expiresLabel = new Date(expiresAt).toUTCString();
   const safeDisplayName = escapeHtml(displayName);
+  const safeEmailAddress = escapeHtml(emailAddress);
   const safeVerificationUrl = escapeHtml(verificationUrl);
   const safeExpiresLabel = escapeHtml(expiresLabel);
+  const verificationTarget = emailAddress
+    ? `the email address ${emailAddress}`
+    : 'your email address';
+  const safeVerificationTarget = safeEmailAddress
+    ? `the email address <strong>${safeEmailAddress}</strong>`
+    : 'your email address';
 
   return {
     subject: EMAIL_VERIFICATION_SUBJECT,
     text: [
       `Hi ${displayName},`,
       '',
-      'Verify your Continental ID email address by opening this link:',
+      `Verify ${verificationTarget} on your Continental ID account by opening this link:`,
       verificationUrl,
       '',
       `This link expires on ${expiresLabel}.`,
+      'If you did not create this account, you can ignore this message.',
     ].join('\n'),
     html: `
-      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;">
-        <h1 style="margin-bottom:16px;">Verify your email</h1>
-        <p>Hi ${safeDisplayName},</p>
-        <p>Confirm your Continental ID email address to finish setting up your account.</p>
-        <p>
-          <a
-            href="${safeVerificationUrl}"
-            style="display:inline-block;padding:12px 18px;border-radius:8px;background:#111827;color:#ffffff;text-decoration:none;font-weight:700;"
-          >
-            Verify email
-          </a>
-        </p>
-        <p>If the button does not work, copy and paste this link into your browser:</p>
-        <p><a href="${safeVerificationUrl}">${safeVerificationUrl}</a></p>
-        <p>This link expires on ${safeExpiresLabel}.</p>
+      <div
+        style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;color:transparent;"
+      >
+        Verify your Continental ID email to finish setting up your account.
       </div>
+      <table
+        role="presentation"
+        width="100%"
+        cellpadding="0"
+        cellspacing="0"
+        style="width:100%;margin:0;padding:32px 12px;background-color:#f7f2ea;"
+      >
+        <tr>
+          <td align="center">
+            <table
+              role="presentation"
+              width="100%"
+              cellpadding="0"
+              cellspacing="0"
+              style="max-width:640px;width:100%;margin:0 auto;"
+            >
+              <tr>
+                <td style="padding:0 0 16px 0;">
+                  <table
+                    role="presentation"
+                    width="100%"
+                    cellpadding="0"
+                    cellspacing="0"
+                    style="width:100%;background-color:#1c2530;border-radius:24px 24px 0 0;"
+                  >
+                    <tr>
+                      <td style="padding:24px 28px 22px 28px;">
+                        <p
+                          style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.2;letter-spacing:0.22em;text-transform:uppercase;color:#c6d3d0;font-weight:700;"
+                        >
+                          Continental ID
+                        </p>
+                        <h1
+                          style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:30px;line-height:1.15;color:#ffffff;font-weight:700;"
+                        >
+                          Verify your email
+                        </h1>
+                        <p
+                          style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.65;color:#dce7e4;"
+                        >
+                          Finish setting up your account and keep your sign-in trusted across the
+                          dashboard.
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                  <table
+                    role="presentation"
+                    width="100%"
+                    cellpadding="0"
+                    cellspacing="0"
+                    style="width:100%;background-color:#ffffff;border:1px solid #e2d8cb;border-top:0;border-radius:0 0 24px 24px;"
+                  >
+                    <tr>
+                      <td style="padding:28px;">
+                        <p
+                          style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1c2530;"
+                        >
+                          Hi ${safeDisplayName},
+                        </p>
+                        <p
+                          style="margin:0 0 18px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1c2530;"
+                        >
+                          We received a request to verify ${safeVerificationTarget} for your
+                          Continental ID account.
+                        </p>
+                        <table
+                          role="presentation"
+                          cellpadding="0"
+                          cellspacing="0"
+                          style="margin:0 0 24px 0;"
+                        >
+                          <tr>
+                            <td style="border-radius:999px;background-color:#146f63;">
+                              <a
+                                href="${safeVerificationUrl}"
+                                style="display:inline-block;padding:14px 24px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.2;font-weight:700;color:#ffffff;text-decoration:none;"
+                              >
+                                Verify email address
+                              </a>
+                            </td>
+                          </tr>
+                        </table>
+                        <table
+                          role="presentation"
+                          width="100%"
+                          cellpadding="0"
+                          cellspacing="0"
+                          style="width:100%;margin:0 0 24px 0;background-color:#f6faf9;border:1px solid #d7e5e1;border-radius:18px;"
+                        >
+                          <tr>
+                            <td style="padding:18px 20px;">
+                              <p
+                                style="margin:0 0 6px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.4;letter-spacing:0.08em;text-transform:uppercase;color:#5c6b68;font-weight:700;"
+                              >
+                                Verification details
+                              </p>
+                              <p
+                                style="margin:0 0 10px 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#1c2530;"
+                              >
+                                Address: ${safeEmailAddress || 'Your email address'}
+                              </p>
+                              <p
+                                style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#1c2530;"
+                              >
+                                Link expires: ${safeExpiresLabel}
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                        <p
+                          style="margin:0 0 10px 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#1c2530;"
+                        >
+                          If the button does not work, copy and paste this link into your browser:
+                        </p>
+                        <p
+                          style="margin:0 0 22px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.8;word-break:break-all;"
+                        >
+                          <a
+                            href="${safeVerificationUrl}"
+                            style="color:#0d5a52;text-decoration:underline;"
+                          >
+                            ${safeVerificationUrl}
+                          </a>
+                        </p>
+                        <p
+                          style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#69707d;"
+                        >
+                          If you did not create a Continental ID account, you can safely ignore
+                          this message.
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td
+                  style="padding:0 18px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#7b6f66;text-align:center;"
+                >
+                  This verification link was sent for Continental ID account setup.
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     `,
   };
 };
@@ -563,6 +726,7 @@ const rememberKnownDevice = (user, req, requestedLabel = '') => {
   const nextDevice = {
     fingerprint,
     label,
+    trusted: false,
     firstSeenAt: now,
     lastSeenAt: now,
     lastIp: ip,
@@ -575,6 +739,7 @@ const rememberKnownDevice = (user, req, requestedLabel = '') => {
       ...currentDevice,
       fingerprint,
       label: sanitizeText(currentDevice?.label || label, 60) || label,
+      trusted: Boolean(currentDevice?.trusted),
       lastSeenAt: now,
       lastIp: ip,
       userAgent,
@@ -601,6 +766,84 @@ const rememberKnownDevice = (user, req, requestedLabel = '') => {
     device:
       devices.find((device) => sanitizeText(device?.fingerprint, 128) === fingerprint) || nextDevice,
   };
+};
+
+const normalizePublicProfilePreferences = (incoming = {}, current = DEFAULT_PUBLIC_PROFILE) => {
+  const source = current || DEFAULT_PUBLIC_PROFILE;
+
+  return {
+    headline: hasOwn(incoming, 'headline') ? Boolean(incoming.headline) : Boolean(source.headline),
+    bio: hasOwn(incoming, 'bio') ? Boolean(incoming.bio) : Boolean(source.bio),
+    pronouns: hasOwn(incoming, 'pronouns') ? Boolean(incoming.pronouns) : Boolean(source.pronouns),
+    location: hasOwn(incoming, 'location') ? Boolean(incoming.location) : Boolean(source.location),
+    website: hasOwn(incoming, 'website') ? Boolean(incoming.website) : Boolean(source.website),
+    timezone: hasOwn(incoming, 'timezone') ? Boolean(incoming.timezone) : Boolean(source.timezone),
+    language: hasOwn(incoming, 'language') ? Boolean(incoming.language) : Boolean(source.language),
+    linkedAccounts: hasOwn(incoming, 'linkedAccounts')
+      ? Boolean(incoming.linkedAccounts)
+      : Boolean(source.linkedAccounts),
+    memberSince: hasOwn(incoming, 'memberSince') ? Boolean(incoming.memberSince) : Boolean(source.memberSince),
+  };
+};
+
+const getMfaState = (user) => ({
+  enabled: Boolean(user?.security?.mfa?.enabled),
+  hasPendingSetup: Boolean(user?.security?.mfa?.pendingSecret),
+  enrolledAt: user?.security?.mfa?.enrolledAt || null,
+  lastUsedAt: user?.security?.mfa?.lastUsedAt || null,
+  backupCodesRemaining: Array.isArray(user?.security?.mfa?.backupCodes) ? user.security.mfa.backupCodes.length : 0,
+});
+
+const sanitizeMfaCode = (value) => String(value || '').replace(/\s+/g, '').slice(0, 8);
+const sanitizeBackupCode = (value) =>
+  String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .slice(0, 24);
+
+const hashBackupCodes = (codes = []) => codes.map((code) => hashToken(sanitizeBackupCode(code)));
+
+const buildMfaSetupPayload = (user, secret, backupCodes) => ({
+  secret,
+  otpAuthUrl: buildOtpAuthUrl({
+    secret,
+    accountName: sanitizeText(user?.email || user?.username || user?._id, 120) || 'user',
+  }),
+  backupCodes,
+});
+
+const verifyBackupCode = (user, backupCode) => {
+  const normalized = sanitizeBackupCode(backupCode);
+  if (!normalized) {
+    return { ok: false };
+  }
+
+  const hashedCandidate = hashToken(normalized);
+  const storedCodes = Array.isArray(user?.security?.mfa?.backupCodes) ? user.security.mfa.backupCodes : [];
+  const matchIndex = storedCodes.findIndex((value) => value === hashedCandidate);
+  if (matchIndex < 0) {
+    return { ok: false };
+  }
+
+  user.security.mfa.backupCodes.splice(matchIndex, 1);
+  return { ok: true, usedBackupCode: normalized };
+};
+
+const verifyMfaAttempt = (user, { mfaCode = '', backupCode = '' } = {}) => {
+  const secret = sanitizeText(user?.security?.mfa?.secret, 120);
+  const normalizedCode = sanitizeMfaCode(mfaCode);
+
+  if (normalizedCode && verifyTotp({ secret, token: normalizedCode })) {
+    return { ok: true, method: 'totp' };
+  }
+
+  const backupResult = verifyBackupCode(user, backupCode);
+  if (backupResult.ok) {
+    return { ok: true, method: 'backup_code', usedBackupCode: backupResult.usedBackupCode };
+  }
+
+  return { ok: false };
 };
 
 const isCrossSiteRequest = (req) => {
@@ -816,6 +1059,10 @@ const normalizePreferences = (incoming = {}, current = {}) => {
           ),
     },
     appearance: normalizeAppearance(incoming.appearance || {}, source.appearance || DEFAULT_APPEARANCE),
+    publicProfile: normalizePublicProfilePreferences(
+      incoming.publicProfile || {},
+      source.publicProfile || DEFAULT_PUBLIC_PROFILE
+    ),
   };
 };
 
@@ -1115,7 +1362,28 @@ const serializeSession = (session, currentSid = '', knownDevice = null) => {
     recognized: Boolean(knownDevice),
     newDevice,
     deviceLabel: sanitizeText(knownDevice?.label, 60) || '',
+    deviceTrusted: Boolean(knownDevice?.trusted),
+    fingerprint: sanitizeText(session?.deviceFingerprint, 128),
     current: Boolean(sid && sid === sanitizeText(currentSid, 120)),
+  };
+};
+
+const serializeDevice = (device, sessions = [], currentFingerprint = '') => {
+  const fingerprint = sanitizeText(device?.fingerprint, 128);
+  const relatedSessions = sessions.filter(
+    (session) => sanitizeText(session?.deviceFingerprint, 128) === fingerprint
+  );
+
+  return {
+    fingerprint,
+    label: sanitizeText(device?.label, 60) || 'Browser device',
+    trusted: Boolean(device?.trusted),
+    firstSeenAt: device?.firstSeenAt || null,
+    lastSeenAt: device?.lastSeenAt || null,
+    lastIp: sanitizeText(device?.lastIp, 80),
+    userAgent: sanitizeText(device?.userAgent, 300),
+    activeSessions: relatedSessions.length,
+    current: Boolean(fingerprint && fingerprint === sanitizeText(currentFingerprint, 128)),
   };
 };
 
@@ -1267,12 +1535,17 @@ const buildUserPayload = (user) => {
           user.preferences?.appearance?.dashboardDensity || DEFAULT_APPEARANCE.dashboardDensity
         ),
       },
+      publicProfile: normalizePublicProfilePreferences(
+        user.preferences?.publicProfile || {},
+        DEFAULT_PUBLIC_PROFILE
+      ),
     },
     security: {
       loginAlerts: Boolean(hasOwn(user.security || {}, 'loginAlerts') ? user.security?.loginAlerts : true),
       passwordChangedAt: user.security?.passwordChangedAt || null,
       activeSessions: Array.isArray(user.refreshSessions) ? user.refreshSessions.length : 0,
       knownDevices: Array.isArray(user.knownDevices) ? user.knownDevices.length : 0,
+      mfa: getMfaState(user),
     },
   };
 };
@@ -1290,24 +1563,31 @@ const buildPublicLinkedAccounts = (linkedAccounts = {}) => {
   return next;
 };
 
-const buildPublicProfilePayload = (user) => ({
-  username: getDisplayableUsername(user),
-  handle: `@${getDisplayableUsername(user)}`,
-  displayName: sanitizeText(user?.displayName, 60) || 'User',
-  createdAt: user?.createdAt || null,
-  updatedAt: user?.updatedAt || null,
-  profile: {
-    avatar: sanitizeAvatar(user?.profile?.avatar, ''),
-    headline: sanitizeHeadline(user?.profile?.headline, ''),
-    pronouns: sanitizePronouns(user?.profile?.pronouns, ''),
-    bio: sanitizeText(user?.profile?.bio, 320),
-    location: sanitizeText(user?.profile?.location, 120),
-    website: sanitizeText(user?.profile?.website, 240),
-    timezone: sanitizeTimezone(user?.profile?.timezone, 'UTC'),
-    language: sanitizeLanguage(user?.profile?.language, 'en'),
-  },
-  linkedAccounts: buildPublicLinkedAccounts(user?.linkedAccounts),
-});
+const buildPublicProfilePayload = (user) => {
+  const visibility = normalizePublicProfilePreferences(
+    user?.preferences?.publicProfile || {},
+    DEFAULT_PUBLIC_PROFILE
+  );
+
+  return {
+    username: getDisplayableUsername(user),
+    handle: `@${getDisplayableUsername(user)}`,
+    displayName: sanitizeText(user?.displayName, 60) || 'User',
+    createdAt: visibility.memberSince ? user?.createdAt || null : null,
+    updatedAt: user?.updatedAt || null,
+    profile: {
+      avatar: sanitizeAvatar(user?.profile?.avatar, ''),
+      headline: visibility.headline ? sanitizeHeadline(user?.profile?.headline, '') : '',
+      pronouns: visibility.pronouns ? sanitizePronouns(user?.profile?.pronouns, '') : '',
+      bio: visibility.bio ? sanitizeText(user?.profile?.bio, 320) : '',
+      location: visibility.location ? sanitizeText(user?.profile?.location, 120) : '',
+      website: visibility.website ? sanitizeText(user?.profile?.website, 240) : '',
+      timezone: visibility.timezone ? sanitizeTimezone(user?.profile?.timezone, 'UTC') : '',
+      language: visibility.language ? sanitizeLanguage(user?.profile?.language, 'en') : '',
+    },
+    linkedAccounts: visibility.linkedAccounts ? buildPublicLinkedAccounts(user?.linkedAccounts) : {},
+  };
+};
 
 const sendUserResponse = (res, status, message, user, extra = {}) => {
   const payload = buildUserPayload(user);
@@ -1713,6 +1993,8 @@ exports.login = async (req, res) => {
     req.body?.identifier || req.body?.email || req.body?.username
   );
   const password = req.body?.password;
+  const mfaCode = sanitizeMfaCode(req.body?.mfaCode);
+  const backupCode = sanitizeBackupCode(req.body?.backupCode);
 
   const rateKey = loginRateKey(identifier, req);
   const throttle = await getLoginThrottleState(rateKey);
@@ -1739,6 +2021,27 @@ exports.login = async (req, res) => {
     if (!isMatch) {
       await registerLoginFailure(rateKey);
       return res.status(400).json({ message: 'Invalid credentials.' });
+    }
+
+    const mfaEnabled = Boolean(user?.security?.mfa?.enabled && user?.security?.mfa?.secret);
+    if (mfaEnabled) {
+      const mfaResult = verifyMfaAttempt(user, { mfaCode, backupCode });
+      if (!mfaResult.ok) {
+        appendAuditEvent(user, req, 'mfa_challenge', 'Additional verification required for sign-in.', {
+          identifier,
+        });
+        await user.save();
+        return res.status(401).json({
+          message: mfaCode || backupCode ? 'Invalid MFA code.' : 'Enter your MFA code to continue.',
+          mfaRequired: true,
+        });
+      }
+
+      user.security.mfa.lastUsedAt = new Date();
+
+      if (mfaResult.method === 'backup_code') {
+        appendAuditEvent(user, req, 'mfa_backup_code_used', 'A backup code was used for sign-in.');
+      }
     }
 
     await clearLoginFailures(rateKey);
@@ -1917,7 +2220,7 @@ exports.searchPublicProfiles = async (req, res) => {
         { 'profile.headline': regex },
       ],
     })
-      .select('username displayName profile linkedAccounts createdAt updatedAt')
+      .select('username displayName profile linkedAccounts preferences createdAt updatedAt')
       .sort({ updatedAt: -1, _id: -1 })
       .limit(12)
       .lean();
@@ -1944,7 +2247,7 @@ exports.getPublicProfile = async (req, res) => {
       username,
       'preferences.profilePublic': true,
     })
-      .select('username displayName profile linkedAccounts createdAt updatedAt')
+      .select('username displayName profile linkedAccounts preferences createdAt updatedAt')
       .lean();
 
     if (!user) {
@@ -2297,6 +2600,7 @@ exports.getSecurity = async (req, res) => {
       message: 'Security settings loaded.',
       security: payload.security,
       sessionLimit: MAX_ACTIVE_SESSIONS,
+      mfa: payload.security.mfa,
     });
   } catch (err) {
     console.error('Get security error:', err);
@@ -2322,6 +2626,284 @@ exports.updateSecurity = async (req, res) => {
   } catch (err) {
     console.error('Update security error:', err);
     return res.status(500).json({ message: 'Failed to update security settings.' });
+  }
+};
+
+exports.beginMfaSetup = async (req, res) => {
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const secret = generateMfaSecret();
+    const backupCodes = generateBackupCodes(MFA_BACKUP_CODE_COUNT);
+
+    user.security.mfa.pendingSecret = secret;
+    user.security.mfa.pendingBackupCodes = hashBackupCodes(backupCodes);
+    user.security.mfa.pendingCreatedAt = new Date();
+    await user.save();
+
+    return res.json({
+      message: 'MFA setup ready.',
+      setup: buildMfaSetupPayload(user, secret, backupCodes),
+      mfa: getMfaState(user),
+    });
+  } catch (err) {
+    console.error('Begin MFA setup error:', err);
+    return res.status(500).json({ message: 'Failed to start MFA setup.' });
+  }
+};
+
+exports.enableMfa = async (req, res) => {
+  const code = sanitizeMfaCode(req.body?.code);
+
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const pendingSecret = sanitizeText(user?.security?.mfa?.pendingSecret, 120);
+    if (!pendingSecret) {
+      return res.status(400).json({ message: 'Start MFA setup before enabling it.' });
+    }
+
+    if (!verifyTotp({ secret: pendingSecret, token: code })) {
+      return res.status(400).json({ message: 'Invalid MFA code.' });
+    }
+
+    user.security.mfa.enabled = true;
+    user.security.mfa.secret = pendingSecret;
+    user.security.mfa.backupCodes = Array.isArray(user.security.mfa.pendingBackupCodes)
+      ? [...user.security.mfa.pendingBackupCodes]
+      : [];
+    user.security.mfa.pendingSecret = '';
+    user.security.mfa.pendingBackupCodes = [];
+    user.security.mfa.pendingCreatedAt = null;
+    user.security.mfa.enrolledAt = new Date();
+    user.security.mfa.lastUsedAt = new Date();
+
+    appendAuditEvent(user, req, 'mfa_enabled', 'Multi-factor authentication enabled.');
+    await user.save();
+
+    return sendUserResponse(res, 200, 'Multi-factor authentication enabled.', user);
+  } catch (err) {
+    console.error('Enable MFA error:', err);
+    return res.status(500).json({ message: 'Failed to enable MFA.' });
+  }
+};
+
+exports.disableMfa = async (req, res) => {
+  const currentPassword = req.body?.currentPassword || '';
+  const code = sanitizeMfaCode(req.body?.code);
+
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    if (!user.security?.mfa?.enabled || !user.security?.mfa?.secret) {
+      return res.status(400).json({ message: 'MFA is not enabled.' });
+    }
+
+    const matches = await user.comparePassword(currentPassword);
+    if (!matches) {
+      return res.status(400).json({ message: 'Current password is incorrect.' });
+    }
+
+    if (!verifyTotp({ secret: user.security.mfa.secret, token: code })) {
+      return res.status(400).json({ message: 'Invalid MFA code.' });
+    }
+
+    user.security.mfa.enabled = false;
+    user.security.mfa.secret = '';
+    user.security.mfa.backupCodes = [];
+    user.security.mfa.pendingSecret = '';
+    user.security.mfa.pendingBackupCodes = [];
+    user.security.mfa.pendingCreatedAt = null;
+    user.security.mfa.enrolledAt = null;
+    user.security.mfa.lastUsedAt = null;
+
+    appendAuditEvent(user, req, 'mfa_disabled', 'Multi-factor authentication disabled.');
+    await user.save();
+
+    return sendUserResponse(res, 200, 'Multi-factor authentication disabled.', user);
+  } catch (err) {
+    console.error('Disable MFA error:', err);
+    return res.status(500).json({ message: 'Failed to disable MFA.' });
+  }
+};
+
+exports.regenerateMfaBackupCodes = async (req, res) => {
+  const currentPassword = req.body?.currentPassword || '';
+  const code = sanitizeMfaCode(req.body?.code);
+
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    if (!user.security?.mfa?.enabled || !user.security?.mfa?.secret) {
+      return res.status(400).json({ message: 'MFA is not enabled.' });
+    }
+
+    const matches = await user.comparePassword(currentPassword);
+    if (!matches) {
+      return res.status(400).json({ message: 'Current password is incorrect.' });
+    }
+
+    if (!verifyTotp({ secret: user.security.mfa.secret, token: code })) {
+      return res.status(400).json({ message: 'Invalid MFA code.' });
+    }
+
+    const backupCodes = generateBackupCodes(MFA_BACKUP_CODE_COUNT);
+    user.security.mfa.backupCodes = hashBackupCodes(backupCodes);
+    appendAuditEvent(user, req, 'mfa_backup_codes_regenerated', 'Backup codes regenerated.');
+    await user.save();
+
+    return res.json({
+      message: 'Backup codes regenerated.',
+      backupCodes,
+      mfa: getMfaState(user),
+    });
+  } catch (err) {
+    console.error('Regenerate MFA backup codes error:', err);
+    return res.status(500).json({ message: 'Failed to regenerate backup codes.' });
+  }
+};
+
+exports.getDevices = async (req, res) => {
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const sessions = Array.isArray(user.refreshSessions) ? user.refreshSessions : [];
+    const currentSession = findRefreshSession(user, req.user?.sid);
+    const currentFingerprint = sanitizeText(currentSession?.deviceFingerprint, 128);
+    const devices = (Array.isArray(user.knownDevices) ? user.knownDevices : [])
+      .map((device) => serializeDevice(device, sessions, currentFingerprint))
+      .sort((left, right) => {
+        const leftTime = new Date(left.lastSeenAt || 0).getTime();
+        const rightTime = new Date(right.lastSeenAt || 0).getTime();
+        return rightTime - leftTime;
+      });
+
+    return res.json({
+      message: 'Devices loaded.',
+      devices,
+    });
+  } catch (err) {
+    console.error('Get devices error:', err);
+    return res.status(500).json({ message: 'Failed to load devices.' });
+  }
+};
+
+exports.updateDevice = async (req, res) => {
+  const fingerprint = sanitizeText(req.params?.fingerprint, 128);
+  const nextLabel = sanitizeText(req.body?.label, 60);
+  const nextTrusted = hasOwn(req.body || {}, 'trusted') ? Boolean(req.body.trusted) : null;
+
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const devices = Array.isArray(user.knownDevices) ? [...user.knownDevices] : [];
+    const deviceIndex = devices.findIndex((device) => sanitizeText(device?.fingerprint, 128) === fingerprint);
+    if (deviceIndex < 0) {
+      return res.status(404).json({ message: 'Device not found.' });
+    }
+
+    const device = devices[deviceIndex];
+    devices[deviceIndex] = {
+      ...device,
+      label: nextLabel || sanitizeText(device?.label, 60) || 'Browser device',
+      trusted: nextTrusted === null ? Boolean(device?.trusted) : nextTrusted,
+    };
+    user.knownDevices = devices;
+
+    if (nextLabel) {
+      user.refreshSessions = (Array.isArray(user.refreshSessions) ? user.refreshSessions : []).map((session) =>
+        sanitizeText(session?.deviceFingerprint, 128) === fingerprint
+          ? { ...session, label: nextLabel }
+          : session
+      );
+    }
+
+    appendAuditEvent(user, req, 'device_updated', 'Device settings updated.', {
+      trusted: devices[deviceIndex].trusted,
+    });
+    await user.save();
+
+    return res.json({
+      message: 'Device updated.',
+      device: serializeDevice(
+        devices[deviceIndex],
+        Array.isArray(user.refreshSessions) ? user.refreshSessions : [],
+        sanitizeText(findRefreshSession(user, req.user?.sid)?.deviceFingerprint, 128)
+      ),
+    });
+  } catch (err) {
+    console.error('Update device error:', err);
+    return res.status(500).json({ message: 'Failed to update device.' });
+  }
+};
+
+exports.deleteDevice = async (req, res) => {
+  const fingerprint = sanitizeText(req.params?.fingerprint, 128);
+  const revokeSessions = !hasOwn(req.body || {}, 'revokeSessions') || Boolean(req.body.revokeSessions);
+
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const deviceExists = (Array.isArray(user.knownDevices) ? user.knownDevices : []).some(
+      (device) => sanitizeText(device?.fingerprint, 128) === fingerprint
+    );
+    if (!deviceExists) {
+      return res.status(404).json({ message: 'Device not found.' });
+    }
+
+    user.knownDevices = (Array.isArray(user.knownDevices) ? user.knownDevices : []).filter(
+      (device) => sanitizeText(device?.fingerprint, 128) !== fingerprint
+    );
+
+    let forceRelogin = false;
+    if (revokeSessions) {
+      const currentSid = sanitizeText(req.user?.sid, 120);
+      user.refreshSessions = (Array.isArray(user.refreshSessions) ? user.refreshSessions : []).filter((session) => {
+        const isTarget = sanitizeText(session?.deviceFingerprint, 128) === fingerprint;
+        if (isTarget && sanitizeText(session?.sid, 120) === currentSid) {
+          forceRelogin = true;
+        }
+        return !isTarget;
+      });
+    }
+
+    appendAuditEvent(user, req, 'device_removed', 'Device removed.', {
+      revokeSessions,
+    });
+    await user.save();
+
+    if (forceRelogin) {
+      clearRefreshCookie(res, req);
+    }
+
+    return res.json({
+      message: revokeSessions ? 'Device removed and sessions revoked.' : 'Device removed.',
+      forceRelogin,
+    });
+  } catch (err) {
+    console.error('Delete device error:', err);
+    return res.status(500).json({ message: 'Failed to remove device.' });
   }
 };
 

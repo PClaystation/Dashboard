@@ -31,6 +31,13 @@ router.get('/activity', auth, ctrl.getActivity);
 
 router.get('/security', auth, ctrl.getSecurity);
 router.patch('/security', auth, ctrl.updateSecurity);
+router.post('/mfa/setup', auth, ctrl.beginMfaSetup);
+router.post('/mfa/enable', auth, ctrl.enableMfa);
+router.post('/mfa/disable', auth, ctrl.disableMfa);
+router.post('/mfa/regenerate-backup-codes', auth, ctrl.regenerateMfaBackupCodes);
+router.get('/devices', auth, ctrl.getDevices);
+router.patch('/devices/:fingerprint', auth, ctrl.updateDevice);
+router.delete('/devices/:fingerprint', auth, ctrl.deleteDevice);
 router.get('/sessions', auth, ctrl.getSessions);
 router.delete('/sessions/:sessionId', auth, ctrl.revokeSession);
 router.delete('/sessions', auth, ctrl.revokeAllSessions);

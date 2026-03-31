@@ -88,6 +88,10 @@
       margin: 0;
     }
 
+    .hidden {
+      display: none;
+    }
+
     input {
       width: 100%;
       padding: 12px 14px;
@@ -167,6 +171,21 @@
     <form id="login-form" novalidate>
       <input type="text" id="login-identifier" placeholder="Email or username" autocomplete="username" required />
       <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required />
+      <input
+        type="text"
+        id="login-mfa-code"
+        class="hidden"
+        placeholder="Authenticator code"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+      />
+      <input
+        type="text"
+        id="login-backup-code"
+        class="hidden"
+        placeholder="Backup code"
+        autocomplete="one-time-code"
+      />
       <a id="forgot-password-link" class="helper-link" href="reset-password.html">Forgot password?</a>
       <button type="submit" id="login-btn" class="submit-btn">Login</button>
     </form>
@@ -266,6 +285,9 @@
     const loginBtn = document.getElementById('login-btn');
     const registerBtn = document.getElementById('register-btn');
     const forgotPasswordLink = document.getElementById('forgot-password-link');
+    const loginMfaCode = document.getElementById('login-mfa-code');
+    const loginBackupCode = document.getElementById('login-backup-code');
+    let awaitingMfa = false;
 
     const isTrustedAppOrigin = (origin) => {
       if (!origin) return false;
@@ -328,6 +350,10 @@
       registerToggle.classList.remove('selected');
       loginForm.classList.remove('hidden');
       registerForm.classList.add('hidden');
+      awaitingMfa = false;
+      loginMfaCode.classList.add('hidden');
+      loginBackupCode.classList.add('hidden');
+      loginBtn.textContent = 'Login';
       setStatus('', '#d33');
     };
 
@@ -392,9 +418,16 @@
         const data = await parseJson(res);
 
         if (!res.ok) {
+          if (data.mfaRequired) {
+            awaitingMfa = true;
+            loginMfaCode.classList.remove('hidden');
+            loginBackupCode.classList.remove('hidden');
+            loginBtn.textContent = 'Verify and Login';
+          }
           throw new Error(data.message || 'Authentication failed.');
         }
 
+        awaitingMfa = false;
         setStatus('Success. Continuing...', 'green');
         finishAuth(data);
       } catch (error) {
@@ -409,13 +442,20 @@
 
       const identifier = document.getElementById('login-identifier').value.trim();
       const password = document.getElementById('login-password').value;
+      const mfaCode = loginMfaCode.value.trim();
+      const backupCode = loginBackupCode.value.trim();
 
       if (!identifier || !password) {
         setStatus('Username/email and password are required.');
         return;
       }
 
-      await requestAuth('/login', { identifier, password }, loginBtn);
+      if (awaitingMfa && !mfaCode && !backupCode) {
+        setStatus('Enter an authenticator code or backup code.');
+        return;
+      }
+
+      await requestAuth('/login', { identifier, password, mfaCode, backupCode }, loginBtn);
     });
 
     registerForm.addEventListener('submit', async (event) => {

@@ -109,11 +109,32 @@ const dom = {
   securitySaveBtn: document.getElementById('security-save-btn'),
   loginAlertsToggle: document.getElementById('login-alerts-toggle'),
   sessionLimitNote: document.getElementById('session-limit-note'),
+  mfaStatusCopy: document.getElementById('mfa-status-copy'),
+  mfaSetupBtn: document.getElementById('mfa-setup-btn'),
+  mfaDisableBtn: document.getElementById('mfa-disable-btn'),
+  mfaBackupBtn: document.getElementById('mfa-backup-btn'),
+  mfaSetupPanel: document.getElementById('mfa-setup-panel'),
+  mfaSecret: document.getElementById('mfa-secret'),
+  mfaOtpAuthUrl: document.getElementById('mfa-otpauth-url'),
+  mfaCode: document.getElementById('mfa-code'),
+  mfaEnableBtn: document.getElementById('mfa-enable-btn'),
+  mfaBackupCodes: document.getElementById('mfa-backup-codes'),
 
   privacyForm: document.getElementById('privacy-form'),
   privacySaveBtn: document.getElementById('privacy-save-btn'),
   privacyPublic: document.getElementById('privacy-public'),
   privacySearchable: document.getElementById('privacy-searchable'),
+  publicFieldHeadline: document.getElementById('public-field-headline'),
+  publicFieldBio: document.getElementById('public-field-bio'),
+  publicFieldPronouns: document.getElementById('public-field-pronouns'),
+  publicFieldLocation: document.getElementById('public-field-location'),
+  publicFieldWebsite: document.getElementById('public-field-website'),
+  publicFieldTimezone: document.getElementById('public-field-timezone'),
+  publicFieldLanguage: document.getElementById('public-field-language'),
+  publicFieldLinked: document.getElementById('public-field-linked'),
+  publicFieldMemberSince: document.getElementById('public-field-member-since'),
+  publicProfilePreviewBtn: document.getElementById('public-profile-preview-btn'),
+  publicProfileDirectoryBtn: document.getElementById('public-profile-directory-btn'),
 
   notificationForm: document.getElementById('notification-form'),
   notificationSaveBtn: document.getElementById('notification-save-btn'),
@@ -137,6 +158,8 @@ const dom = {
   sessionsRefreshBtn: document.getElementById('sessions-refresh-btn'),
   sessionsRevokeOthersBtn: document.getElementById('sessions-revoke-others-btn'),
   sessionsRevokeAllBtn: document.getElementById('sessions-revoke-all-btn'),
+  devicesList: document.getElementById('devices-list'),
+  devicesRefreshBtn: document.getElementById('devices-refresh-btn'),
 
   activityList: document.getElementById('activity-list'),
   activityKind: document.getElementById('activity-kind'),
@@ -181,6 +204,26 @@ const normalizeActivitySummary = (summary = {}) => ({
   last30Days: Number(summary?.last30Days || 0),
   uniqueIps: Number(summary?.uniqueIps || 0),
   recentDays: Array.isArray(summary?.recentDays) ? summary.recentDays : [],
+});
+
+const normalizePublicProfileSettings = (settings = {}) => ({
+  headline: Boolean(settings?.headline),
+  bio: Boolean(settings?.bio),
+  pronouns: Boolean(settings?.pronouns),
+  location: Boolean(settings?.location),
+  website: Boolean(settings?.website),
+  timezone: Boolean(settings?.timezone),
+  language: Boolean(settings?.language),
+  linkedAccounts: Boolean(settings?.linkedAccounts),
+  memberSince: Boolean(settings?.memberSince),
+});
+
+const normalizeMfaState = (mfa = {}) => ({
+  enabled: Boolean(mfa?.enabled),
+  hasPendingSetup: Boolean(mfa?.hasPendingSetup),
+  enrolledAt: mfa?.enrolledAt || null,
+  lastUsedAt: mfa?.lastUsedAt || null,
+  backupCodesRemaining: Number(mfa?.backupCodesRemaining || 0),
 });
 
 const getDefaultApiBaseUrl = () => {
@@ -233,6 +276,7 @@ const state = {
     recentDays: [],
   },
   sessions: [],
+  devices: [],
   sessionLimit: null,
   accessToken: '',
   authEpoch: 0,
@@ -244,6 +288,7 @@ const state = {
   favoriteServices: new Set(readStoredArray(SERVICE_FAVORITES_STORAGE_KEY)),
   favoriteServicesOnly: localStorage.getItem(FAVORITE_SERVICES_ONLY_STORAGE_KEY) === 'true',
   profileAvatarDraft: '',
+  mfaSetup: null,
 };
 
 const trackedForms = [
@@ -415,6 +460,7 @@ const computeAccountHealth = (user = state.user) => {
 
   if (user.isVerified) score += 20;
   if (user.security?.loginAlerts) score += 15;
+  if (user.security?.mfa?.enabled) score += 18;
   if (getUsername(user)) score += 6;
   if (getAvatarValue(user)) score += 5;
   if (safeText(user.profile?.headline)) score += 4;
@@ -651,8 +697,10 @@ const clearDashboardUi = () => {
   state.auditEvents = [];
   state.activitySummary = normalizeActivitySummary();
   state.sessions = [];
+  state.devices = [];
   state.sessionLimit = null;
   state.profileAvatarDraft = '';
+  state.mfaSetup = null;
 
   if (dom.summaryId) dom.summaryId.textContent = '-';
   if (dom.summaryUsername) dom.summaryUsername.textContent = '-';
@@ -690,7 +738,10 @@ const clearDashboardUi = () => {
   if (dom.activityList) dom.activityList.innerHTML = '<li>No recent login activity found.</li>';
   if (dom.overviewActivityList) dom.overviewActivityList.innerHTML = '<li>Recent login activity will appear here.</li>';
   if (dom.sessionsList) dom.sessionsList.innerHTML = '<li>No active sessions found.</li>';
+  if (dom.devicesList) dom.devicesList.innerHTML = '<li>No known devices found.</li>';
   if (dom.activityBars) dom.activityBars.innerHTML = '';
+  renderBackupCodes([]);
+  renderMfaState();
 
   if (dom.insightLast7) dom.insightLast7.textContent = '0';
   if (dom.insightLast30) dom.insightLast30.textContent = '0';
@@ -1160,6 +1211,11 @@ const renderProfileChecklist = (user = state.user) => {
       detail: user.security?.loginAlerts ? 'Login alerts are active.' : 'Turn on suspicious sign-in alerts.',
       complete: Boolean(user.security?.loginAlerts),
     },
+    {
+      title: 'MFA enabled',
+      detail: user.security?.mfa?.enabled ? 'Second-factor protection is active.' : 'Enable MFA to protect sign-in.',
+      complete: Boolean(user.security?.mfa?.enabled),
+    },
   ];
 
   for (const item of items) {
@@ -1251,6 +1307,16 @@ const renderActionCenter = (user = state.user) => {
       title: 'Enable login alerts',
       detail: 'Get a heads-up when suspicious sign-in activity is detected.',
       actionLabel: 'Open security',
+      onAction: () => switchTab('security'),
+    });
+  }
+
+  if (!user.security?.mfa?.enabled) {
+    actions.push({
+      tone: 'warn',
+      title: 'Turn on MFA',
+      detail: 'Password-only sign-in is still enabled. Add an authenticator app before this account is reused elsewhere.',
+      actionLabel: 'Set up MFA',
       onAction: () => switchTab('security'),
     });
   }
@@ -1373,9 +1439,19 @@ const fillPreferences = (user) => {
   const prefs = user.preferences || {};
   const notifications = prefs.notifications || {};
   const appearance = prefs.appearance || {};
+  const publicProfile = normalizePublicProfileSettings(prefs.publicProfile);
 
   if (dom.privacyPublic) dom.privacyPublic.checked = Boolean(prefs.profilePublic);
   if (dom.privacySearchable) dom.privacySearchable.checked = Boolean(prefs.searchable);
+  if (dom.publicFieldHeadline) dom.publicFieldHeadline.checked = publicProfile.headline;
+  if (dom.publicFieldBio) dom.publicFieldBio.checked = publicProfile.bio;
+  if (dom.publicFieldPronouns) dom.publicFieldPronouns.checked = publicProfile.pronouns;
+  if (dom.publicFieldLocation) dom.publicFieldLocation.checked = publicProfile.location;
+  if (dom.publicFieldWebsite) dom.publicFieldWebsite.checked = publicProfile.website;
+  if (dom.publicFieldTimezone) dom.publicFieldTimezone.checked = publicProfile.timezone;
+  if (dom.publicFieldLanguage) dom.publicFieldLanguage.checked = publicProfile.language;
+  if (dom.publicFieldLinked) dom.publicFieldLinked.checked = publicProfile.linkedAccounts;
+  if (dom.publicFieldMemberSince) dom.publicFieldMemberSince.checked = publicProfile.memberSince;
 
   if (dom.notifyEmail) dom.notifyEmail.checked = Boolean(notifications.email);
   if (dom.notifySms) dom.notifySms.checked = Boolean(notifications.sms);
@@ -1396,6 +1472,7 @@ const fillPreferences = (user) => {
 
 const fillSecurity = (user) => {
   if (dom.loginAlertsToggle) dom.loginAlertsToggle.checked = Boolean(user.security?.loginAlerts);
+  renderMfaState(user);
   renderAccountHealth(user);
   renderActionCenter(user);
   renderProfileChecklist(user);
@@ -1709,6 +1786,7 @@ const renderSessions = () => {
       `IP: ${safeText(session.ip) || 'Unknown'}`,
       safeText(session.userAgent) || 'Unknown device',
       session.newDevice ? 'First seen on this device' : session.recognized ? 'Known device' : '',
+      session.deviceTrusted ? 'Trusted device' : '',
     ]
       .filter(Boolean)
       .join(' | ');
@@ -1717,6 +1795,176 @@ const renderSessions = () => {
     li.appendChild(meta);
     li.appendChild(details);
     dom.sessionsList.appendChild(li);
+  }
+};
+
+const renderBackupCodes = (codes = []) => {
+  if (!dom.mfaBackupCodes) return;
+
+  dom.mfaBackupCodes.innerHTML = '';
+  if (!Array.isArray(codes) || !codes.length) return;
+
+  for (const code of codes) {
+    const item = document.createElement('div');
+    item.className = 'backup-code-item';
+    item.textContent = safeText(code);
+    dom.mfaBackupCodes.appendChild(item);
+  }
+};
+
+const renderMfaState = (user = state.user) => {
+  const mfa = normalizeMfaState(user?.security?.mfa);
+
+  if (dom.mfaStatusCopy) {
+    if (mfa.enabled) {
+      dom.mfaStatusCopy.textContent = `MFA is enabled. Backup codes remaining: ${mfa.backupCodesRemaining}. Last used: ${formatDate(mfa.lastUsedAt)}.`;
+    } else if (state.mfaSetup?.secret) {
+      dom.mfaStatusCopy.textContent = 'Finish the setup below to enable MFA on your account.';
+    } else {
+      dom.mfaStatusCopy.textContent = 'MFA is not enabled.';
+    }
+  }
+
+  if (dom.mfaDisableBtn) dom.mfaDisableBtn.disabled = !mfa.enabled;
+  if (dom.mfaBackupBtn) dom.mfaBackupBtn.disabled = !mfa.enabled;
+  if (dom.mfaSetupPanel) dom.mfaSetupPanel.hidden = !state.mfaSetup?.secret;
+  if (dom.mfaSecret) dom.mfaSecret.value = safeText(state.mfaSetup?.secret);
+  if (dom.mfaOtpAuthUrl) dom.mfaOtpAuthUrl.value = safeText(state.mfaSetup?.otpAuthUrl);
+};
+
+const renderDevices = () => {
+  if (!dom.devicesList) return;
+
+  dom.devicesList.innerHTML = '';
+  if (!state.devices.length) {
+    const li = document.createElement('li');
+    li.textContent = 'No known devices found.';
+    dom.devicesList.appendChild(li);
+    return;
+  }
+
+  for (const device of state.devices) {
+    const li = document.createElement('li');
+    li.className = 'device-card';
+
+    const head = document.createElement('div');
+    head.className = 'session-head';
+
+    const title = document.createElement('strong');
+    title.textContent = safeText(device.label) || 'Browser device';
+    head.appendChild(title);
+
+    const right = document.createElement('div');
+    right.className = 'session-actions';
+
+    if (device.current) {
+      const currentChip = document.createElement('span');
+      currentChip.className = 'inline-chip';
+      currentChip.textContent = 'Current device';
+      right.appendChild(currentChip);
+    }
+
+    const trustBtn = document.createElement('button');
+    trustBtn.type = 'button';
+    trustBtn.className = 'secondary-btn';
+    trustBtn.textContent = device.trusted ? 'Mark Untrusted' : 'Trust Device';
+    trustBtn.addEventListener('click', async () => {
+      setButtonBusy(trustBtn, true, 'Saving...');
+      try {
+        await apiRequest(`/devices/${encodeURIComponent(device.fingerprint)}`, {
+          method: 'PATCH',
+          body: { trusted: !device.trusted },
+        });
+        await loadDevices();
+        await loadCurrentUser();
+        showToast(device.trusted ? 'Device marked untrusted.' : 'Device trusted.', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        setButtonBusy(trustBtn, false);
+      }
+    });
+    right.appendChild(trustBtn);
+
+    const renameBtn = document.createElement('button');
+    renameBtn.type = 'button';
+    renameBtn.className = 'secondary-btn';
+    renameBtn.textContent = 'Rename';
+    renameBtn.addEventListener('click', async () => {
+      const nextLabel = window.prompt('Device label', safeText(device.label) || 'Browser device');
+      if (!nextLabel) return;
+
+      setButtonBusy(renameBtn, true, 'Saving...');
+      try {
+        await apiRequest(`/devices/${encodeURIComponent(device.fingerprint)}`, {
+          method: 'PATCH',
+          body: { label: nextLabel },
+        });
+        await Promise.all([loadDevices(), loadSessions()]);
+        showToast('Device label updated.', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        setButtonBusy(renameBtn, false);
+      }
+    });
+    right.appendChild(renameBtn);
+
+    const forgetBtn = document.createElement('button');
+    forgetBtn.type = 'button';
+    forgetBtn.className = 'danger-btn';
+    forgetBtn.textContent = device.current ? 'Remove Device' : 'Forget Device';
+    forgetBtn.addEventListener('click', async () => {
+      if (!window.confirm('Remove this device and revoke any sessions tied to it?')) return;
+
+      setButtonBusy(forgetBtn, true, 'Removing...');
+      try {
+        const data = await apiRequest(`/devices/${encodeURIComponent(device.fingerprint)}`, {
+          method: 'DELETE',
+          body: { revokeSessions: true },
+        });
+        showToast(data.message || 'Device removed.', 'success');
+
+        if (data.forceRelogin) {
+          clearStoredAuth();
+          stopSessionAutoRefresh();
+          setLoggedOutUI(true);
+          return;
+        }
+
+        await Promise.all([loadDevices(), loadSessions(), loadCurrentUser()]);
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        setButtonBusy(forgetBtn, false);
+      }
+    });
+    right.appendChild(forgetBtn);
+
+    head.appendChild(right);
+
+    const meta = document.createElement('div');
+    meta.className = 'session-meta';
+    meta.textContent = [
+      `Last seen: ${formatDate(device.lastSeenAt)}`,
+      `First seen: ${formatDate(device.firstSeenAt)}`,
+      device.trusted ? 'Trusted' : 'Untrusted',
+      `${Number(device.activeSessions || 0)} active session${Number(device.activeSessions || 0) === 1 ? '' : 's'}`,
+    ].join(' | ');
+
+    const detail = document.createElement('div');
+    detail.className = 'session-meta';
+    detail.textContent = [
+      `IP: ${safeText(device.lastIp) || 'Unknown'}`,
+      safeText(device.userAgent) || 'Unknown device',
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    li.appendChild(head);
+    li.appendChild(meta);
+    li.appendChild(detail);
+    dom.devicesList.appendChild(li);
   }
 };
 
@@ -1799,6 +2047,7 @@ const syncUiWithUser = (user) => {
   renderActivityBars();
   renderInsights();
   renderVerificationState(user);
+  renderDevices();
   renderServices();
   renderAvatarPreviews(user);
 
@@ -1854,6 +2103,18 @@ const loadSecurity = async () => {
   updateSessionNote();
 };
 
+const loadDevices = async () => {
+  const data = await apiRequest('/devices', { method: 'GET', auth: true });
+  state.devices = Array.isArray(data.devices) ? data.devices : [];
+
+  if (!state.user) state.user = {};
+  if (!state.user.security) state.user.security = {};
+  state.user.security.knownDevices = state.devices.length;
+
+  renderDevices();
+  updateSessionNote();
+};
+
 const loadSessions = async () => {
   const data = await apiRequest('/sessions', { method: 'GET', auth: true });
   state.sessions = Array.isArray(data.sessions) ? data.sessions : [];
@@ -1888,6 +2149,14 @@ const loadDashboardData = async ({ silent = false } = {}) => {
     await loadSessions();
   } catch (error) {
     sessionsError = error;
+  }
+
+  try {
+    await loadDevices();
+  } catch (error) {
+    if (state.appVisible) {
+      showToast('Account loaded, but devices could not be refreshed.', 'warn', 3600);
+    }
   }
 
   if (sessionsError && !state.user) {
@@ -2219,9 +2488,128 @@ const handleSecuritySave = async (event) => {
   }
 };
 
+const handleMfaSetup = async () => {
+  setButtonBusy(dom.mfaSetupBtn, true, 'Preparing...');
+
+  try {
+    const data = await apiRequest('/mfa/setup', {
+      method: 'POST',
+      body: {},
+    });
+
+    state.mfaSetup = data.setup || null;
+    renderBackupCodes(data.setup?.backupCodes || []);
+    renderMfaState(state.user);
+    showToast('Authenticator setup created.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    setButtonBusy(dom.mfaSetupBtn, false);
+  }
+};
+
+const handleMfaEnable = async () => {
+  const code = safeText(dom.mfaCode?.value);
+  if (!code) {
+    showToast('Enter the MFA code from your authenticator app.', 'error');
+    return;
+  }
+
+  setButtonBusy(dom.mfaEnableBtn, true, 'Enabling...');
+
+  try {
+    const data = await apiRequest('/mfa/enable', {
+      method: 'POST',
+      body: { code },
+    });
+
+    state.user = normalizeUserPayload(data);
+    state.mfaSetup = null;
+    if (dom.mfaCode) dom.mfaCode.value = '';
+    renderBackupCodes([]);
+    syncUiWithUser(state.user);
+    showToast('MFA enabled.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    setButtonBusy(dom.mfaEnableBtn, false);
+  }
+};
+
+const handleMfaDisable = async () => {
+  const currentPassword = window.prompt('Enter your current password to disable MFA.');
+  if (!currentPassword) return;
+
+  const code = window.prompt('Enter a current MFA code.');
+  if (!code) return;
+
+  setButtonBusy(dom.mfaDisableBtn, true, 'Disabling...');
+
+  try {
+    const data = await apiRequest('/mfa/disable', {
+      method: 'POST',
+      body: { currentPassword, code },
+    });
+
+    state.user = normalizeUserPayload(data);
+    state.mfaSetup = null;
+    renderBackupCodes([]);
+    syncUiWithUser(state.user);
+    showToast('MFA disabled.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    setButtonBusy(dom.mfaDisableBtn, false);
+  }
+};
+
+const handleMfaBackupCodes = async () => {
+  const currentPassword = window.prompt('Enter your current password to regenerate backup codes.');
+  if (!currentPassword) return;
+
+  const code = window.prompt('Enter a current MFA code.');
+  if (!code) return;
+
+  setButtonBusy(dom.mfaBackupBtn, true, 'Regenerating...');
+
+  try {
+    const data = await apiRequest('/mfa/regenerate-backup-codes', {
+      method: 'POST',
+      body: { currentPassword, code },
+    });
+
+    if (!state.user) state.user = {};
+    if (!state.user.security) state.user.security = {};
+    state.user.security.mfa = normalizeMfaState(data.mfa || state.user.security.mfa);
+    renderBackupCodes(data.backupCodes || []);
+    renderMfaState(state.user);
+    showToast('Backup codes regenerated.', 'success', 4200);
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    setButtonBusy(dom.mfaBackupBtn, false);
+  }
+};
+
+const openPublicProfileDirectory = () => {
+  const url = new URL('profile.html', window.location.href);
+  window.open(url.toString(), '_blank', 'noopener');
+};
+
 const buildPreferencesPayload = () => ({
   profilePublic: Boolean(dom.privacyPublic?.checked),
   searchable: Boolean(dom.privacySearchable?.checked),
+  publicProfile: {
+    headline: Boolean(dom.publicFieldHeadline?.checked),
+    bio: Boolean(dom.publicFieldBio?.checked),
+    pronouns: Boolean(dom.publicFieldPronouns?.checked),
+    location: Boolean(dom.publicFieldLocation?.checked),
+    website: Boolean(dom.publicFieldWebsite?.checked),
+    timezone: Boolean(dom.publicFieldTimezone?.checked),
+    language: Boolean(dom.publicFieldLanguage?.checked),
+    linkedAccounts: Boolean(dom.publicFieldLinked?.checked),
+    memberSince: Boolean(dom.publicFieldMemberSince?.checked),
+  },
   notifications: {
     email: Boolean(dom.notifyEmail?.checked),
     sms: Boolean(dom.notifySms?.checked),
@@ -2557,6 +2945,23 @@ const setupEventHandlers = () => {
   if (dom.linkedForm) dom.linkedForm.addEventListener('submit', handleLinkedSave);
   if (dom.passwordForm) dom.passwordForm.addEventListener('submit', handlePasswordSave);
   if (dom.securityForm) dom.securityForm.addEventListener('submit', handleSecuritySave);
+  if (dom.mfaSetupBtn) dom.mfaSetupBtn.addEventListener('click', handleMfaSetup);
+  if (dom.mfaEnableBtn) dom.mfaEnableBtn.addEventListener('click', handleMfaEnable);
+  if (dom.mfaDisableBtn) dom.mfaDisableBtn.addEventListener('click', handleMfaDisable);
+  if (dom.mfaBackupBtn) dom.mfaBackupBtn.addEventListener('click', handleMfaBackupCodes);
+  if (dom.publicProfilePreviewBtn) {
+    dom.publicProfilePreviewBtn.addEventListener('click', () => {
+      const url = getPublicProfileUrl(state.user?.username);
+      if (!url) {
+        showToast('Set a username before previewing your public profile.', 'error');
+        return;
+      }
+      window.open(url, '_blank', 'noopener');
+    });
+  }
+  if (dom.publicProfileDirectoryBtn) {
+    dom.publicProfileDirectoryBtn.addEventListener('click', openPublicProfileDirectory);
+  }
 
   if (dom.newPassword) {
     dom.newPassword.addEventListener('input', updatePasswordStrengthUi);
@@ -2617,6 +3022,20 @@ const setupEventHandlers = () => {
         showToast(err.message, 'error');
       } finally {
         setButtonBusy(dom.sessionsRefreshBtn, false);
+      }
+    });
+  }
+
+  if (dom.devicesRefreshBtn) {
+    dom.devicesRefreshBtn.addEventListener('click', async () => {
+      setButtonBusy(dom.devicesRefreshBtn, true, 'Refreshing...');
+      try {
+        await loadDevices();
+        showToast('Devices refreshed.', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        setButtonBusy(dom.devicesRefreshBtn, false);
       }
     });
   }
