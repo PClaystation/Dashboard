@@ -336,6 +336,26 @@ input[type='checkbox'] {
   color: var(--muted);
 }
 
+.loading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.85rem;
+}
+
+.loading-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding-inline: 1.1rem;
+  text-decoration: none;
+}
+
+.loading-link:hover {
+  text-decoration: none;
+}
+
 .pulsing-image {
   width: 120px;
   margin: 0 auto;

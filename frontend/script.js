@@ -13,6 +13,9 @@ const AVATAR_ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/web
 const dom = {
   loadingScreen: document.getElementById('loading-screen'),
   loadingMessage: document.getElementById('loading-message'),
+  loadingActions: document.getElementById('loading-actions'),
+  loadingSignInBtn: document.getElementById('loading-sign-in-btn'),
+  loadingFullLoginLink: document.getElementById('loading-full-login-link'),
   appContent: document.getElementById('app-content'),
   toastRegion: document.getElementById('toast-region'),
 
@@ -597,7 +600,6 @@ const stopSessionAutoRefresh = () => {
 };
 
 const handleUnauthenticatedState = ({
-  openPopup = true,
   message = 'Your session expired. Please sign in again.',
   notify = true,
 } = {}) => {
@@ -610,7 +612,7 @@ const handleUnauthenticatedState = ({
     return;
   }
 
-  setLoggedOutUI(openPopup);
+  setLoggedOutUI();
 
   if (notify && message && state.appVisible) {
     showToast(message, 'warn', 4200);
@@ -662,7 +664,15 @@ const openLoginPopup = () => {
   state.loginPopupWindow = window.open(
     popupUrl.toString(),
     'LoginPopup',
-    `width=${width},height=${height},top=${Math.max(top, 0)},left=${Math.max(left, 0)}`
+    [
+      'popup=yes',
+      `width=${width}`,
+      `height=${height}`,
+      `top=${Math.max(top, 0)}`,
+      `left=${Math.max(left, 0)}`,
+      'resizable=yes',
+      'scrollbars=yes',
+    ].join(',')
   );
 
   return state.loginPopupWindow;
@@ -670,6 +680,19 @@ const openLoginPopup = () => {
 
 const openLoginPage = () => {
   window.location.assign(buildLoginPopupUrl().toString());
+};
+
+const promptSignIn = () => {
+  const popup = openLoginPopup();
+  if (popup) {
+    if (dom.loadingMessage && !state.appVisible) {
+      dom.loadingMessage.textContent = 'Sign-in window opened. Finish login there, then return here.';
+    }
+    return true;
+  }
+
+  openLoginPage();
+  return false;
 };
 
 const closeLoginPopup = () => {
@@ -764,7 +787,7 @@ const clearDashboardUi = () => {
   });
 };
 
-const setLoggedOutUI = (openPopup = true) => {
+const setLoggedOutUI = () => {
   stopSessionAutoRefresh();
   clearStoredAuth();
   clearDashboardUi();
@@ -772,10 +795,7 @@ const setLoggedOutUI = (openPopup = true) => {
   setStatus('Not logged in - click to sign in', {
     clickable: true,
     onClick: () => {
-      const popup = openLoginPopup();
-      if (!popup) {
-        openLoginPage();
-      }
+      promptSignIn();
     },
   });
 
@@ -787,20 +807,17 @@ const setLoggedOutUI = (openPopup = true) => {
     dom.loadingMessage.textContent = 'Please sign in to continue.';
   }
 
-  if (!openPopup) return;
-
-  const popup = openLoginPopup();
-  if (popup) return;
-
-  if (dom.loadingMessage) {
-    dom.loadingMessage.textContent = 'Login popup blocked. Click here to continue to login.';
+  if (dom.loadingScreen) {
+    dom.loadingScreen.style.cursor = 'default';
+    dom.loadingScreen.onclick = null;
   }
 
-  if (dom.loadingScreen) {
-    dom.loadingScreen.style.cursor = 'pointer';
-    dom.loadingScreen.onclick = () => {
-      openLoginPage();
-    };
+  if (!state.appVisible && dom.loadingActions) {
+    dom.loadingActions.hidden = false;
+  }
+
+  if (!state.appVisible && dom.loadingFullLoginLink) {
+    dom.loadingFullLoginLink.href = buildLoginPopupUrl().toString();
   }
 };
 
@@ -1763,7 +1780,7 @@ const renderSessions = () => {
         if (data.forceRelogin) {
           clearStoredAuth();
           stopSessionAutoRefresh();
-          setLoggedOutUI(true);
+          setLoggedOutUI();
           return;
         }
 
@@ -1933,7 +1950,7 @@ const renderDevices = () => {
         if (data.forceRelogin) {
           clearStoredAuth();
           stopSessionAutoRefresh();
-          setLoggedOutUI(true);
+          setLoggedOutUI();
           return;
         }
 
@@ -2187,6 +2204,10 @@ const showApp = () => {
 
   if (!dom.loadingScreen || !dom.appContent) return;
 
+  if (dom.loadingActions) {
+    dom.loadingActions.hidden = true;
+  }
+
   dom.loadingScreen.style.opacity = '0';
   setTimeout(() => {
     dom.loadingScreen.style.display = 'none';
@@ -2234,7 +2255,7 @@ const doLogout = async () => {
 
   clearStoredAuth();
   stopSessionAutoRefresh();
-  setLoggedOutUI(true);
+  setLoggedOutUI();
   showToast('Logged out successfully.', 'success');
 };
 
@@ -2373,7 +2394,7 @@ const handleProfileSave = async (event) => {
     if (profileResult.forceRelogin) {
       clearStoredAuth();
       stopSessionAutoRefresh();
-      setTimeout(() => setLoggedOutUI(true), 450);
+      setTimeout(() => setLoggedOutUI(), 450);
       return;
     }
 
@@ -2468,7 +2489,7 @@ const handlePasswordSave = async (event) => {
     if (result.forceRelogin) {
       clearStoredAuth();
       stopSessionAutoRefresh();
-      setTimeout(() => setLoggedOutUI(true), 450);
+      setTimeout(() => setLoggedOutUI(), 450);
     }
   } catch (err) {
     showToast(err.message, 'error');
@@ -2717,9 +2738,8 @@ const handleDeleteAccount = async (event) => {
     if (dom.deleteForm) dom.deleteForm.reset();
     clearStoredAuth();
     stopSessionAutoRefresh();
-    setLoggedOutUI(false);
+    setLoggedOutUI();
     showToast('Account deleted.', 'success');
-    openLoginPopup();
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
@@ -2903,6 +2923,12 @@ const setupEventHandlers = () => {
   setupServiceFiltering();
   setupUnsavedChangeTracking();
   setupKeyboardShortcuts();
+
+  if (dom.loadingSignInBtn) {
+    dom.loadingSignInBtn.addEventListener('click', () => {
+      promptSignIn();
+    });
+  }
 
   if (dom.logoutBtn) dom.logoutBtn.addEventListener('click', doLogout);
   if (dom.refreshDataBtn) dom.refreshDataBtn.addEventListener('click', runManualRefresh);
@@ -3103,7 +3129,7 @@ const setupEventHandlers = () => {
         if (data.forceRelogin) {
           clearStoredAuth();
           stopSessionAutoRefresh();
-          setLoggedOutUI(true);
+          setLoggedOutUI();
           return;
         }
 
@@ -3214,5 +3240,5 @@ window.addEventListener('load', async () => {
     return;
   }
 
-  setLoggedOutUI(true);
+  setLoggedOutUI();
 });
