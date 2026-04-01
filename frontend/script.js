@@ -265,6 +265,10 @@ const dom = {
   mfaCode: document.getElementById('mfa-code'),
   mfaEnableBtn: document.getElementById('mfa-enable-btn'),
   mfaBackupCodes: document.getElementById('mfa-backup-codes'),
+  passkeyStatusCopy: document.getElementById('passkey-status-copy'),
+  passkeyCurrentPassword: document.getElementById('passkey-current-password'),
+  passkeyRegisterBtn: document.getElementById('passkey-register-btn'),
+  passkeyList: document.getElementById('passkey-list'),
 
   privacyForm: document.getElementById('privacy-form'),
   privacySaveBtn: document.getElementById('privacy-save-btn'),
@@ -436,6 +440,24 @@ const normalizeMfaState = (mfa = {}) => ({
   backupCodesRemaining: Number(mfa?.backupCodesRemaining || 0),
 });
 
+const normalizePasskeyState = (passkeys = {}) => ({
+  count: Math.max(0, Number(passkeys?.count || 0)),
+  lastUsedAt: passkeys?.lastUsedAt || null,
+  items: Array.isArray(passkeys?.items)
+    ? passkeys.items.map((item) => ({
+        credentialId: safeText(item?.credentialId),
+        name: safeText(item?.name) || 'Passkey',
+        createdAt: item?.createdAt || null,
+        lastUsedAt: item?.lastUsedAt || null,
+        transports: Array.isArray(item?.transports)
+          ? item.transports.map((transport) => safeText(transport)).filter(Boolean)
+          : [],
+        deviceType: safeText(item?.deviceType) === 'multiDevice' ? 'multiDevice' : 'singleDevice',
+        backedUp: Boolean(item?.backedUp),
+      }))
+    : [],
+});
+
 const getDefaultApiBaseUrl = () => {
   if (LOCAL_HOSTS.has(window.location.hostname)) {
     return 'http://localhost:5000';
@@ -449,7 +471,8 @@ const getDefaultApiBaseUrl = () => {
 };
 
 const getApiBaseCandidates = () => {
-  const rawCandidates = [window.__API_BASE_URL__, readStoredApiBaseUrl()];
+  const params = new URLSearchParams(window.location.search);
+  const rawCandidates = [params.get('apiBaseUrl'), window.__API_BASE_URL__, readStoredApiBaseUrl()];
 
   if (LOCAL_HOSTS.has(window.location.hostname)) {
     rawCandidates.push('http://localhost:5000', window.location.origin);
@@ -527,7 +550,12 @@ const ensureApiBaseUrl = async () => {
     );
   })();
 
-  return apiBaseResolutionPromise;
+  try {
+    return await apiBaseResolutionPromise;
+  } catch (error) {
+    apiBaseResolutionPromise = null;
+    throw error;
+  }
 };
 
 const getDefaultLoginPopupUrl = () => {
@@ -705,6 +733,9 @@ const getFirstName = (user = state.user) => {
   return source.split(/[\s@._-]+/).filter(Boolean)[0] || 'there';
 };
 
+const getMigrationState = (user = state.user) =>
+  user?.migration && typeof user.migration === 'object' ? user.migration : {};
+
 const normalizeAvatarInput = (value) => {
   const raw = safeText(value);
   if (!raw) return '';
@@ -824,6 +855,15 @@ const getAccountHealthContributors = (user = state.user) => {
       detail: user.security?.mfa?.enabled ? 'Authenticator-based sign-in is active.' : 'Password-only sign-in is still allowed.',
       points: user.security?.mfa?.enabled ? 18 : 0,
       max: 18,
+    },
+    {
+      title: 'Passkeys',
+      detail:
+        Number(user.security?.passkeys?.count || 0) > 0
+          ? `${Number(user.security?.passkeys?.count || 0)} passkey${Number(user.security?.passkeys?.count || 0) === 1 ? '' : 's'} saved for passwordless sign-in.`
+          : 'No passkeys are registered yet.',
+      points: Number(user.security?.passkeys?.count || 0) > 0 ? 16 : 0,
+      max: 16,
     },
     {
       title: 'Claimed username',
@@ -1163,6 +1203,7 @@ const clearDashboardUi = () => {
   if (dom.profileAvatarUpload) dom.profileAvatarUpload.value = '';
   if (dom.mfaCurrentPassword) dom.mfaCurrentPassword.value = '';
   if (dom.mfaCode) dom.mfaCode.value = '';
+  if (dom.passkeyCurrentPassword) dom.passkeyCurrentPassword.value = '';
 
   if (dom.activityFilter) dom.activityFilter.value = '';
   if (dom.activityKind) dom.activityKind.value = 'all';
@@ -1171,9 +1212,11 @@ const clearDashboardUi = () => {
   if (dom.overviewActivityList) dom.overviewActivityList.innerHTML = '<li>No recent activity.</li>';
   if (dom.sessionsList) dom.sessionsList.innerHTML = '<li>No active sessions found.</li>';
   if (dom.devicesList) dom.devicesList.innerHTML = '<li>No known devices found.</li>';
+  if (dom.passkeyList) dom.passkeyList.innerHTML = '<li>No passkeys saved.</li>';
   if (dom.activityBars) dom.activityBars.innerHTML = '';
   renderBackupCodes([]);
   renderMfaState();
+  renderPasskeys();
 
   if (dom.insightLast7) dom.insightLast7.textContent = '0';
   if (dom.insightLast30) dom.insightLast30.textContent = '0';
@@ -1231,16 +1274,24 @@ const setLoggedOutUI = () => {
 const stripLegacyAuthParamsFromUrl = () => {
   const params = new URLSearchParams(window.location.search);
   const hadLegacyAuthParams =
-    params.has('token') || params.has('userId') || params.has('continentalId');
+    params.has('token') ||
+    params.has('userId') ||
+    params.has('continentalId') ||
+    params.has('email') ||
+    params.has('username');
 
   if (hadLegacyAuthParams) {
     params.delete('token');
     params.delete('userId');
     params.delete('continentalId');
+    params.delete('email');
+    params.delete('username');
     const nextQuery = params.toString();
     const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
     history.replaceState({}, '', nextUrl);
   }
+
+  return hadLegacyAuthParams;
 };
 
 const refreshSession = async () => {
@@ -1533,6 +1584,17 @@ const renderHero = (user = state.user) => {
 
     const completion = Number(user.profile?.completion || 0);
     const sessionCount = Math.max(0, getActiveSessionCount());
+    const migration = getMigrationState(user);
+    if (migration.suggested) {
+      const inactiveDays = Number.isFinite(Number(migration.inactiveDays))
+        ? `${Number(migration.inactiveDays)} days away`
+        : 'returning account';
+      dom.heroStatusNote.textContent = `${inactiveDays}, ${completion}% complete, ${
+        user.isVerified ? 'verified' : 'verification pending'
+      }. Review security before relying on this account again.`;
+      return;
+    }
+
     dom.heroStatusNote.textContent = `${completion}% complete, ${
       user.isVerified ? 'verified' : 'verification pending'
     }, ${sessionCount} ${sessionCount === 1 ? 'session' : 'sessions'}.`;
@@ -1603,7 +1665,17 @@ const renderProfileChecklist = (user = state.user) => {
     return;
   }
 
+  const migration = getMigrationState(user);
   const items = [
+    {
+      title: 'Returning account review',
+      detail: migration.suggested
+        ? Number.isFinite(Number(migration.inactiveDays))
+          ? `This account was inactive for ${Number(migration.inactiveDays)} days. Review profile, recovery, and sign-in settings.`
+          : 'This older account should be reviewed against the upgraded identity model.'
+        : 'This account has already been reviewed recently.',
+      complete: !migration.suggested,
+    },
     {
       title: 'Username claimed',
       detail: getUserHandle(user) ? `${getUserHandle(user)} is active.` : 'Choose a sign-in handle.',
@@ -1674,6 +1746,14 @@ const renderProfileChecklist = (user = state.user) => {
       detail: user.security?.mfa?.enabled ? 'Second-factor protection is active.' : 'Enable MFA to protect sign-in.',
       complete: Boolean(user.security?.mfa?.enabled),
     },
+    {
+      title: 'Passkey added',
+      detail:
+        Number(user.security?.passkeys?.count || 0) > 0
+          ? 'Passwordless sign-in is ready.'
+          : 'Add a passkey for faster sign-in on your devices.',
+      complete: Number(user.security?.passkeys?.count || 0) > 0,
+    },
   ];
 
   for (const item of items) {
@@ -1738,6 +1818,28 @@ const renderActionCenter = (user = state.user) => {
   const actions = [];
   const completion = Number(user.profile?.completion || 0);
   const activeSessions = Math.max(0, getActiveSessionCount());
+  const migration = getMigrationState(user);
+
+  if (migration.suggested) {
+    const migrationDetails = [];
+    if (Number.isFinite(Number(migration.inactiveDays))) {
+      migrationDetails.push(`Last active about ${Number(migration.inactiveDays)} days ago.`);
+    }
+    if (migration.shouldResetPassword) migrationDetails.push('Refresh the password for the newer auth flow.');
+    if (migration.shouldVerifyEmail) migrationDetails.push('Finish email verification.');
+    if (migration.shouldEnableMfa) migrationDetails.push('Turn on MFA.');
+    if (migration.shouldAddPasskey) migrationDetails.push('Add a passkey.');
+
+    actions.push({
+      tone: 'warn',
+      title: 'Review this upgraded account',
+      detail:
+        migrationDetails.join(' ') ||
+        'This returning account should be reviewed against the current sign-in and recovery settings.',
+      actionLabel: 'Open security',
+      onAction: () => switchTab('security'),
+    });
+  }
 
   if (!user.isVerified) {
     actions.push({
@@ -1802,6 +1904,16 @@ const renderActionCenter = (user = state.user) => {
       title: 'Turn on MFA',
       detail: 'Password-only sign-in is still enabled. Add an authenticator app before this account is reused elsewhere.',
       actionLabel: 'Set up MFA',
+      onAction: () => switchTab('security'),
+    });
+  }
+
+  if (!Number(user.security?.passkeys?.count || 0)) {
+    actions.push({
+      tone: 'neutral',
+      title: 'Add a passkey',
+      detail: 'Use a device passkey for passwordless sign-in and stronger phishing resistance.',
+      actionLabel: 'Open security',
       onAction: () => switchTab('security'),
     });
   }
@@ -2415,6 +2527,7 @@ const fillPreferences = (user) => {
 const fillSecurity = (user) => {
   if (dom.loginAlertsToggle) dom.loginAlertsToggle.checked = Boolean(user.security?.loginAlerts);
   renderMfaState(user);
+  renderPasskeys(user);
   renderAccountHealth(user);
   renderActionCenter(user);
   renderProfileChecklist(user);
@@ -2986,6 +3099,120 @@ const renderMfaState = (user = state.user) => {
   if (dom.mfaOtpAuthUrl) dom.mfaOtpAuthUrl.value = safeText(state.mfaSetup?.otpAuthUrl);
 };
 
+const renderPasskeys = (user = state.user) => {
+  const passkeys = normalizePasskeyState(user?.security?.passkeys);
+  const supported = Boolean(window.WebAuthnJson?.isSupported?.());
+
+  if (dom.passkeyStatusCopy) {
+    if (!supported) {
+      dom.passkeyStatusCopy.textContent = 'This browser does not support passkeys.';
+    } else if (passkeys.count > 0) {
+      dom.passkeyStatusCopy.textContent = `${passkeys.count} passkey${
+        passkeys.count === 1 ? '' : 's'
+      } saved. Last used: ${formatDate(passkeys.lastUsedAt)}.`;
+    } else {
+      dom.passkeyStatusCopy.textContent = 'No passkeys saved.';
+    }
+  }
+
+  if (dom.passkeyRegisterBtn) dom.passkeyRegisterBtn.disabled = !supported;
+  if (!dom.passkeyList) return;
+
+  dom.passkeyList.innerHTML = '';
+  if (!passkeys.items.length) {
+    const li = document.createElement('li');
+    li.textContent = supported ? 'No passkeys saved.' : 'Passkeys are unavailable in this browser.';
+    dom.passkeyList.appendChild(li);
+    return;
+  }
+
+  for (const passkey of passkeys.items) {
+    const li = document.createElement('li');
+    li.className = 'passkey-card';
+
+    const head = document.createElement('div');
+    head.className = 'session-head';
+
+    const left = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = passkey.name || 'Passkey';
+    left.appendChild(title);
+
+    const chipRow = document.createElement('div');
+    chipRow.className = 'session-actions';
+
+    const typeChip = document.createElement('span');
+    typeChip.className = 'inline-chip';
+    typeChip.textContent = passkey.deviceType === 'multiDevice' ? 'Synced passkey' : 'Device passkey';
+    chipRow.appendChild(typeChip);
+
+    if (passkey.backedUp) {
+      const backupChip = document.createElement('span');
+      backupChip.className = 'inline-chip';
+      backupChip.textContent = 'Backed up';
+      chipRow.appendChild(backupChip);
+    }
+
+    left.appendChild(chipRow);
+
+    const actions = document.createElement('div');
+    actions.className = 'session-actions';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'danger-btn';
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', async () => {
+      const currentPassword = dom.passkeyCurrentPassword?.value || '';
+      if (!currentPassword) {
+        showToast('Enter your current password before removing a passkey.', 'error');
+        dom.passkeyCurrentPassword?.focus();
+        return;
+      }
+      if (!window.confirm(`Remove ${passkey.name || 'this passkey'}?`)) return;
+
+      setButtonBusy(removeBtn, true, 'Removing...');
+      try {
+        const data = await apiRequest(`/passkeys/${encodeURIComponent(passkey.credentialId)}`, {
+          method: 'DELETE',
+          auth: true,
+          body: { currentPassword },
+        });
+        if (!state.user) state.user = {};
+        state.user.security = data.security || data.user?.security || state.user.security || {};
+        if (dom.passkeyCurrentPassword) dom.passkeyCurrentPassword.value = '';
+        fillSecurity(state.user);
+        showToast(data.message || 'Passkey removed.', 'success');
+      } catch (error) {
+        showToast(error.message || 'Failed to remove the passkey.', 'error');
+      } finally {
+        setButtonBusy(removeBtn, false);
+      }
+    });
+
+    actions.appendChild(removeBtn);
+    head.appendChild(left);
+    head.appendChild(actions);
+
+    const meta = document.createElement('p');
+    meta.className = 'session-meta';
+    meta.textContent = `Created: ${formatDate(passkey.createdAt)} | Last used: ${formatDate(
+      passkey.lastUsedAt
+    )}`;
+
+    const detail = document.createElement('p');
+    detail.className = 'session-meta';
+    detail.textContent = passkey.transports.length
+      ? `Transports: ${passkey.transports.join(', ')}`
+      : 'Transports: Not reported by the authenticator';
+
+    li.appendChild(head);
+    li.appendChild(meta);
+    li.appendChild(detail);
+    dom.passkeyList.appendChild(li);
+  }
+};
+
 const renderDevices = () => {
   if (!dom.devicesList) return;
 
@@ -3366,19 +3593,25 @@ const showApp = () => {
 };
 
 const initializeSession = async () => {
-  stripLegacyAuthParamsFromUrl();
+  const strippedLegacyParams = stripLegacyAuthParamsFromUrl();
 
   const refreshed = await refreshSession();
   if (!refreshed.ok) return false;
 
   try {
     await loadDashboardData();
+    if (strippedLegacyParams) {
+      showToast('Old sign-in parameters were removed from the URL. The current session flow is now in use.', 'info', 5000);
+    }
     return true;
   } catch {
     const retry = await refreshSession();
     if (!retry.ok) return false;
 
     await loadDashboardData();
+    if (strippedLegacyParams) {
+      showToast('Old sign-in parameters were removed from the URL. The current session flow is now in use.', 'info', 5000);
+    }
     return true;
   }
 };
@@ -3667,6 +3900,75 @@ const handleSecuritySave = async (event) => {
     showToast(err.message, 'error');
   } finally {
     setButtonBusy(dom.securitySaveBtn, false);
+  }
+};
+
+const handlePasskeyRegister = async () => {
+  if (!window.WebAuthnJson?.isSupported?.()) {
+    showToast('This browser does not support passkeys.', 'error');
+    return;
+  }
+
+  const currentPassword = dom.passkeyCurrentPassword?.value || '';
+  if (!currentPassword) {
+    showToast('Enter your current password before adding a passkey.', 'error');
+    dom.passkeyCurrentPassword?.focus();
+    return;
+  }
+
+  setButtonBusy(dom.passkeyRegisterBtn, true, 'Adding...');
+
+  try {
+    await ensureApiBaseUrl();
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (state.accessToken) {
+      headers.Authorization = `Bearer ${state.accessToken}`;
+    }
+
+    const optionsResponse = await fetchWithTimeout(`${getAuthApiBase()}/passkeys/register/options`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify({ currentPassword }),
+    });
+    const optionsPayload = await parseResponseBody(optionsResponse);
+    if (!optionsResponse.ok) {
+      if (optionsResponse.status === 401) {
+        handleUnauthenticatedState({ message: optionsPayload.message || 'Your session expired. Please sign in again.' });
+      }
+      throw new Error(optionsPayload.message || 'Failed to start passkey registration.');
+    }
+
+    const credential = await window.WebAuthnJson.create(optionsPayload.options);
+
+    const verifyResponse = await fetchWithTimeout(`${getAuthApiBase()}/passkeys/register/verify`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify({ credential }),
+    });
+    const verifyPayload = await parseResponseBody(verifyResponse);
+    if (!verifyResponse.ok) {
+      if (verifyResponse.status === 401) {
+        handleUnauthenticatedState({ message: verifyPayload.message || 'Your session expired. Please sign in again.' });
+      }
+      throw new Error(verifyPayload.message || 'Failed to verify the new passkey.');
+    }
+
+    syncUiWithUser(normalizeUserPayload(verifyPayload));
+    if (dom.passkeyCurrentPassword) dom.passkeyCurrentPassword.value = '';
+    showToast(verifyPayload.message || 'Passkey added.', 'success');
+    setSyncStatus(new Date());
+  } catch (error) {
+    if (error?.name === 'NotAllowedError') {
+      showToast('Passkey registration was cancelled or timed out.', 'warn');
+      return;
+    }
+    showToast(error.message || 'Failed to add the passkey.', 'error');
+  } finally {
+    setButtonBusy(dom.passkeyRegisterBtn, false);
   }
 };
 
@@ -4172,6 +4474,7 @@ const setupEventHandlers = () => {
   if (dom.mfaEnableBtn) dom.mfaEnableBtn.addEventListener('click', handleMfaEnable);
   if (dom.mfaDisableBtn) dom.mfaDisableBtn.addEventListener('click', handleMfaDisable);
   if (dom.mfaBackupBtn) dom.mfaBackupBtn.addEventListener('click', handleMfaBackupCodes);
+  if (dom.passkeyRegisterBtn) dom.passkeyRegisterBtn.addEventListener('click', handlePasskeyRegister);
   if (dom.publicProfilePreviewBtn) {
     dom.publicProfilePreviewBtn.addEventListener('click', () => {
       const draftState = getDraftPublicProfileState(state.user);

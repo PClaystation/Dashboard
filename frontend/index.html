@@ -982,6 +982,42 @@
             <article class="section-card">
               <div class="section-heading">
                 <div>
+                  <p class="eyebrow">Passwordless</p>
+                  <h3>Passkeys</h3>
+                </div>
+              </div>
+
+              <div class="stack-grid">
+                <div class="mfa-status-card">
+                  <p id="passkey-status-copy" class="helper-line">No passkeys saved.</p>
+                  <div class="mfa-actions">
+                    <button id="passkey-register-btn" class="secondary-btn" type="button">Add Passkey</button>
+                  </div>
+                </div>
+
+                <div class="passkey-panel">
+                  <label>
+                    Current password
+                    <input
+                      id="passkey-current-password"
+                      type="password"
+                      autocomplete="current-password"
+                      placeholder="Required to add or remove passkeys"
+                    />
+                  </label>
+                  <p class="helper-line">
+                    Use your device biometrics, screen lock, or security key when the browser prompts you.
+                  </p>
+                  <ul id="passkey-list" class="activity-list">
+                    <li>No passkeys saved.</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
                   <p class="eyebrow">Monitoring</p>
                   <h3>Security settings</h3>
                 </div>
@@ -1146,6 +1182,7 @@
     </footer>
   </div>
 
+  <script src="webauthn.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

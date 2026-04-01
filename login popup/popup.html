@@ -79,7 +79,7 @@
                   required
                 />
               </div>
-              <p id="login-identifier-hint" class="field-hint">Use the same sign-in handle you use across the dashboard.</p>
+              <p id="login-identifier-hint" class="field-hint">Use your email or username. Returning after a long break? Your email still works, and password reset can re-sync older accounts.</p>
               <p id="login-identifier-error" class="field-error"></p>
             </div>
 
@@ -107,6 +107,11 @@
               <p class="field-hint">Passwords are never stored in the popup UI after the page closes.</p>
               <a id="forgot-password-link" class="text-link" href="reset-password.html">Forgot password?</a>
             </div>
+          </div>
+
+          <div class="passkey-actions">
+            <button id="login-passkey-btn" class="secondary-btn" type="button">Sign in with passkey</button>
+            <p class="field-hint">Use a saved passkey instead of typing your password or MFA code.</p>
           </div>
 
           <div id="login-mfa-step" class="mfa-step" aria-live="polite">
@@ -317,6 +322,7 @@
   </main>
 
   <script src="auth-config.js"></script>
+  <script src="webauthn.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

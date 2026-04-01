@@ -171,7 +171,12 @@ async function ensureApiBaseUrl() {
     );
   })();
 
-  return apiBaseResolutionPromise;
+  try {
+    return await apiBaseResolutionPromise;
+  } catch (error) {
+    apiBaseResolutionPromise = null;
+    throw error;
+  }
 }
 
 function setStatus(message, tone = 'error') {

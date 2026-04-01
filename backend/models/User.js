@@ -62,6 +62,29 @@ const auditEventSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const passkeySchema = new mongoose.Schema(
+  {
+    credentialId: { type: String, required: true, trim: true, maxlength: 512 },
+    publicKey: { type: Buffer, required: true },
+    counter: { type: Number, default: 0, min: 0 },
+    transports: {
+      type: [String],
+      default: [],
+    },
+    deviceType: {
+      type: String,
+      enum: ['singleDevice', 'multiDevice'],
+      default: 'singleDevice',
+    },
+    backedUp: { type: Boolean, default: false },
+    aaguid: { type: String, default: '', trim: true, maxlength: 64 },
+    name: { type: String, default: '', trim: true, maxlength: 80 },
+    createdAt: { type: Date, default: Date.now },
+    lastUsedAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     email: {
@@ -209,12 +232,18 @@ const userSchema = new mongoose.Schema(
         enrolledAt: { type: Date, default: null },
         lastUsedAt: { type: Date, default: null },
       },
+      passkeys: {
+        type: [passkeySchema],
+        default: [],
+      },
     },
   },
   {
     timestamps: true,
   }
 );
+
+userSchema.index({ 'security.passkeys.credentialId': 1 }, { unique: true, sparse: true });
 
 userSchema.pre('save', async function onSave(next) {
   if (!this.displayName && this.email) {

@@ -165,7 +165,19 @@ const extractBrowserOrigin = (req) => {
   }
 };
 
-const browserProtectedAuthRoutes = new Set(['/login', '/register', '/logout', '/refresh_token']);
+const browserProtectedAuthRoutes = new Set([
+  '/login',
+  '/register',
+  '/logout',
+  '/refresh_token',
+  '/request-password-reset',
+  '/resend-verification-public',
+  '/reset-password',
+  '/passkeys/authenticate/options',
+  '/passkeys/authenticate/verify',
+  '/passkeys/register/options',
+  '/passkeys/register/verify',
+]);
 
 const requireTrustedBrowserOrigin = (req, res, next) => {
   if (req.method === 'OPTIONS' || !browserProtectedAuthRoutes.has(req.path)) {

@@ -1568,6 +1568,15 @@ footer {
   gap: 1rem;
 }
 
+.passkey-panel {
+  padding: 1rem;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  display: grid;
+  gap: 0.9rem;
+}
+
 .backup-code-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1916,6 +1925,11 @@ footer {
 }
 
 .device-card {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.passkey-card {
   display: grid;
   gap: 0.7rem;
 }

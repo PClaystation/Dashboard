@@ -1,5 +1,12 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const {
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+} = require('@simplewebauthn/server');
+const { isoBase64URL, isoUint8Array } = require('@simplewebauthn/server/helpers');
 const ApiRateLimitBucket = require('../models/ApiRateLimitBucket');
 const LoginThrottle = require('../models/LoginThrottle');
 const User = require('../models/User');
@@ -43,9 +50,19 @@ const PASSWORD_RESET_EMAIL_COOLDOWN_MS =
   Number(process.env.PASSWORD_RESET_EMAIL_COOLDOWN_MS) || 10 * 60 * 1000;
 const VERIFICATION_EMAIL_COOLDOWN_MS =
   Number(process.env.VERIFICATION_EMAIL_COOLDOWN_MS) || 30 * 60 * 1000;
+const RETURNING_ACCOUNT_INACTIVE_DAYS =
+  Number(process.env.RETURNING_ACCOUNT_INACTIVE_DAYS) || 120;
+const RETURNING_ACCOUNT_PASSWORD_REVIEW_DAYS =
+  Number(process.env.RETURNING_ACCOUNT_PASSWORD_REVIEW_DAYS) || 180;
 const EMAIL_DAILY_LIMIT = Number(process.env.EMAIL_DAILY_LIMIT) || 100;
 const EMAIL_MONTHLY_LIMIT = Number(process.env.EMAIL_MONTHLY_LIMIT) || 3000;
 const NEW_DEVICE_SESSION_WINDOW_MS = 15 * 60 * 1000;
+const MAX_PASSKEYS = 20;
+const WEBAUTHN_CHALLENGE_COOKIE = 'webauthnChallenge';
+const WEBAUTHN_CHALLENGE_TTL_MS = 10 * 60 * 1000;
+const WEBAUTHN_RP_NAME = process.env.WEBAUTHN_RP_NAME || 'Continental ID';
+const WEBAUTHN_DEFAULT_RP_ID = process.env.WEBAUTHN_RP_ID || 'continental-hub.com';
+const WEBAUTHN_CONTINENTAL_HOST_SUFFIX = '.continental-hub.com';
 
 const LINKED_PROVIDERS = [
   'google',
@@ -196,6 +213,54 @@ const resolveAbsoluteUrl = (value) => {
   } catch {
     return '';
   }
+};
+
+const normalizeOrigin = (value) => String(value || '').trim().replace(/\/+$/, '');
+
+const extractBrowserOrigin = (req) => {
+  const headerOrigin = normalizeOrigin(req.headers.origin);
+  if (headerOrigin) return headerOrigin;
+
+  const referer = String(req.headers.referer || '').trim();
+  if (!referer) return '';
+
+  try {
+    return normalizeOrigin(new URL(referer).origin);
+  } catch {
+    return '';
+  }
+};
+
+const resolveWebAuthnRpId = (origin) => {
+  const explicitRpId = sanitizeText(process.env.WEBAUTHN_RP_ID, 255);
+  if (explicitRpId) {
+    return explicitRpId.toLowerCase();
+  }
+
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+    if (!hostname) return '';
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return hostname;
+    if (
+      hostname === WEBAUTHN_DEFAULT_RP_ID ||
+      hostname.endsWith(WEBAUTHN_CONTINENTAL_HOST_SUFFIX)
+    ) {
+      return WEBAUTHN_DEFAULT_RP_ID;
+    }
+    return hostname;
+  } catch {
+    return '';
+  }
+};
+
+const resolveWebAuthnContext = (req) => {
+  const origin = extractBrowserOrigin(req);
+  const rpID = resolveWebAuthnRpId(origin);
+  if (!origin || !rpID) {
+    throw createHttpError(400, 'A trusted browser origin is required for passkeys.');
+  }
+
+  return { origin, rpID };
 };
 
 const isHostedLoginOrigin = (value) => {
@@ -1193,6 +1258,64 @@ const getMfaState = (user) => ({
   backupCodesRemaining: Array.isArray(user?.security?.mfa?.backupCodes) ? user.security.mfa.backupCodes.length : 0,
 });
 
+const getStoredPasskeys = (user) =>
+  Array.isArray(user?.security?.passkeys) ? user.security.passkeys : [];
+
+const sanitizePasskeyName = (value, fallback = '') =>
+  sanitizeText(value, 80) || sanitizeText(fallback, 80) || 'Passkey';
+
+const buildDefaultPasskeyName = (req, existingCount = 0) => {
+  const base = `${buildSessionLabel('', parseUserAgent(req))} passkey`;
+  return existingCount > 0 ? `${base} ${existingCount + 1}` : base;
+};
+
+const serializePasskey = (passkey = {}) => ({
+  credentialId: sanitizeText(passkey?.credentialId, 512),
+  name: sanitizePasskeyName(passkey?.name, 'Passkey'),
+  createdAt: passkey?.createdAt || null,
+  lastUsedAt: passkey?.lastUsedAt || null,
+  transports: Array.isArray(passkey?.transports)
+    ? passkey.transports.map((transport) => sanitizeText(transport, 24)).filter(Boolean)
+    : [],
+  deviceType:
+    sanitizeText(passkey?.deviceType, 40) === 'multiDevice' ? 'multiDevice' : 'singleDevice',
+  backedUp: Boolean(passkey?.backedUp),
+});
+
+const getPasskeyState = (user) => {
+  const passkeys = getStoredPasskeys(user)
+    .map((passkey) => serializePasskey(passkey))
+    .sort((left, right) => {
+      const leftTs = new Date(left.lastUsedAt || left.createdAt || 0).getTime();
+      const rightTs = new Date(right.lastUsedAt || right.createdAt || 0).getTime();
+      return rightTs - leftTs;
+    });
+
+  return {
+    count: passkeys.length,
+    lastUsedAt: passkeys.reduce((latest, passkey) => {
+      const timestamp = new Date(passkey.lastUsedAt || 0).getTime();
+      if (Number.isNaN(timestamp) || timestamp <= latest) return latest;
+      return timestamp;
+    }, 0)
+      ? new Date(
+          passkeys.reduce((latest, passkey) => {
+            const timestamp = new Date(passkey.lastUsedAt || 0).getTime();
+            return Number.isNaN(timestamp) || timestamp <= latest ? latest : timestamp;
+          }, 0)
+        ).toISOString()
+      : null,
+    items: passkeys,
+  };
+};
+
+const findStoredPasskey = (user, credentialId) =>
+  getStoredPasskeys(user).find(
+    (passkey) => sanitizeText(passkey?.credentialId, 512) === sanitizeText(credentialId, 512)
+  ) || null;
+
+const getWebAuthnUserId = (user) => `continental-id:${toObjectIdString(user?._id)}`;
+
 const sanitizeMfaCode = (value) => String(value || '').replace(/\s+/g, '').slice(0, 8);
 const sanitizeBackupCode = (value) =>
   String(value || '')
@@ -1243,21 +1366,6 @@ const verifyMfaAttempt = (user, { mfaCode = '', backupCode = '' } = {}) => {
   }
 
   return { ok: false };
-};
-
-const isCrossSiteRequest = (req) => {
-  const requestOrigin = getRequestOrigin(req);
-  const originHeader = sanitizeText(req.headers.origin, 240);
-
-  if (!requestOrigin || !originHeader) {
-    return false;
-  }
-
-  try {
-    return new URL(originHeader).origin !== requestOrigin;
-  } catch {
-    return false;
-  }
 };
 
 const buildSessionLabel = (requestedLabel, userAgent = '') => {
@@ -1503,12 +1611,13 @@ const normalizePreferences = (incoming = {}, current = {}) => {
 
 const buildCookieOptions = (req) => {
   const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
-  const crossSite = isCrossSiteRequest(req);
 
   return {
     httpOnly: true,
     secure: isSecure,
-    sameSite: isSecure ? (crossSite ? 'None' : 'Strict') : 'Lax',
+    // The hosted login flow redirects back to a different trusted app origin, so the
+    // refresh cookie must remain available for later credentialed cross-site refresh requests.
+    sameSite: isSecure ? 'None' : 'Lax',
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   };
@@ -1522,6 +1631,70 @@ const clearRefreshCookie = (res, req) => {
     sameSite: cookieOptions.sameSite,
     path: cookieOptions.path,
   });
+};
+
+const buildWebAuthnChallengeCookieOptions = (req) => {
+  const cookieOptions = buildCookieOptions(req);
+  return {
+    httpOnly: true,
+    secure: cookieOptions.secure,
+    sameSite: cookieOptions.sameSite,
+    path: '/api/auth/passkeys',
+    maxAge: WEBAUTHN_CHALLENGE_TTL_MS,
+  };
+};
+
+const clearWebAuthnChallengeCookie = (res, req) => {
+  const cookieOptions = buildWebAuthnChallengeCookieOptions(req);
+  res.clearCookie(WEBAUTHN_CHALLENGE_COOKIE, {
+    httpOnly: cookieOptions.httpOnly,
+    secure: cookieOptions.secure,
+    sameSite: cookieOptions.sameSite,
+    path: cookieOptions.path,
+  });
+};
+
+const storeWebAuthnChallenge = (res, req, payload) => {
+  const challengeToken = jwt.sign(
+    {
+      type: 'webauthn_challenge',
+      ...payload,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: Math.max(30, Math.floor(WEBAUTHN_CHALLENGE_TTL_MS / 1000)) }
+  );
+
+  res.cookie(
+    WEBAUTHN_CHALLENGE_COOKIE,
+    challengeToken,
+    buildWebAuthnChallengeCookieOptions(req)
+  );
+};
+
+const readWebAuthnChallenge = (req, expectedFlow = '') => {
+  const token = sanitizeText(req.cookies?.[WEBAUTHN_CHALLENGE_COOKIE], 4000);
+  if (!token) {
+    throw createHttpError(400, 'This passkey request expired. Start again.');
+  }
+
+  let payload;
+  try {
+    payload = jwt.verify(token, process.env.JWT_SECRET, {
+      algorithms: ['HS256'],
+    });
+  } catch {
+    throw createHttpError(400, 'This passkey request expired. Start again.');
+  }
+
+  if (payload?.type !== 'webauthn_challenge') {
+    throw createHttpError(400, 'This passkey request is invalid.');
+  }
+
+  if (expectedFlow && payload?.flow !== expectedFlow) {
+    throw createHttpError(400, 'This passkey request does not match the expected step.');
+  }
+
+  return payload;
 };
 
 const signToken = (user, sid) =>
@@ -1745,6 +1918,58 @@ const reissueCurrentRefreshSession = (user, req, sid, session, requestedLabel = 
   return buildTokenPair(user, sid, currentRefreshTokenId);
 };
 
+const completeInteractiveSignIn = async (res, req, user, options = {}) => {
+  const {
+    deviceLabel = '',
+    auditType = 'login',
+    auditMessage = '',
+    auditMeta = {},
+    alertTitle = 'New device sign-in to Continental ID',
+    alertHeading = 'New device sign-in detected',
+    alertCopy = 'A sign-in from a device we had not seen before was detected on your account.',
+    alertDetails = null,
+  } = options;
+
+  const device = rememberKnownDevice(user, req, deviceLabel);
+  appendRecentLogin(user, req);
+  appendAuditEvent(
+    user,
+    req,
+    auditType,
+    auditMessage || (device.isNewDevice ? 'Signed in from a new device.' : 'Signed in.'),
+    {
+      newDevice: device.isNewDevice,
+      ...auditMeta,
+    }
+  );
+  const sessionTokens = createTrackedRefreshSession(user, req, deviceLabel, device.fingerprint);
+  await user.save();
+
+  if (device.isNewDevice && shouldSendLoginAlert(user)) {
+    await sendSecurityAlertEmail(
+      user,
+      alertTitle,
+      alertHeading,
+      alertCopy,
+      Array.isArray(alertDetails) && alertDetails.length
+        ? alertDetails
+        : [
+            `Time: ${new Date().toUTCString()}`,
+            `IP address: ${parseClientIp(req) || 'Unknown'}`,
+            `Device: ${buildSessionLabel(deviceLabel, parseUserAgent(req))}`,
+          ]
+    );
+  }
+
+  res.cookie('refreshToken', sessionTokens.refreshToken, buildCookieOptions(req));
+
+  return sendUserResponse(res, 200, 'Login successful.', user, {
+    token: sessionTokens.accessToken,
+    accessToken: sessionTokens.accessToken,
+    authenticated: true,
+  });
+};
+
 const removeRefreshSession = (user, sid) => {
   const sessionId = sanitizeText(sid, 120);
   if (!sessionId) return false;
@@ -1883,6 +2108,47 @@ const profileCompletion = (user) => {
   return Math.round((filled / fields.length) * 100);
 };
 
+const getDaysSince = (value) => {
+  const timestamp = new Date(value || 0).getTime();
+  if (!timestamp) return null;
+
+  const diff = Date.now() - timestamp;
+  if (Number.isNaN(diff) || diff < 0) return 0;
+  return Math.floor(diff / DAY_MS);
+};
+
+const buildMigrationPayload = (user) => {
+  const accountAgeDays = getDaysSince(user?.createdAt) || 0;
+  const inactiveDays = getDaysSince(user?.lastLoginAt);
+  const passwordAgeDays = getDaysSince(user?.security?.passwordChangedAt);
+  const activeSessions = Array.isArray(user?.refreshSessions) ? user.refreshSessions.length : 0;
+  const hasMfa = Boolean(user?.security?.mfa?.enabled);
+  const passkeyCount = Number(user?.security?.passkeys?.length || 0);
+  const knownDevices = Array.isArray(user?.knownDevices) ? user.knownDevices.length : 0;
+  const isReturningAccount =
+    accountAgeDays >= RETURNING_ACCOUNT_INACTIVE_DAYS &&
+    (
+      inactiveDays === null ||
+      inactiveDays >= RETURNING_ACCOUNT_INACTIVE_DAYS ||
+      (!passwordAgeDays && knownDevices === 0)
+    );
+  const shouldResetPassword =
+    isReturningAccount &&
+    (passwordAgeDays === null || passwordAgeDays >= RETURNING_ACCOUNT_PASSWORD_REVIEW_DAYS);
+
+  return {
+    suggested: isReturningAccount,
+    inactiveDays,
+    accountAgeDays,
+    shouldReviewProfile: profileCompletion(user) < 80,
+    shouldVerifyEmail: !user?.isVerified,
+    shouldResetPassword,
+    shouldEnableMfa: !hasMfa,
+    shouldAddPasskey: passkeyCount === 0,
+    shouldReviewSessions: activeSessions > 1,
+  };
+};
+
 const buildUserPayload = (user) => {
   const linkedAccounts = {};
   for (const provider of LINKED_PROVIDERS) {
@@ -1992,7 +2258,9 @@ const buildUserPayload = (user) => {
       activeSessions: Array.isArray(user.refreshSessions) ? user.refreshSessions.length : 0,
       knownDevices: Array.isArray(user.knownDevices) ? user.knownDevices.length : 0,
       mfa: getMfaState(user),
+      passkeys: getPasskeyState(user),
     },
+    migration: buildMigrationPayload(user),
   };
 };
 
@@ -2644,45 +2912,8 @@ exports.login = async (req, res) => {
     }
 
     await clearLoginFailures(rateKey);
-
-    const device = rememberKnownDevice(user, req, req.body?.deviceLabel);
-    appendRecentLogin(user, req);
-    appendAuditEvent(
-      user,
-      req,
-      'login',
-      device.isNewDevice ? 'Signed in from a new device.' : 'Signed in.',
-      {
-        newDevice: device.isNewDevice,
-      }
-    );
-    const sessionTokens = createTrackedRefreshSession(
-      user,
-      req,
-      req.body?.deviceLabel,
-      device.fingerprint
-    );
-    await user.save();
-
-    if (device.isNewDevice && shouldSendLoginAlert(user)) {
-      await sendSecurityAlertEmail(
-        user,
-        'New device sign-in to Continental ID',
-        'New device sign-in detected',
-        'A sign-in from a device we had not seen before was detected on your account.',
-        [
-          `Time: ${new Date().toUTCString()}`,
-          `IP address: ${parseClientIp(req) || 'Unknown'}`,
-          `Device: ${buildSessionLabel(req.body?.deviceLabel, parseUserAgent(req))}`,
-        ]
-      );
-    }
-
-    res.cookie('refreshToken', sessionTokens.refreshToken, buildCookieOptions(req));
-
-    return sendUserResponse(res, 200, 'Login successful.', user, {
-      token: sessionTokens.accessToken,
-      accessToken: sessionTokens.accessToken,
+    return completeInteractiveSignIn(res, req, user, {
+      deviceLabel: req.body?.deviceLabel,
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -3281,6 +3512,311 @@ exports.getActivity = async (req, res) => {
   }
 };
 
+exports.beginPasskeyRegistration = async (req, res) => {
+  const currentPassword = req.body?.currentPassword || '';
+
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    if (getStoredPasskeys(user).length >= MAX_PASSKEYS) {
+      return res.status(400).json({ message: `You can store up to ${MAX_PASSKEYS} passkeys.` });
+    }
+
+    const matches = await user.comparePassword(currentPassword);
+    if (!matches) {
+      return res.status(400).json({ message: 'Current password is incorrect.' });
+    }
+
+    const { origin, rpID } = resolveWebAuthnContext(req);
+    const options = await generateRegistrationOptions({
+      rpName: WEBAUTHN_RP_NAME,
+      rpID,
+      userName: sanitizeText(user.email || getDisplayableUsername(user), 120) || 'user',
+      userDisplayName: sanitizeText(user.displayName || getDisplayableUsername(user), 60) || 'User',
+      userID: isoUint8Array.fromUTF8String(getWebAuthnUserId(user)),
+      attestationType: 'none',
+      excludeCredentials: getStoredPasskeys(user).map((passkey) => ({
+        id: sanitizeText(passkey?.credentialId, 512),
+        transports: Array.isArray(passkey?.transports) ? passkey.transports : [],
+      })),
+      authenticatorSelection: {
+        residentKey: 'required',
+        userVerification: 'required',
+      },
+    });
+
+    storeWebAuthnChallenge(res, req, {
+      flow: 'registration',
+      challenge: options.challenge,
+      origin,
+      rpID,
+      userId: toObjectIdString(user._id),
+    });
+
+    return res.json({
+      message: 'Passkey registration ready.',
+      options,
+    });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    console.error('Begin passkey registration error:', err);
+    return res.status(500).json({ message: 'Failed to start passkey registration.' });
+  }
+};
+
+exports.finishPasskeyRegistration = async (req, res) => {
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      clearWebAuthnChallengeCookie(res, req);
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const challenge = readWebAuthnChallenge(req, 'registration');
+    if (sanitizeText(challenge.userId, 120) !== toObjectIdString(user._id)) {
+      clearWebAuthnChallengeCookie(res, req);
+      return res.status(400).json({ message: 'This passkey setup request does not match your account.' });
+    }
+
+    if (getStoredPasskeys(user).length >= MAX_PASSKEYS) {
+      clearWebAuthnChallengeCookie(res, req);
+      return res.status(400).json({ message: `You can store up to ${MAX_PASSKEYS} passkeys.` });
+    }
+
+    const verification = await verifyRegistrationResponse({
+      response: req.body?.credential || req.body,
+      expectedChallenge: challenge.challenge,
+      expectedOrigin: challenge.origin,
+      expectedRPID: challenge.rpID,
+      requireUserVerification: true,
+    });
+
+    if (!verification.verified || !verification.registrationInfo) {
+      clearWebAuthnChallengeCookie(res, req);
+      return res.status(400).json({ message: 'Passkey registration could not be verified.' });
+    }
+
+    const credentialId = sanitizeText(verification.registrationInfo.credential.id, 512);
+    if (!credentialId) {
+      clearWebAuthnChallengeCookie(res, req);
+      return res.status(400).json({ message: 'Passkey registration returned an invalid credential.' });
+    }
+
+    if (findStoredPasskey(user, credentialId)) {
+      clearWebAuthnChallengeCookie(res, req);
+      return res.status(409).json({ message: 'That passkey is already registered on this account.' });
+    }
+
+    const credentialResponse = req.body?.credential?.response || req.body?.response || {};
+    const nextName = sanitizePasskeyName(
+      req.body?.name,
+      buildDefaultPasskeyName(req, getStoredPasskeys(user).length)
+    );
+
+    user.security.passkeys.push({
+      credentialId,
+      publicKey: Buffer.from(verification.registrationInfo.credential.publicKey),
+      counter: Number(verification.registrationInfo.credential.counter || 0),
+      transports: Array.isArray(credentialResponse.transports)
+        ? credentialResponse.transports.map((transport) => sanitizeText(transport, 24)).filter(Boolean)
+        : [],
+      deviceType:
+        verification.registrationInfo.credentialDeviceType === 'multiDevice'
+          ? 'multiDevice'
+          : 'singleDevice',
+      backedUp: Boolean(verification.registrationInfo.credentialBackedUp),
+      aaguid: sanitizeText(verification.registrationInfo.aaguid, 64),
+      name: nextName,
+      createdAt: new Date(),
+      lastUsedAt: null,
+    });
+
+    appendAuditEvent(user, req, 'passkey_registered', 'Passkey added.', {
+      credentialId,
+      passkeyName: nextName,
+    });
+    await user.save();
+    clearWebAuthnChallengeCookie(res, req);
+
+    return sendUserResponse(res, 200, 'Passkey added.', user, {
+      security: buildUserPayload(user).security,
+    });
+  } catch (err) {
+    clearWebAuthnChallengeCookie(res, req);
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    if (isDuplicateKeyError(err)) {
+      return res.status(409).json({ message: 'That passkey is already linked to another account.' });
+    }
+    console.error('Finish passkey registration error:', err);
+    return res.status(500).json({ message: 'Failed to save the new passkey.' });
+  }
+};
+
+exports.beginPasskeyAuthentication = async (req, res) => {
+  try {
+    const { origin, rpID } = resolveWebAuthnContext(req);
+    const options = await generateAuthenticationOptions({
+      rpID,
+      userVerification: 'required',
+    });
+
+    storeWebAuthnChallenge(res, req, {
+      flow: 'authentication',
+      challenge: options.challenge,
+      origin,
+      rpID,
+    });
+
+    return res.json({
+      message: 'Passkey authentication ready.',
+      options,
+    });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    console.error('Begin passkey authentication error:', err);
+    return res.status(500).json({ message: 'Failed to start passkey sign-in.' });
+  }
+};
+
+exports.finishPasskeyAuthentication = async (req, res) => {
+  try {
+    const challenge = readWebAuthnChallenge(req, 'authentication');
+    const credentialResponse = req.body?.credential || req.body || {};
+    const credentialId = sanitizeText(credentialResponse.id, 512);
+    if (!credentialId) {
+      clearWebAuthnChallengeCookie(res, req);
+      return res.status(400).json({ message: 'Passkey sign-in returned an invalid credential.' });
+    }
+
+    const user = await User.findOne({ 'security.passkeys.credentialId': credentialId }).select(
+      FULL_USER_SELECT_FIELDS
+    );
+    if (!user) {
+      clearWebAuthnChallengeCookie(res, req);
+      return res.status(400).json({ message: 'That passkey is not recognized.' });
+    }
+
+    await ensureUserIdentityFields(user);
+
+    if (!user.isVerified) {
+      clearWebAuthnChallengeCookie(res, req);
+      clearRefreshCookie(res, req);
+      return res.status(403).json({
+        authenticated: false,
+        requiresVerification: true,
+        message: 'Verify your email before signing in.',
+      });
+    }
+
+    const passkey = findStoredPasskey(user, credentialId);
+    if (!passkey) {
+      clearWebAuthnChallengeCookie(res, req);
+      return res.status(400).json({ message: 'That passkey is not recognized.' });
+    }
+
+    const verification = await verifyAuthenticationResponse({
+      response: credentialResponse,
+      expectedChallenge: challenge.challenge,
+      expectedOrigin: challenge.origin,
+      expectedRPID: challenge.rpID,
+      credential: {
+        id: sanitizeText(passkey.credentialId, 512),
+        publicKey: new Uint8Array(passkey.publicKey),
+        counter: Number(passkey.counter || 0),
+        transports: Array.isArray(passkey.transports) ? passkey.transports : [],
+      },
+      requireUserVerification: true,
+    });
+
+    if (!verification.verified || !verification.authenticationInfo) {
+      clearWebAuthnChallengeCookie(res, req);
+      return res.status(400).json({ message: 'Passkey sign-in could not be verified.' });
+    }
+
+    passkey.counter = Number(verification.authenticationInfo.newCounter || passkey.counter || 0);
+    passkey.deviceType =
+      verification.authenticationInfo.credentialDeviceType === 'multiDevice'
+        ? 'multiDevice'
+        : 'singleDevice';
+    passkey.backedUp = Boolean(verification.authenticationInfo.credentialBackedUp);
+    passkey.lastUsedAt = new Date();
+    clearWebAuthnChallengeCookie(res, req);
+
+    return completeInteractiveSignIn(res, req, user, {
+      auditType: 'passkey_login',
+      auditMessage: 'Signed in with a passkey.',
+      auditMeta: {
+        credentialId,
+        passkeyName: sanitizePasskeyName(passkey.name, 'Passkey'),
+      },
+      alertTitle: 'New device passkey sign-in to Continental ID',
+      alertHeading: 'New device passkey sign-in detected',
+      alertCopy: 'A passkey sign-in from a device we had not seen before was detected on your account.',
+      alertDetails: [
+        `Time: ${new Date().toUTCString()}`,
+        `IP address: ${parseClientIp(req) || 'Unknown'}`,
+        `Device: ${buildSessionLabel('', parseUserAgent(req))}`,
+        `Passkey: ${sanitizePasskeyName(passkey.name, 'Passkey')}`,
+      ],
+    });
+  } catch (err) {
+    clearWebAuthnChallengeCookie(res, req);
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    console.error('Finish passkey authentication error:', err);
+    return res.status(500).json({ message: 'Failed to complete passkey sign-in.' });
+  }
+};
+
+exports.deletePasskey = async (req, res) => {
+  const currentPassword = req.body?.currentPassword || '';
+  const credentialId = sanitizeText(req.params.credentialId, 512);
+
+  try {
+    if (!credentialId) {
+      return res.status(400).json({ message: 'Passkey id is required.' });
+    }
+
+    const user = await getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const matches = await user.comparePassword(currentPassword);
+    if (!matches) {
+      return res.status(400).json({ message: 'Current password is incorrect.' });
+    }
+
+    const nextPasskeys = getStoredPasskeys(user).filter(
+      (passkey) => sanitizeText(passkey?.credentialId, 512) !== credentialId
+    );
+    if (nextPasskeys.length === getStoredPasskeys(user).length) {
+      return res.status(404).json({ message: 'Passkey not found.' });
+    }
+
+    user.security.passkeys = nextPasskeys;
+    appendAuditEvent(user, req, 'passkey_removed', 'Passkey removed.', {
+      credentialId,
+    });
+    await user.save();
+
+    return sendUserResponse(res, 200, 'Passkey removed.', user);
+  } catch (err) {
+    console.error('Delete passkey error:', err);
+    return res.status(500).json({ message: 'Failed to remove the passkey.' });
+  }
+};
+
 exports.getSecurity = async (req, res) => {
   try {
     const user = await getUserById(req.user.id);
@@ -3295,6 +3831,8 @@ exports.getSecurity = async (req, res) => {
       security: payload.security,
       sessionLimit: MAX_ACTIVE_SESSIONS,
       mfa: payload.security.mfa,
+      passkeys: payload.security.passkeys,
+      passkeyLimit: MAX_PASSKEYS,
     });
   } catch (err) {
     console.error('Get security error:', err);

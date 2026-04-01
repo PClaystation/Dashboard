@@ -127,6 +127,7 @@ const registerPanel = document.getElementById('register-panel');
 const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 const loginBtn = document.getElementById('login-btn');
+const loginPasskeyBtn = document.getElementById('login-passkey-btn');
 const registerBtn = document.getElementById('register-btn');
 const loginPrimaryFields = document.getElementById('login-primary-fields');
 const loginMfaStep = document.getElementById('login-mfa-step');
@@ -285,7 +286,12 @@ const ensureApiBaseUrl = async () => {
     );
   })();
 
-  return apiBaseResolutionPromise;
+  try {
+    return await apiBaseResolutionPromise;
+  } catch (error) {
+    apiBaseResolutionPromise = null;
+    throw error;
+  }
 };
 
 const isTrustedAppOrigin = (origin) => {
@@ -330,7 +336,17 @@ const resolveRedirectUrl = (value, fallbackOrigin) => {
   }
 };
 
-const redirectUrl = resolveRedirectUrl(params.get('redirect'), targetOrigin);
+const getRedirectUrl = () => {
+  const redirectUrl = new URL(resolveRedirectUrl(params.get('redirect'), targetOrigin));
+  const apiBaseUrl =
+    trimTrailingSlash(API_BASE_URL) || resolveTrustedApiBaseUrl(params.get('apiBaseUrl'));
+
+  if (apiBaseUrl) {
+    redirectUrl.searchParams.set('apiBaseUrl', apiBaseUrl);
+  }
+
+  return redirectUrl.toString();
+};
 
 const setStatus = (message, tone = 'error') => {
   const text = safeText(message);
@@ -394,7 +410,7 @@ const finishAuth = (payload) => {
     return;
   }
 
-  window.location.href = redirectUrl;
+  window.location.href = getRedirectUrl();
 };
 
 const parseJson = async (res) => {
@@ -866,6 +882,66 @@ const requestAuth = async (endpoint, body, submitButton, labels) => {
   }
 };
 
+const handlePasskeySignIn = async () => {
+  if (!window.WebAuthnJson?.isSupported?.()) {
+    setStatus('This browser does not support passkeys.', 'error');
+    return;
+  }
+
+  resetLoginChallenge({ clearStatus: true });
+  showVerificationActions(false);
+  setBusy(loginPasskeyBtn, true, 'Sign in with passkey', 'Preparing...');
+  setStatus('Preparing passkey sign-in...', 'info');
+
+  try {
+    await ensureApiBaseUrl();
+    const optionsResponse = await fetch(`${getAuthApiBase()}/passkeys/authenticate/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({}),
+    });
+    const optionsPayload = await parseJson(optionsResponse);
+    if (!optionsResponse.ok) {
+      throw new Error(optionsPayload.message || 'Failed to start passkey sign-in.');
+    }
+
+    const credential = await window.WebAuthnJson.get(optionsPayload.options);
+    setStatus('Verifying passkey...', 'info');
+
+    const verifyResponse = await fetch(`${getAuthApiBase()}/passkeys/authenticate/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ credential }),
+    });
+    const verifyPayload = await parseJson(verifyResponse);
+
+    if (!verifyResponse.ok) {
+      if (verifyPayload.requiresVerification) {
+        pendingVerificationIdentifier = '';
+        showVerificationActions(true);
+      }
+      throw new Error(verifyPayload.message || 'Failed to complete passkey sign-in.');
+    }
+
+    pendingVerificationIdentifier = '';
+    clearCooldown();
+    resetLoginChallenge();
+    showVerificationActions(false);
+    setStatus('Success. Continuing...', 'success');
+    finishAuth(verifyPayload);
+  } catch (error) {
+    if (error?.name === 'NotAllowedError') {
+      setStatus('Passkey sign-in was cancelled or timed out.', 'warn');
+      return;
+    }
+    setStatus(getRequestErrorMessage(error, 'Passkey sign-in failed.'), 'error');
+  } finally {
+    setBusy(loginPasskeyBtn, false, 'Sign in with passkey', 'Preparing...');
+  }
+};
+
 loginToggle.addEventListener('click', () => switchTabs('login'));
 registerToggle.addEventListener('click', () => switchTabs('register'));
 loginToggle.addEventListener('keydown', handleAuthTabKeydown);
@@ -892,6 +968,11 @@ verificationResetBtn.addEventListener('click', () => {
 openFullPageLink.href = window.location.href;
 openFullPageLink.target = '_blank';
 openFullPageLink.rel = 'noopener noreferrer';
+
+if (loginPasskeyBtn) {
+  loginPasskeyBtn.disabled = !window.WebAuthnJson?.isSupported?.();
+  loginPasskeyBtn.addEventListener('click', handlePasskeySignIn);
+}
 
 for (const toggle of document.querySelectorAll('[data-password-toggle]')) {
   toggle.addEventListener('click', () => togglePasswordVisibility(toggle));

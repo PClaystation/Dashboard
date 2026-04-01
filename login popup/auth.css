@@ -501,6 +501,15 @@ body.auth-page {
   color: var(--auth-text-muted);
 }
 
+.passkey-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.passkey-actions .secondary-btn {
+  width: 100%;
+}
+
 .password-strength {
   display: grid;
   gap: 8px;

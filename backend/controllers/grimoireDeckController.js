@@ -274,6 +274,14 @@ const dedupeIncomingDecks = (decks) => {
   return Array.from(map.values());
 };
 
+const getDeckTimestampMs = (value) => {
+  const timestamp = new Date(value || 0).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
+const isIncomingDeckStale = (incomingDeck, existingDeck) =>
+  getDeckTimestampMs(existingDeck?.deckUpdatedAt) > getDeckTimestampMs(incomingDeck?.deckUpdatedAt);
+
 exports.listDecks = async (req, res) => {
   try {
     const decks = await listDecksForUser(req.user.id);
@@ -298,7 +306,16 @@ exports.saveDeck = async (req, res) => {
     const existingDeck = await GrimoireDeck.findOne({
       ownerId: req.user.id,
       deckId: normalizedDeck.deckId,
-    }).select('_id');
+    }).select('_id deckUpdatedAt');
+
+    if (isIncomingDeckStale(normalizedDeck, existingDeck)) {
+      return res.status(409).json({
+        message:
+          'This deck has a newer version on the server. Refresh the latest decks before syncing again.',
+        deckId: normalizedDeck.deckId,
+        serverUpdatedAt: existingDeck.deckUpdatedAt,
+      });
+    }
 
     const deck = await GrimoireDeck.findOneAndUpdate(
       {
@@ -359,6 +376,7 @@ exports.importDecks = async (req, res) => {
 
   try {
     const normalizedDecks = dedupeIncomingDecks(rawDecks.map((deck) => normalizeDeckInput(deck)));
+    const staleDeckIds = [];
 
     if (normalizedDecks.length > 0) {
       await ensureDeckCapacity(
@@ -366,39 +384,63 @@ exports.importDecks = async (req, res) => {
         normalizedDecks.map((deck) => deck.deckId)
       );
 
-      await GrimoireDeck.bulkWrite(
-        normalizedDecks.map((deck) => ({
-          updateOne: {
-            filter: {
-              ownerId: req.user.id,
-              deckId: deck.deckId,
-            },
-            update: {
-              $set: {
+      const existingDecks = await GrimoireDeck.find({
+        ownerId: req.user.id,
+        deckId: { $in: normalizedDecks.map((deck) => deck.deckId) },
+      })
+        .select('deckId deckUpdatedAt')
+        .lean();
+      const existingDeckMap = new Map(
+        existingDecks.map((deck) => [sanitizeText(deck.deckId, 120), deck])
+      );
+      const decksToWrite = normalizedDecks.filter((deck) => {
+        const existingDeck = existingDeckMap.get(deck.deckId);
+        if (!isIncomingDeckStale(deck, existingDeck)) {
+          return true;
+        }
+        staleDeckIds.push(deck.deckId);
+        return false;
+      });
+
+      if (decksToWrite.length > 0) {
+        await GrimoireDeck.bulkWrite(
+          decksToWrite.map((deck) => ({
+            updateOne: {
+              filter: {
                 ownerId: req.user.id,
                 deckId: deck.deckId,
-                name: deck.name,
-                format: deck.format,
-                mainboard: deck.mainboard,
-                sideboard: deck.sideboard,
-                notes: deck.notes,
-                matchupNotes: deck.matchupNotes,
-                budgetTargetUsd: deck.budgetTargetUsd,
-                deckCreatedAt: deck.deckCreatedAt,
-                deckUpdatedAt: deck.deckUpdatedAt,
               },
+              update: {
+                $set: {
+                  ownerId: req.user.id,
+                  deckId: deck.deckId,
+                  name: deck.name,
+                  format: deck.format,
+                  mainboard: deck.mainboard,
+                  sideboard: deck.sideboard,
+                  notes: deck.notes,
+                  matchupNotes: deck.matchupNotes,
+                  budgetTargetUsd: deck.budgetTargetUsd,
+                  deckCreatedAt: deck.deckCreatedAt,
+                  deckUpdatedAt: deck.deckUpdatedAt,
+                },
+              },
+              upsert: true,
             },
-            upsert: true,
-          },
-        })),
-        { ordered: false }
-      );
+          })),
+          { ordered: false }
+        );
+      }
     }
 
     const decks = await listDecksForUser(req.user.id);
     return res.status(200).json({
+      message: staleDeckIds.length
+        ? 'Deck import completed. Some stale decks were skipped because the server has newer versions.'
+        : 'Deck import completed.',
       decks,
-      importedCount: normalizedDecks.length,
+      importedCount: normalizedDecks.length - staleDeckIds.length,
+      staleDeckIds,
       syncedAt: new Date().toISOString(),
       continentalId: toObjectIdString(req.user.id),
     });

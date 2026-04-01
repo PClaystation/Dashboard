@@ -15,6 +15,8 @@ router.post('/reset-password', ctrl.resetPassword);
 router.get('/verify-email', verifyEmailCtrl.verifyEmail);
 router.get('/public-search', ctrl.searchPublicProfiles);
 router.get('/public/:username', ctrl.getPublicProfile);
+router.post('/passkeys/authenticate/options', ctrl.beginPasskeyAuthentication);
+router.post('/passkeys/authenticate/verify', ctrl.finishPasskeyAuthentication);
 
 router.get('/me', auth, ctrl.me);
 router.post('/resend-verification', auth, ctrl.resendVerificationEmail);
@@ -36,6 +38,9 @@ router.post('/mfa/setup', auth, ctrl.beginMfaSetup);
 router.post('/mfa/enable', auth, ctrl.enableMfa);
 router.post('/mfa/disable', auth, ctrl.disableMfa);
 router.post('/mfa/regenerate-backup-codes', auth, ctrl.regenerateMfaBackupCodes);
+router.post('/passkeys/register/options', auth, ctrl.beginPasskeyRegistration);
+router.post('/passkeys/register/verify', auth, ctrl.finishPasskeyRegistration);
+router.delete('/passkeys/:credentialId', auth, ctrl.deletePasskey);
 router.get('/devices', auth, ctrl.getDevices);
 router.patch('/devices/:fingerprint', auth, ctrl.updateDevice);
 router.delete('/devices/:fingerprint', auth, ctrl.deleteDevice);
