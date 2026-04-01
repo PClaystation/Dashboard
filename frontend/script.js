@@ -148,6 +148,10 @@ const dom = {
   heroEmail: document.getElementById('hero-email'),
   heroGreeting: document.getElementById('hero-greeting'),
   heroStatusNote: document.getElementById('hero-status-note'),
+  heroFocusTitle: document.getElementById('hero-focus-title'),
+  heroFocusCopy: document.getElementById('hero-focus-copy'),
+  heroFocusChip: document.getElementById('hero-focus-chip'),
+  heroFocusBtn: document.getElementById('hero-focus-btn'),
   healthScoreValue: document.getElementById('health-score-value'),
   healthScoreLabel: document.getElementById('health-score-label'),
   actionCenter: document.getElementById('action-center'),
@@ -615,8 +619,43 @@ const state = {
   lastSyncAt: null,
   favoriteServices: new Set(readStoredArray(SERVICE_FAVORITES_STORAGE_KEY)),
   favoriteServicesOnly: localStorage.getItem(FAVORITE_SERVICES_ONLY_STORAGE_KEY) === 'true',
+  activeTab: 'overview',
   profileAvatarDraft: '',
   mfaSetup: null,
+};
+
+const requiresSensitiveActionMfa = () => Boolean(state.user?.security?.mfa?.enabled);
+
+const parseSensitiveMfaInput = (value) => {
+  const normalized = safeText(value).toUpperCase().replace(/[^A-Z0-9-]/g, '');
+  if (!normalized) {
+    return { mfaCode: '', backupCode: '' };
+  }
+
+  if (/^\d{6,8}$/.test(normalized)) {
+    return { mfaCode: normalized, backupCode: '' };
+  }
+
+  return { mfaCode: '', backupCode: normalized };
+};
+
+const collectSensitiveActionMfa = (actionLabel) => {
+  if (!requiresSensitiveActionMfa()) {
+    return { mfaCode: '', backupCode: '' };
+  }
+
+  const value = window.prompt(`Enter your MFA code or backup code to ${actionLabel}.`);
+  if (value === null) {
+    return null;
+  }
+
+  const parsed = parseSensitiveMfaInput(value);
+  if (!parsed.mfaCode && !parsed.backupCode) {
+    showToast('Enter a current MFA code or backup code.', 'error');
+    return null;
+  }
+
+  return parsed;
 };
 
 const trackedForms = [
@@ -812,6 +851,7 @@ const resetProfileAvatarDraft = (user = state.user) => {
   }
 
   renderAvatarPreviews(user);
+  renderHeroFocus(user);
 };
 
 const setProfileProgress = (completion) => {
@@ -1799,20 +1839,15 @@ const createActionItem = ({ tone = 'neutral', title, detail, actionLabel, onActi
   return item;
 };
 
-const renderActionCenter = (user = state.user) => {
-  if (!dom.actionCenter) return;
-
-  dom.actionCenter.innerHTML = '';
-
+const getRecommendedActions = (user = state.user) => {
   if (!user) {
-    dom.actionCenter.appendChild(
-      createActionItem({
+    return [
+      {
         tone: 'warn',
         title: 'Sign in required',
         detail: 'Your personalized suggestions will appear once the dashboard loads account data.',
-      })
-    );
-    return;
+      },
+    ];
   }
 
   const actions = [];
@@ -1868,8 +1903,8 @@ const renderActionCenter = (user = state.user) => {
       detail: user.preferences?.profilePublic
         ? 'Your page is live, but directory discovery is off. Turn search on if people should be able to find you.'
         : 'Your public page is still private. Review visibility settings before sharing it.',
-      actionLabel: 'Open preferences',
-      onAction: () => switchTab('preferences'),
+      actionLabel: 'Review visibility',
+      onAction: () => switchTab('profile'),
     });
   }
 
@@ -1948,7 +1983,41 @@ const renderActionCenter = (user = state.user) => {
     });
   }
 
-  for (const action of actions.slice(0, 4)) {
+  return actions;
+};
+
+const renderHeroFocus = (user = state.user) => {
+  const primaryAction = getRecommendedActions(user)[0];
+  if (!primaryAction) return;
+
+  if (dom.heroFocusTitle) dom.heroFocusTitle.textContent = primaryAction.title;
+  if (dom.heroFocusCopy) dom.heroFocusCopy.textContent = primaryAction.detail;
+  if (dom.heroFocusChip) {
+    const chipLabel = primaryAction.tone === 'warn'
+      ? 'Needs attention'
+      : primaryAction.tone === 'success'
+        ? 'On track'
+        : primaryAction.tone === 'danger'
+          ? 'Important'
+          : 'Recommended';
+    dom.heroFocusChip.textContent = chipLabel;
+  }
+  if (dom.heroFocusBtn) {
+    dom.heroFocusBtn.hidden = !(primaryAction.actionLabel && typeof primaryAction.onAction === 'function');
+    dom.heroFocusBtn.textContent = primaryAction.actionLabel || 'Open';
+    dom.heroFocusBtn.onclick = typeof primaryAction.onAction === 'function' ? primaryAction.onAction : null;
+  }
+};
+
+const renderActionCenter = (user = state.user) => {
+  if (!dom.actionCenter) return;
+
+  dom.actionCenter.innerHTML = '';
+
+  const secondaryActions = getRecommendedActions(user).slice(1, 4);
+  const actionsToRender = secondaryActions.length ? secondaryActions : getRecommendedActions(user).slice(0, 1);
+
+  for (const action of actionsToRender) {
     dom.actionCenter.appendChild(createActionItem(action));
   }
 };
@@ -3170,13 +3239,15 @@ const renderPasskeys = (user = state.user) => {
         return;
       }
       if (!window.confirm(`Remove ${passkey.name || 'this passkey'}?`)) return;
+      const passkeyRemovalMfa = collectSensitiveActionMfa('remove a passkey');
+      if (!passkeyRemovalMfa) return;
 
       setButtonBusy(removeBtn, true, 'Removing...');
       try {
         const data = await apiRequest(`/passkeys/${encodeURIComponent(passkey.credentialId)}`, {
           method: 'DELETE',
           auth: true,
-          body: { currentPassword },
+          body: { currentPassword, ...passkeyRemovalMfa },
         });
         if (!state.user) state.user = {};
         state.user.security = data.security || data.user?.security || state.user.security || {};
@@ -3737,6 +3808,11 @@ const handleProfileSave = async (event) => {
     return;
   }
 
+  const emailChangeMfa = emailChanged ? collectSensitiveActionMfa('change your email') : { mfaCode: '', backupCode: '' };
+  if (emailChanged && !emailChangeMfa) {
+    return;
+  }
+
   setButtonBusy(dom.profileSaveBtn, true, 'Saving...');
 
   try {
@@ -3749,6 +3825,8 @@ const handleProfileSave = async (event) => {
       organization,
       email,
       currentPassword,
+      mfaCode: emailChangeMfa.mfaCode,
+      backupCode: emailChangeMfa.backupCode,
       avatar: avatar || '',
       location: safeText(dom.profileLocation?.value),
       website,
@@ -3855,12 +3933,17 @@ const handlePasswordSave = async (event) => {
     return;
   }
 
+  const passwordChangeMfa = collectSensitiveActionMfa('update your password');
+  if (!passwordChangeMfa) {
+    return;
+  }
+
   setButtonBusy(dom.passwordSaveBtn, true, 'Updating...');
 
   try {
     const result = await apiRequest('/password', {
       method: 'PATCH',
-      body: { currentPassword, newPassword },
+      body: { currentPassword, newPassword, ...passwordChangeMfa },
     });
 
     if (dom.passwordForm) dom.passwordForm.reset();
@@ -3916,6 +3999,11 @@ const handlePasskeyRegister = async () => {
     return;
   }
 
+  const passkeyRegistrationMfa = collectSensitiveActionMfa('add a passkey');
+  if (!passkeyRegistrationMfa) {
+    return;
+  }
+
   setButtonBusy(dom.passkeyRegisterBtn, true, 'Adding...');
 
   try {
@@ -3931,7 +4019,7 @@ const handlePasskeyRegister = async () => {
       method: 'POST',
       headers,
       credentials: 'include',
-      body: JSON.stringify({ currentPassword }),
+      body: JSON.stringify({ currentPassword, ...passkeyRegistrationMfa }),
     });
     const optionsPayload = await parseResponseBody(optionsResponse);
     if (!optionsResponse.ok) {
@@ -4036,16 +4124,15 @@ const handleMfaEnable = async () => {
 const handleMfaDisable = async () => {
   const currentPassword = window.prompt('Enter your current password to disable MFA.');
   if (!currentPassword) return;
-
-  const code = window.prompt('Enter a current MFA code.');
-  if (!code) return;
+  const sensitiveMfa = collectSensitiveActionMfa('disable MFA');
+  if (!sensitiveMfa) return;
 
   setButtonBusy(dom.mfaDisableBtn, true, 'Disabling...');
 
   try {
     const data = await apiRequest('/mfa/disable', {
       method: 'POST',
-      body: { currentPassword, code },
+      body: { currentPassword, ...sensitiveMfa },
     });
 
     state.user = normalizeUserPayload(data);
@@ -4063,16 +4150,15 @@ const handleMfaDisable = async () => {
 const handleMfaBackupCodes = async () => {
   const currentPassword = window.prompt('Enter your current password to regenerate backup codes.');
   if (!currentPassword) return;
-
-  const code = window.prompt('Enter a current MFA code.');
-  if (!code) return;
+  const sensitiveMfa = collectSensitiveActionMfa('regenerate backup codes');
+  if (!sensitiveMfa) return;
 
   setButtonBusy(dom.mfaBackupBtn, true, 'Regenerating...');
 
   try {
     const data = await apiRequest('/mfa/regenerate-backup-codes', {
       method: 'POST',
-      body: { currentPassword, code },
+      body: { currentPassword, ...sensitiveMfa },
     });
 
     if (!state.user) state.user = {};
@@ -4181,12 +4267,17 @@ const handleDeleteAccount = async (event) => {
     return;
   }
 
+  const deleteAccountMfa = collectSensitiveActionMfa('delete your account');
+  if (!deleteAccountMfa) {
+    return;
+  }
+
   setButtonBusy(dom.deleteAccountBtn, true, 'Deleting...');
 
   try {
     await apiRequest('/account', {
       method: 'DELETE',
-      body: { currentPassword, confirmText: 'DELETE' },
+      body: { currentPassword, confirmText: 'DELETE', ...deleteAccountMfa },
     });
 
     if (dom.deleteForm) dom.deleteForm.reset();
@@ -4259,16 +4350,59 @@ const runManualRefresh = async () => {
   }
 };
 
-const switchTab = (tabId) => {
+const getKnownTabIds = () =>
+  new Set(dom.tabButtons.map((button) => safeText(button.dataset.tab)).filter(Boolean));
+
+const normalizeTabId = (tabId) => {
+  const normalized = safeText(tabId);
+  return getKnownTabIds().has(normalized) ? normalized : 'overview';
+};
+
+const getTabUrl = (tabId) => {
+  const url = new URL(window.location.href);
+  if (tabId === 'overview') {
+    url.searchParams.delete('tab');
+  } else {
+    url.searchParams.set('tab', tabId);
+  }
+  return url;
+};
+
+const getTabFromUrl = () => normalizeTabId(new URL(window.location.href).searchParams.get('tab'));
+
+const switchTab = (tabId, options = {}) => {
+  const { historyMode = 'push' } = options;
+  const nextTabId = normalizeTabId(tabId);
+
+  if (state.activeTab === nextTabId && historyMode === 'push') {
+    return;
+  }
+
+  state.activeTab = nextTabId;
+
   for (const btn of dom.tabButtons) {
-    btn.classList.toggle('active', btn.dataset.tab === tabId);
+    const active = btn.dataset.tab === nextTabId;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    btn.tabIndex = active ? 0 : -1;
   }
 
   for (const panel of dom.tabContents) {
-    panel.classList.toggle('active', panel.id === tabId);
+    const active = panel.id === nextTabId;
+    panel.classList.toggle('active', active);
+    panel.hidden = !active;
   }
 
-  localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabId);
+  localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, nextTabId);
+
+  if (historyMode !== 'none') {
+    const url = getTabUrl(nextTabId);
+    if (historyMode === 'replace') {
+      window.history.replaceState({ tabId: nextTabId }, '', url);
+    } else {
+      window.history.pushState({ tabId: nextTabId }, '', url);
+    }
+  }
 };
 
 const setupTabs = () => {
@@ -4276,17 +4410,19 @@ const setupTabs = () => {
     button.addEventListener('click', () => {
       const tabId = safeText(button.dataset.tab);
       if (!tabId) return;
-      switchTab(tabId);
+      switchTab(tabId, { historyMode: 'push' });
     });
   }
 
-  const savedTab = safeText(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY));
-  if (savedTab && document.getElementById(savedTab)) {
-    switchTab(savedTab);
-    return;
-  }
+  window.addEventListener('popstate', () => {
+    switchTab(getTabFromUrl(), { historyMode: 'none' });
+  });
 
-  switchTab('overview');
+  const url = new URL(window.location.href);
+  const urlTab = normalizeTabId(url.searchParams.get('tab'));
+  const savedTab = normalizeTabId(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY));
+  const initialTab = url.searchParams.has('tab') ? urlTab : savedTab || 'overview';
+  switchTab(initialTab, { historyMode: 'replace' });
 };
 
 const setupServiceFiltering = () => {
@@ -4370,7 +4506,7 @@ const setupKeyboardShortcuts = () => {
 
     if (!isEditableTarget(event.target) && key === '?') {
       event.preventDefault();
-      showToast('Shortcuts: Cmd/Ctrl+K filter services, Cmd/Ctrl+Shift+R refresh, Alt+1..9 switch tabs.', 'warn', 5000);
+      showToast('Shortcuts: Cmd/Ctrl+K filter services, Cmd/Ctrl+Shift+R refresh, Alt+1..5 switch tabs.', 'warn', 5000);
     }
   });
 };

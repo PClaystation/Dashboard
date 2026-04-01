@@ -79,14 +79,12 @@
           </div>
         </section>
 
-        <nav class="tabs" aria-label="Dashboard sections">
-          <button class="tab-btn active" data-tab="overview" type="button">Overview</button>
-          <button class="tab-btn" data-tab="profile" type="button">Profile</button>
-          <button class="tab-btn" data-tab="linked" type="button">External Profiles</button>
-          <button class="tab-btn" data-tab="preferences" type="button">Preferences</button>
-          <button class="tab-btn" data-tab="security" type="button">Security</button>
-          <button class="tab-btn" data-tab="activity" type="button">Activity</button>
-          <button class="tab-btn danger-tab" data-tab="delete" type="button">Delete Account</button>
+        <nav class="tabs" aria-label="Dashboard sections" role="tablist">
+          <button id="tab-overview" class="tab-btn active" data-tab="overview" type="button" role="tab" aria-controls="overview" aria-selected="true">Overview</button>
+          <button id="tab-profile" class="tab-btn" data-tab="profile" type="button" role="tab" aria-controls="profile" aria-selected="false">Profile</button>
+          <button id="tab-security" class="tab-btn" data-tab="security" type="button" role="tab" aria-controls="security" aria-selected="false">Security</button>
+          <button id="tab-activity" class="tab-btn" data-tab="activity" type="button" role="tab" aria-controls="activity" aria-selected="false">Activity</button>
+          <button id="tab-settings" class="tab-btn" data-tab="settings" type="button" role="tab" aria-controls="settings" aria-selected="false">Settings</button>
         </nav>
 
         <section id="profile-checklist-card" class="sidebar-card">
@@ -119,7 +117,7 @@
       </aside>
 
       <main class="dashboard-main tab-panels">
-        <section id="overview" class="tab-content active">
+        <section id="overview" class="tab-content active" role="tabpanel" aria-labelledby="tab-overview">
           <div class="hero-panel">
             <div class="hero-panel-main">
               <div>
@@ -133,16 +131,23 @@
                 <button id="overview-jump-activity-btn" class="primary-btn" type="button">Open activity</button>
               </div>
             </div>
-            <aside class="hero-brand-card" aria-label="Continental network summary">
+            <aside class="hero-brand-card" aria-label="Primary account focus">
               <div class="hero-brand-head">
                 <div class="hero-brand-mark" aria-hidden="true">
                   <img src="images/C2-new-white.png" alt="" />
                 </div>
                 <div>
-                  <p class="eyebrow">Continental network</p>
-                  <h3>Core services.</h3>
+                  <p class="eyebrow">Primary focus</p>
+                  <h3 id="hero-focus-title">Complete your profile.</h3>
                 </div>
               </div>
+              <p id="hero-focus-copy" class="hero-brand-copy">
+                Fill in the missing profile details, then review what should be visible on your public page.
+              </p>
+              <div class="hero-brand-tags">
+                <span id="hero-focus-chip" class="brand-signal">Recommended</span>
+              </div>
+              <button id="hero-focus-btn" class="secondary-btn hero-focus-btn" type="button">Open profile</button>
             </aside>
           </div>
 
@@ -170,12 +175,12 @@
             </article>
           </section>
 
-          <div class="overview-grid">
+          <div class="overview-grid overview-primary-grid">
             <article class="section-card">
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">Next steps</p>
-                  <h3>Action center</h3>
+                  <p class="eyebrow">More to review</p>
+                  <h3>Secondary actions</h3>
                 </div>
               </div>
               <div id="action-center" class="action-list"></div>
@@ -336,7 +341,7 @@
           </div>
         </section>
 
-        <section id="profile" class="tab-content">
+        <section id="profile" class="tab-content" role="tabpanel" aria-labelledby="tab-profile">
           <div class="panel-header">
             <div>
               <p class="eyebrow">Personal details</p>
@@ -531,115 +536,8 @@
             <article class="section-card">
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">Live draft</p>
-                  <h3>Public profile preview</h3>
-                </div>
-                <span id="profile-preview-visibility" class="inline-chip">Private draft</span>
-              </div>
-
-              <div class="public-preview-card">
-                <div class="public-preview-hero">
-                  <div id="profile-preview-avatar" class="identity-badge public-preview-avatar" aria-hidden="true">CI</div>
-                  <div class="public-preview-copy">
-                    <p id="profile-preview-handle" class="eyebrow">@continental</p>
-                    <h3 id="profile-preview-name">Continental User</h3>
-                    <p id="profile-preview-headline" class="public-preview-headline">
-                      Add a headline to make the public page easier to scan.
-                    </p>
-                    <p id="profile-preview-summary" class="helper-line">
-                      Role, organization, and focus details will appear here as you edit.
-                    </p>
-                  </div>
-                </div>
-
-                <div id="profile-preview-meta" class="preview-chip-list" aria-live="polite"></div>
-
-                <div class="preview-stat-grid">
-                  <div class="preview-stat">
-                    <span>Visible fields</span>
-                    <strong id="profile-preview-visible-count">0</strong>
-                  </div>
-                  <div class="preview-stat">
-                    <span>Linked profiles</span>
-                    <strong id="profile-preview-linked-count">0</strong>
-                  </div>
-                  <div class="preview-stat">
-                    <span>Member since</span>
-                    <strong id="profile-preview-member-since">Hidden</strong>
-                  </div>
-                </div>
-
-                <div id="profile-preview-focus" class="preview-chip-list"></div>
-                <div id="profile-preview-sections" class="preview-section-list"></div>
-                <p id="profile-preview-note" class="helper-line">
-                  This preview follows your current visibility toggles, even before you save.
-                </p>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section id="linked" class="tab-content">
-          <div class="panel-header">
-            <div>
-              <p class="eyebrow">Connections</p>
-              <h2>External Profiles</h2>
-            </div>
-          </div>
-
-          <article class="section-card">
-            <form id="linked-form" class="form-grid">
-              <label>
-                Google
-                <input id="linked-google" name="google" type="text" placeholder="name@gmail.com" />
-              </label>
-              <label>
-                Facebook
-                <input id="linked-facebook" name="facebook" type="text" placeholder="facebook username" />
-              </label>
-              <label>
-                GitHub
-                <input id="linked-github" name="github" type="text" placeholder="github handle" />
-              </label>
-              <label>
-                Twitter/X
-                <input id="linked-twitter" name="twitter" type="text" placeholder="@handle" />
-              </label>
-              <label>
-                LinkedIn
-                <input id="linked-linkedin" name="linkedin" type="text" placeholder="linkedin profile" />
-              </label>
-              <label>
-                Discord
-                <input id="linked-discord" name="discord" type="text" placeholder="username#1234" />
-              </label>
-              <label>
-                Apple
-                <input id="linked-apple" name="apple" type="text" placeholder="Apple ID" />
-              </label>
-              <label>
-                Microsoft
-                <input id="linked-microsoft" name="microsoft" type="text" placeholder="Outlook account" />
-              </label>
-              <button id="linked-save-btn" class="primary-btn" type="submit">Save External Profiles</button>
-            </form>
-          </article>
-        </section>
-
-        <section id="preferences" class="tab-content">
-          <div class="panel-header">
-            <div>
-              <p class="eyebrow">Control center</p>
-              <h2>Preferences</h2>
-            </div>
-          </div>
-
-          <div class="stack-grid">
-            <article class="section-card">
-              <div class="section-heading">
-                <div>
-                  <p class="eyebrow">Visibility</p>
-                  <h3>Privacy</h3>
+                  <p class="eyebrow">Public presence</p>
+                  <h3>Visibility & sharing</h3>
                 </div>
               </div>
 
@@ -648,7 +546,7 @@
                   <div class="section-heading compact-heading">
                     <div>
                       <p class="eyebrow">Public profile</p>
-                      <h3>Visibility controls</h3>
+                      <h3>Publish settings</h3>
                     </div>
                     <span id="public-profile-visible-count" class="inline-chip">0 sections visible</span>
                   </div>
@@ -767,7 +665,112 @@
                   <button id="public-profile-preview-btn" class="secondary-btn" type="button">Preview Public Profile</button>
                   <button id="public-profile-directory-btn" class="secondary-btn" type="button">Open Profile Directory</button>
                 </div>
-                <button id="privacy-save-btn" class="primary-btn" type="submit">Save Privacy Settings</button>
+                <button id="privacy-save-btn" class="primary-btn" type="submit">Save Visibility Settings</button>
+              </form>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Live draft</p>
+                  <h3>Public profile preview</h3>
+                </div>
+                <span id="profile-preview-visibility" class="inline-chip">Private draft</span>
+              </div>
+
+              <div class="public-preview-card">
+                <div class="public-preview-hero">
+                  <div id="profile-preview-avatar" class="identity-badge public-preview-avatar" aria-hidden="true">CI</div>
+                  <div class="public-preview-copy">
+                    <p id="profile-preview-handle" class="eyebrow">@continental</p>
+                    <h3 id="profile-preview-name">Continental User</h3>
+                    <p id="profile-preview-headline" class="public-preview-headline">
+                      Add a headline to make the public page easier to scan.
+                    </p>
+                    <p id="profile-preview-summary" class="helper-line">
+                      Role, organization, and focus details will appear here as you edit.
+                    </p>
+                  </div>
+                </div>
+
+                <div id="profile-preview-meta" class="preview-chip-list" aria-live="polite"></div>
+
+                <div class="preview-stat-grid">
+                  <div class="preview-stat">
+                    <span>Visible fields</span>
+                    <strong id="profile-preview-visible-count">0</strong>
+                  </div>
+                  <div class="preview-stat">
+                    <span>Linked profiles</span>
+                    <strong id="profile-preview-linked-count">0</strong>
+                  </div>
+                  <div class="preview-stat">
+                    <span>Member since</span>
+                    <strong id="profile-preview-member-since">Hidden</strong>
+                  </div>
+                </div>
+
+                <div id="profile-preview-focus" class="preview-chip-list"></div>
+                <div id="profile-preview-sections" class="preview-section-list"></div>
+                <p id="profile-preview-note" class="helper-line">
+                  This preview follows your current visibility toggles, even before you save.
+                </p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="settings" class="tab-content" role="tabpanel" aria-labelledby="tab-settings">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Control center</p>
+              <h2>Settings</h2>
+            </div>
+          </div>
+
+          <div class="stack-grid">
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Connected identities</p>
+                  <h3>External profiles</h3>
+                </div>
+              </div>
+
+              <form id="linked-form" class="form-grid">
+                <label>
+                  Google
+                  <input id="linked-google" name="google" type="text" placeholder="name@gmail.com" />
+                </label>
+                <label>
+                  Facebook
+                  <input id="linked-facebook" name="facebook" type="text" placeholder="facebook username" />
+                </label>
+                <label>
+                  GitHub
+                  <input id="linked-github" name="github" type="text" placeholder="github handle" />
+                </label>
+                <label>
+                  Twitter/X
+                  <input id="linked-twitter" name="twitter" type="text" placeholder="@handle" />
+                </label>
+                <label>
+                  LinkedIn
+                  <input id="linked-linkedin" name="linkedin" type="text" placeholder="linkedin profile" />
+                </label>
+                <label>
+                  Discord
+                  <input id="linked-discord" name="discord" type="text" placeholder="username#1234" />
+                </label>
+                <label>
+                  Apple
+                  <input id="linked-apple" name="apple" type="text" placeholder="Apple ID" />
+                </label>
+                <label>
+                  Microsoft
+                  <input id="linked-microsoft" name="microsoft" type="text" placeholder="Outlook account" />
+                </label>
+                <button id="linked-save-btn" class="primary-btn" type="submit">Save External Profiles</button>
               </form>
             </article>
 
@@ -850,10 +853,31 @@
                 <button id="appearance-reset-btn" class="secondary-btn" type="button">Reset to Defaults</button>
               </form>
             </article>
+
+            <article class="section-card danger-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Permanent action</p>
+                  <h3>Delete account</h3>
+                </div>
+              </div>
+              <p class="danger-note">Cannot be undone.</p>
+              <form id="delete-form" class="form-grid">
+                <label>
+                  Confirm password
+                  <input id="delete-password" name="currentPassword" type="password" autocomplete="current-password" required />
+                </label>
+                <label>
+                  Type DELETE to confirm
+                  <input id="delete-confirm-text" name="confirmText" type="text" pattern="DELETE" required />
+                </label>
+                <button id="delete-account-btn" class="danger-btn" type="submit">Delete My Account</button>
+              </form>
+            </article>
           </div>
         </section>
 
-        <section id="security" class="tab-content">
+        <section id="security" class="tab-content" role="tabpanel" aria-labelledby="tab-security">
           <div class="panel-header">
             <div>
               <p class="eyebrow">Protection</p>
@@ -1068,7 +1092,7 @@
           </div>
         </section>
 
-        <section id="activity" class="tab-content">
+        <section id="activity" class="tab-content" role="tabpanel" aria-labelledby="tab-activity">
           <div class="panel-header">
             <div>
               <p class="eyebrow">Timeline</p>
@@ -1129,29 +1153,6 @@
           </article>
         </section>
 
-        <section id="delete" class="tab-content">
-          <div class="panel-header">
-            <div>
-              <p class="eyebrow">Permanent action</p>
-              <h2>Delete Account</h2>
-            </div>
-          </div>
-
-          <article class="section-card danger-card">
-            <p class="danger-note">Cannot be undone.</p>
-            <form id="delete-form" class="form-grid">
-              <label>
-                Confirm password
-                <input id="delete-password" name="currentPassword" type="password" autocomplete="current-password" required />
-              </label>
-              <label>
-                Type DELETE to confirm
-                <input id="delete-confirm-text" name="confirmText" type="text" pattern="DELETE" required />
-              </label>
-              <button id="delete-account-btn" class="danger-btn" type="submit">Delete My Account</button>
-            </form>
-          </article>
-        </section>
       </main>
     </div>
 

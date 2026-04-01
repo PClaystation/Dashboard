@@ -19,6 +19,13 @@ const {
   verifyTotp,
 } = require('../utils/mfa');
 const {
+  decryptMfaSecret,
+  encryptMfaSecret,
+  hashBackupCodeForStorage,
+  normalizeUserSecurityState,
+  verifyStoredBackupCodeHash,
+} = require('../utils/securityHardening');
+const {
   DISPLAY_NAME_MODERATION_MESSAGE,
   USERNAME_VALIDATION_MESSAGE,
   USERNAME_MODERATION_MESSAGE,
@@ -40,6 +47,9 @@ const MAX_ACTIVE_SESSIONS = 12;
 const LOGIN_RATE_WINDOW_MS = Number(process.env.LOGIN_RATE_WINDOW_MS) || 10 * 60 * 1000;
 const LOGIN_RATE_MAX_ATTEMPTS = Number(process.env.LOGIN_RATE_MAX_ATTEMPTS) || 8;
 const LOGIN_BLOCK_MS = Number(process.env.LOGIN_BLOCK_MS) || 15 * 60 * 1000;
+const MFA_RATE_WINDOW_MS = Number(process.env.MFA_RATE_WINDOW_MS) || 10 * 60 * 1000;
+const MFA_RATE_MAX_ATTEMPTS = Number(process.env.MFA_RATE_MAX_ATTEMPTS) || 5;
+const MFA_BLOCK_MS = Number(process.env.MFA_BLOCK_MS) || 15 * 60 * 1000;
 const REFRESH_TOKEN_REPLAY_GRACE_MS =
   Number(process.env.REFRESH_TOKEN_REPLAY_GRACE_MS) || 15_000;
 const LOGIN_ACTIVITY_RETENTION_DAYS = 45;
@@ -202,6 +212,40 @@ const getRequestOrigin = (req) => {
   } catch {
     return '';
   }
+};
+
+const isLocalHostname = (hostname) => hostname === 'localhost' || hostname === '127.0.0.1';
+
+const isContinentalHostname = (hostname) =>
+  hostname === 'continental-hub.com' || hostname.endsWith('.continental-hub.com');
+
+const isSameSiteRequest = (req) => {
+  const requestOrigin = getRequestOrigin(req);
+  const browserOrigin = extractBrowserOrigin(req);
+  if (!requestOrigin || !browserOrigin) {
+    return true;
+  }
+
+  try {
+    const requestUrl = new URL(requestOrigin);
+    const browserUrl = new URL(browserOrigin);
+
+    if (requestUrl.origin === browserUrl.origin) {
+      return true;
+    }
+
+    if (isLocalHostname(requestUrl.hostname) && isLocalHostname(browserUrl.hostname)) {
+      return true;
+    }
+
+    if (isContinentalHostname(requestUrl.hostname) && isContinentalHostname(browserUrl.hostname)) {
+      return requestUrl.protocol === browserUrl.protocol;
+    }
+  } catch {
+    return true;
+  }
+
+  return false;
 };
 
 const resolveAbsoluteUrl = (value) => {
@@ -1251,7 +1295,7 @@ const normalizePublicProfilePreferences = (incoming = {}, current = DEFAULT_PUBL
 };
 
 const getMfaState = (user) => ({
-  enabled: Boolean(user?.security?.mfa?.enabled),
+  enabled: Boolean(user?.security?.mfa?.enabled && decryptMfaSecret(user?.security?.mfa?.secret)),
   hasPendingSetup: Boolean(user?.security?.mfa?.pendingSecret),
   enrolledAt: user?.security?.mfa?.enrolledAt || null,
   lastUsedAt: user?.security?.mfa?.lastUsedAt || null,
@@ -1324,7 +1368,13 @@ const sanitizeBackupCode = (value) =>
     .replace(/[^A-Z0-9-]/g, '')
     .slice(0, 24);
 
-const hashBackupCodes = (codes = []) => codes.map((code) => hashToken(sanitizeBackupCode(code)));
+const hashBackupCodes = (codes = []) =>
+  codes.map((code) => hashBackupCodeForStorage(sanitizeBackupCode(code))).filter(Boolean);
+
+const getStoredMfaSecret = (user) => decryptMfaSecret(user?.security?.mfa?.secret);
+const getPendingMfaSecret = (user) => decryptMfaSecret(user?.security?.mfa?.pendingSecret);
+const isMfaEnabledForUser = (user) =>
+  Boolean(user?.security?.mfa?.enabled && getStoredMfaSecret(user));
 
 const buildMfaSetupPayload = (user, secret, backupCodes) => ({
   secret,
@@ -1341,9 +1391,10 @@ const verifyBackupCode = (user, backupCode) => {
     return { ok: false };
   }
 
-  const hashedCandidate = hashToken(normalized);
   const storedCodes = Array.isArray(user?.security?.mfa?.backupCodes) ? user.security.mfa.backupCodes : [];
-  const matchIndex = storedCodes.findIndex((value) => value === hashedCandidate);
+  const matchIndex = storedCodes.findIndex((value) =>
+    verifyStoredBackupCodeHash(value, normalized)
+  );
   if (matchIndex < 0) {
     return { ok: false };
   }
@@ -1353,7 +1404,7 @@ const verifyBackupCode = (user, backupCode) => {
 };
 
 const verifyMfaAttempt = (user, { mfaCode = '', backupCode = '' } = {}) => {
-  const secret = sanitizeText(user?.security?.mfa?.secret, 120);
+  const secret = getStoredMfaSecret(user);
   const normalizedCode = sanitizeMfaCode(mfaCode);
 
   if (normalizedCode && verifyTotp({ secret, token: normalizedCode })) {
@@ -1611,13 +1662,12 @@ const normalizePreferences = (incoming = {}, current = {}) => {
 
 const buildCookieOptions = (req) => {
   const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  const isCrossSite = isSecure && !isSameSiteRequest(req);
 
   return {
     httpOnly: true,
     secure: isSecure,
-    // The hosted login flow redirects back to a different trusted app origin, so the
-    // refresh cookie must remain available for later credentialed cross-site refresh requests.
-    sameSite: isSecure ? 'None' : 'Lax',
+    sameSite: isCrossSite ? 'None' : 'Lax',
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   };
@@ -2490,17 +2540,31 @@ const buildActivitySummary = (recentLogins = [], dailyCounts = []) => {
 const FULL_USER_SELECT_FIELDS =
   'email username displayName isVerified verificationToken verificationTokenExpires emailDelivery passwordResetToken passwordResetTokenExpires passwordResetRequestedAt lastLoginAt lastLoginIp recentLogins loginDayCounts knownDevices auditEvents profile linkedAccounts preferences security refreshTokenVersion refreshSessions createdAt updatedAt password';
 
-const getUserById = async (id, { ensureIdentity = true } = {}) => {
-  const user = await User.findById(id).select(FULL_USER_SELECT_FIELDS);
+const ensureUserState = async (user, { ensureIdentity = true } = {}) => {
+  if (!user) {
+    return null;
+  }
 
-  if (user && ensureIdentity) {
-    const changed = await ensureUserIdentityFields(user);
-    if (changed) {
-      await user.save();
-    }
+  let changed = false;
+
+  if (ensureIdentity && (await ensureUserIdentityFields(user))) {
+    changed = true;
+  }
+
+  if (normalizeUserSecurityState(user)) {
+    changed = true;
+  }
+
+  if (changed) {
+    await user.save();
   }
 
   return user;
+};
+
+const getUserById = async (id, { ensureIdentity = true } = {}) => {
+  const user = await User.findById(id).select(FULL_USER_SELECT_FIELDS);
+  return ensureUserState(user, { ensureIdentity });
 };
 
 const loginRateKey = (identifier, req) => `${normalizeLoginIdentifier(identifier)}|${parseClientIp(req)}`;
@@ -2510,17 +2574,20 @@ const findUserByLoginIdentifier = async (identifier) => {
   if (!normalized) return null;
 
   if (isValidEmail(normalized)) {
-    return User.findOne({ email: normalized });
+    return ensureUserState(await User.findOne({ email: normalized }));
   }
 
   if (isValidUsername(normalized)) {
-    return User.findOne({ username: normalized });
+    return ensureUserState(await User.findOne({ username: normalized }));
   }
 
   return null;
 };
 
-const getLoginThrottleState = async (key) => {
+const buildThrottleExpiry = (windowMs, blockMs, now = Date.now()) =>
+  new Date(now + Math.max(windowMs, blockMs) + 60_000);
+
+const getThrottleState = async (key, windowMs) => {
   const now = Date.now();
   const entry = await LoginThrottle.findOne({ key }).select('windowStartedAt blockedUntil');
 
@@ -2537,21 +2604,21 @@ const getLoginThrottleState = async (key) => {
   }
 
   const windowStartedAt = entry.windowStartedAt ? new Date(entry.windowStartedAt).getTime() : 0;
-  if (!windowStartedAt || now - windowStartedAt > LOGIN_RATE_WINDOW_MS) {
+  if (!windowStartedAt || now - windowStartedAt > windowMs) {
     await LoginThrottle.deleteOne({ key });
   }
 
   return { blocked: false, retryAfterSec: 0 };
 };
 
-const registerLoginFailure = async (key) => {
+const registerThrottleFailure = async (key, { windowMs, maxAttempts, blockMs }) => {
   const now = Date.now();
   const current = await LoginThrottle.findOne({ key });
 
   if (
     !current ||
     !current.windowStartedAt ||
-    now - new Date(current.windowStartedAt).getTime() > LOGIN_RATE_WINDOW_MS
+    now - new Date(current.windowStartedAt).getTime() > windowMs
   ) {
     try {
       await LoginThrottle.findOneAndUpdate(
@@ -2561,7 +2628,7 @@ const registerLoginFailure = async (key) => {
           windowStartedAt: new Date(now),
           count: 1,
           blockedUntil: null,
-          expiresAt: buildLoginThrottleExpiry(now),
+          expiresAt: buildThrottleExpiry(windowMs, blockMs, now),
         },
         {
           new: true,
@@ -2580,9 +2647,9 @@ const registerLoginFailure = async (key) => {
       }
 
       retry.count += 1;
-      retry.expiresAt = buildLoginThrottleExpiry(now);
-      if (retry.count >= LOGIN_RATE_MAX_ATTEMPTS) {
-        retry.blockedUntil = new Date(now + LOGIN_BLOCK_MS);
+      retry.expiresAt = buildThrottleExpiry(windowMs, blockMs, now);
+      if (retry.count >= maxAttempts) {
+        retry.blockedUntil = new Date(now + blockMs);
       }
       await retry.save();
     }
@@ -2590,17 +2657,96 @@ const registerLoginFailure = async (key) => {
   }
 
   current.count += 1;
-  current.expiresAt = buildLoginThrottleExpiry(now);
+  current.expiresAt = buildThrottleExpiry(windowMs, blockMs, now);
 
-  if (current.count >= LOGIN_RATE_MAX_ATTEMPTS) {
-    current.blockedUntil = new Date(now + LOGIN_BLOCK_MS);
+  if (current.count >= maxAttempts) {
+    current.blockedUntil = new Date(now + blockMs);
   }
 
   await current.save();
 };
 
-const clearLoginFailures = async (key) => {
+const clearThrottleFailures = async (key) => {
   await LoginThrottle.deleteOne({ key });
+};
+
+const getLoginThrottleState = async (key) => getThrottleState(key, LOGIN_RATE_WINDOW_MS);
+
+const registerLoginFailure = async (key) =>
+  registerThrottleFailure(key, {
+    windowMs: LOGIN_RATE_WINDOW_MS,
+    maxAttempts: LOGIN_RATE_MAX_ATTEMPTS,
+    blockMs: LOGIN_BLOCK_MS,
+  });
+
+const clearLoginFailures = async (key) => {
+  await clearThrottleFailures(key);
+};
+
+const buildMfaThrottleKey = (user) => `mfa:${toObjectIdString(user?._id)}`;
+const getMfaThrottleState = async (user) =>
+  getThrottleState(buildMfaThrottleKey(user), MFA_RATE_WINDOW_MS);
+const registerMfaFailure = async (user) =>
+  registerThrottleFailure(buildMfaThrottleKey(user), {
+    windowMs: MFA_RATE_WINDOW_MS,
+    maxAttempts: MFA_RATE_MAX_ATTEMPTS,
+    blockMs: MFA_BLOCK_MS,
+  });
+const clearMfaFailures = async (user) => clearThrottleFailures(buildMfaThrottleKey(user));
+
+const verifyMfaChallenge = async (user, req, { mfaCode = '', backupCode = '' } = {}) => {
+  if (!isMfaEnabledForUser(user)) {
+    return { ok: true, skipped: true };
+  }
+
+  const throttle = await getMfaThrottleState(user);
+  if (throttle.blocked) {
+    appendAuditEvent(user, req, 'mfa_throttled', 'MFA challenge blocked after repeated failures.', {
+      retryAfterSec: throttle.retryAfterSec,
+    });
+    return { ok: false, reason: 'blocked', retryAfterSec: throttle.retryAfterSec };
+  }
+
+  if (!mfaCode && !backupCode) {
+    return { ok: false, reason: 'missing' };
+  }
+
+  const result = verifyMfaAttempt(user, { mfaCode, backupCode });
+  if (!result.ok) {
+    await registerMfaFailure(user);
+    appendAuditEvent(user, req, 'mfa_failed', 'An invalid MFA code was submitted.', {});
+    const updatedThrottle = await getMfaThrottleState(user);
+    if (updatedThrottle.blocked) {
+      appendAuditEvent(user, req, 'mfa_throttled', 'MFA challenge blocked after repeated failures.', {
+        retryAfterSec: updatedThrottle.retryAfterSec,
+      });
+      return { ok: false, reason: 'blocked', retryAfterSec: updatedThrottle.retryAfterSec };
+    }
+    return { ok: false, reason: 'invalid' };
+  }
+
+  await clearMfaFailures(user);
+  user.security.mfa.lastUsedAt = new Date();
+  if (result.method === 'backup_code') {
+    appendAuditEvent(user, req, 'mfa_backup_code_used', 'A backup code was used for verification.');
+  }
+
+  return { ok: true, ...result };
+};
+
+const sendProtectedActionMfaError = (res, mfaResult, missingMessage = 'Enter your MFA code to continue.') => {
+  if (mfaResult.reason === 'blocked') {
+    return res.status(429).json({
+      message: `Too many invalid MFA attempts. Try again in ${mfaResult.retryAfterSec} seconds.`,
+      retryAfterSec: mfaResult.retryAfterSec,
+      mfaRequired: true,
+    });
+  }
+
+  return res.status(403).json({
+    message: mfaResult.reason === 'invalid' ? 'Invalid MFA code.' : missingMessage,
+    mfaRequired: true,
+  });
 };
 
 const revokeAllTrackedSessions = (user) => {
@@ -2890,25 +3036,27 @@ exports.login = async (req, res) => {
       });
     }
 
-    const mfaEnabled = Boolean(user?.security?.mfa?.enabled && user?.security?.mfa?.secret);
-    if (mfaEnabled) {
-      const mfaResult = verifyMfaAttempt(user, { mfaCode, backupCode });
+    if (isMfaEnabledForUser(user)) {
+      const mfaResult = await verifyMfaChallenge(user, req, { mfaCode, backupCode });
       if (!mfaResult.ok) {
         appendAuditEvent(user, req, 'mfa_challenge', 'Additional verification required for sign-in.', {
           identifier,
+          reason: mfaResult.reason,
         });
         await user.save();
+        if (mfaResult.reason === 'blocked') {
+          return res.status(429).json({
+            message: `Too many invalid MFA attempts. Try again in ${mfaResult.retryAfterSec} seconds.`,
+            retryAfterSec: mfaResult.retryAfterSec,
+            mfaRequired: true,
+          });
+        }
         return res.status(401).json({
-          message: mfaCode || backupCode ? 'Invalid MFA code.' : 'Enter your MFA code to continue.',
+          message: mfaResult.reason === 'invalid' ? 'Invalid MFA code.' : 'Enter your MFA code to continue.',
           mfaRequired: true,
         });
       }
 
-      user.security.mfa.lastUsedAt = new Date();
-
-      if (mfaResult.method === 'backup_code') {
-        appendAuditEvent(user, req, 'mfa_backup_code_used', 'A backup code was used for sign-in.');
-      }
     }
 
     await clearLoginFailures(rateKey);
@@ -3217,6 +3365,8 @@ exports.refreshToken = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   const incoming = req.body || {};
   const currentPassword = req.body?.currentPassword || '';
+  const mfaCode = sanitizeMfaCode(req.body?.mfaCode);
+  const backupCode = sanitizeBackupCode(req.body?.backupCode);
 
   try {
     const user = await getUserById(req.user.id);
@@ -3253,6 +3403,16 @@ exports.updateProfile = async (req, res) => {
     if (hasOwn(incoming, 'email')) {
       emailChanged = await applyEmailChange(user, incoming.email, currentPassword);
       if (emailChanged) {
+        const mfaResult = await verifyMfaChallenge(user, req, { mfaCode, backupCode });
+        if (!mfaResult.ok) {
+          user.email = previousEmail;
+          await user.save();
+          return sendProtectedActionMfaError(
+            res,
+            mfaResult,
+            'Enter your MFA code to change your email.'
+          );
+        }
         verification = prepareEmailVerification(user);
         revokeAllTrackedSessions(user);
       }
@@ -3315,6 +3475,8 @@ exports.updateProfile = async (req, res) => {
 exports.updateEmail = async (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const currentPassword = req.body?.currentPassword || '';
+  const mfaCode = sanitizeMfaCode(req.body?.mfaCode);
+  const backupCode = sanitizeBackupCode(req.body?.backupCode);
 
   try {
     const user = await getUserById(req.user.id);
@@ -3327,6 +3489,16 @@ exports.updateEmail = async (req, res) => {
     const emailChanged = await applyEmailChange(user, email, currentPassword);
     let verification = null;
     if (emailChanged) {
+      const mfaResult = await verifyMfaChallenge(user, req, { mfaCode, backupCode });
+      if (!mfaResult.ok) {
+        user.email = previousEmail;
+        await user.save();
+        return sendProtectedActionMfaError(
+          res,
+          mfaResult,
+          'Enter your MFA code to change your email.'
+        );
+      }
       verification = prepareEmailVerification(user);
       revokeAllTrackedSessions(user);
     }
@@ -3514,6 +3686,8 @@ exports.getActivity = async (req, res) => {
 
 exports.beginPasskeyRegistration = async (req, res) => {
   const currentPassword = req.body?.currentPassword || '';
+  const mfaCode = sanitizeMfaCode(req.body?.mfaCode);
+  const backupCode = sanitizeBackupCode(req.body?.backupCode);
 
   try {
     const user = await getUserById(req.user.id);
@@ -3528,6 +3702,12 @@ exports.beginPasskeyRegistration = async (req, res) => {
     const matches = await user.comparePassword(currentPassword);
     if (!matches) {
       return res.status(400).json({ message: 'Current password is incorrect.' });
+    }
+
+    const mfaResult = await verifyMfaChallenge(user, req, { mfaCode, backupCode });
+    if (!mfaResult.ok) {
+      await user.save();
+      return sendProtectedActionMfaError(res, mfaResult, 'Enter your MFA code to add a passkey.');
     }
 
     const { origin, rpID } = resolveWebAuthnContext(req);
@@ -3780,6 +3960,8 @@ exports.finishPasskeyAuthentication = async (req, res) => {
 
 exports.deletePasskey = async (req, res) => {
   const currentPassword = req.body?.currentPassword || '';
+  const mfaCode = sanitizeMfaCode(req.body?.mfaCode);
+  const backupCode = sanitizeBackupCode(req.body?.backupCode);
   const credentialId = sanitizeText(req.params.credentialId, 512);
 
   try {
@@ -3795,6 +3977,16 @@ exports.deletePasskey = async (req, res) => {
     const matches = await user.comparePassword(currentPassword);
     if (!matches) {
       return res.status(400).json({ message: 'Current password is incorrect.' });
+    }
+
+    const mfaResult = await verifyMfaChallenge(user, req, { mfaCode, backupCode });
+    if (!mfaResult.ok) {
+      await user.save();
+      return sendProtectedActionMfaError(
+        res,
+        mfaResult,
+        'Enter your MFA code to remove a passkey.'
+      );
     }
 
     const nextPasskeys = getStoredPasskeys(user).filter(
@@ -3870,7 +4062,7 @@ exports.beginMfaSetup = async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    if (user.security?.mfa?.enabled && user.security?.mfa?.secret) {
+    if (isMfaEnabledForUser(user)) {
       return res.status(400).json({ message: 'MFA is already enabled on this account.' });
     }
 
@@ -3882,7 +4074,7 @@ exports.beginMfaSetup = async (req, res) => {
     const secret = generateMfaSecret();
     const backupCodes = generateBackupCodes(MFA_BACKUP_CODE_COUNT);
 
-    user.security.mfa.pendingSecret = secret;
+    user.security.mfa.pendingSecret = encryptMfaSecret(secret);
     user.security.mfa.pendingBackupCodes = hashBackupCodes(backupCodes);
     user.security.mfa.pendingCreatedAt = new Date();
     await user.save();
@@ -3908,7 +4100,7 @@ exports.enableMfa = async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    const pendingSecret = sanitizeText(user?.security?.mfa?.pendingSecret, 120);
+    const pendingSecret = getPendingMfaSecret(user);
     if (!pendingSecret) {
       return res.status(400).json({ message: 'Start MFA setup before enabling it.' });
     }
@@ -3923,7 +4115,7 @@ exports.enableMfa = async (req, res) => {
     }
 
     user.security.mfa.enabled = true;
-    user.security.mfa.secret = pendingSecret;
+    user.security.mfa.secret = encryptMfaSecret(pendingSecret);
     user.security.mfa.backupCodes = Array.isArray(user.security.mfa.pendingBackupCodes)
       ? [...user.security.mfa.pendingBackupCodes]
       : [];
@@ -3945,7 +4137,8 @@ exports.enableMfa = async (req, res) => {
 
 exports.disableMfa = async (req, res) => {
   const currentPassword = req.body?.currentPassword || '';
-  const code = sanitizeMfaCode(req.body?.code);
+  const code = sanitizeMfaCode(req.body?.code || req.body?.mfaCode);
+  const backupCode = sanitizeBackupCode(req.body?.backupCode);
 
   try {
     const user = await getUserById(req.user.id);
@@ -3953,7 +4146,7 @@ exports.disableMfa = async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    if (!user.security?.mfa?.enabled || !user.security?.mfa?.secret) {
+    if (!isMfaEnabledForUser(user)) {
       return res.status(400).json({ message: 'MFA is not enabled.' });
     }
 
@@ -3962,8 +4155,20 @@ exports.disableMfa = async (req, res) => {
       return res.status(400).json({ message: 'Current password is incorrect.' });
     }
 
-    if (!verifyTotp({ secret: user.security.mfa.secret, token: code })) {
-      return res.status(400).json({ message: 'Invalid MFA code.' });
+    const mfaResult = await verifyMfaChallenge(user, req, { mfaCode: code, backupCode });
+    if (!mfaResult.ok) {
+      await user.save();
+      if (mfaResult.reason === 'blocked') {
+        return res.status(429).json({
+          message: `Too many invalid MFA attempts. Try again in ${mfaResult.retryAfterSec} seconds.`,
+          retryAfterSec: mfaResult.retryAfterSec,
+          mfaRequired: true,
+        });
+      }
+      return res.status(403).json({
+        message: mfaResult.reason === 'invalid' ? 'Invalid MFA code.' : 'Enter your MFA code to continue.',
+        mfaRequired: true,
+      });
     }
 
     user.security.mfa.enabled = false;
@@ -3987,7 +4192,8 @@ exports.disableMfa = async (req, res) => {
 
 exports.regenerateMfaBackupCodes = async (req, res) => {
   const currentPassword = req.body?.currentPassword || '';
-  const code = sanitizeMfaCode(req.body?.code);
+  const code = sanitizeMfaCode(req.body?.code || req.body?.mfaCode);
+  const backupCode = sanitizeBackupCode(req.body?.backupCode);
 
   try {
     const user = await getUserById(req.user.id);
@@ -3995,7 +4201,7 @@ exports.regenerateMfaBackupCodes = async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    if (!user.security?.mfa?.enabled || !user.security?.mfa?.secret) {
+    if (!isMfaEnabledForUser(user)) {
       return res.status(400).json({ message: 'MFA is not enabled.' });
     }
 
@@ -4004,8 +4210,20 @@ exports.regenerateMfaBackupCodes = async (req, res) => {
       return res.status(400).json({ message: 'Current password is incorrect.' });
     }
 
-    if (!verifyTotp({ secret: user.security.mfa.secret, token: code })) {
-      return res.status(400).json({ message: 'Invalid MFA code.' });
+    const mfaResult = await verifyMfaChallenge(user, req, { mfaCode: code, backupCode });
+    if (!mfaResult.ok) {
+      await user.save();
+      if (mfaResult.reason === 'blocked') {
+        return res.status(429).json({
+          message: `Too many invalid MFA attempts. Try again in ${mfaResult.retryAfterSec} seconds.`,
+          retryAfterSec: mfaResult.retryAfterSec,
+          mfaRequired: true,
+        });
+      }
+      return res.status(403).json({
+        message: mfaResult.reason === 'invalid' ? 'Invalid MFA code.' : 'Enter your MFA code to continue.',
+        mfaRequired: true,
+      });
     }
 
     const backupCodes = generateBackupCodes(MFA_BACKUP_CODE_COUNT);
@@ -4279,6 +4497,8 @@ exports.revokeAllSessions = async (req, res) => {
 exports.updatePassword = async (req, res) => {
   const currentPassword = req.body?.currentPassword || '';
   const newPassword = req.body?.newPassword || '';
+  const mfaCode = sanitizeMfaCode(req.body?.mfaCode);
+  const backupCode = sanitizeBackupCode(req.body?.backupCode);
 
   if (!isStrongPassword(newPassword)) {
     return res.status(400).json({
@@ -4300,6 +4520,16 @@ exports.updatePassword = async (req, res) => {
     const matches = await user.comparePassword(currentPassword);
     if (!matches) {
       return res.status(400).json({ message: 'Current password is incorrect.' });
+    }
+
+    const mfaResult = await verifyMfaChallenge(user, req, { mfaCode, backupCode });
+    if (!mfaResult.ok) {
+      await user.save();
+      return sendProtectedActionMfaError(
+        res,
+        mfaResult,
+        'Enter your MFA code to update your password.'
+      );
     }
 
     user.password = newPassword;
@@ -4375,6 +4605,8 @@ exports.exportAccountData = async (req, res) => {
 exports.deleteAccount = async (req, res) => {
   const currentPassword = req.body?.currentPassword || '';
   const confirmText = sanitizeText(req.body?.confirmText || '', 20);
+  const mfaCode = sanitizeMfaCode(req.body?.mfaCode);
+  const backupCode = sanitizeBackupCode(req.body?.backupCode);
 
   if (confirmText !== 'DELETE') {
     return res.status(400).json({ message: 'Type DELETE to confirm account removal.' });
@@ -4389,6 +4621,16 @@ exports.deleteAccount = async (req, res) => {
     const matches = await user.comparePassword(currentPassword);
     if (!matches) {
       return res.status(400).json({ message: 'Current password is incorrect.' });
+    }
+
+    const mfaResult = await verifyMfaChallenge(user, req, { mfaCode, backupCode });
+    if (!mfaResult.ok) {
+      await user.save();
+      return sendProtectedActionMfaError(
+        res,
+        mfaResult,
+        'Enter your MFA code to delete your account.'
+      );
     }
 
     await sendSecurityAlertEmail(

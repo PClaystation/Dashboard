@@ -977,6 +977,20 @@ footer {
   background: linear-gradient(135deg, #ffffff, color-mix(in srgb, var(--secondary) 78%, #ffffff));
 }
 
+.hero-focus-btn {
+  width: 100%;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #f8fffd;
+  box-shadow: none;
+}
+
+.hero-focus-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1025,6 +1039,10 @@ footer {
 
 .overview-grid {
   grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+}
+
+.overview-primary-grid {
+  grid-template-columns: 1fr;
 }
 
 .wide-layout {
