@@ -13,27 +13,21 @@
         <img src="C2.png" alt="" />
       </div>
       <p class="auth-eyebrow">Continental standard</p>
-      <h1>Secure sign-in for the Continental network.</h1>
-      <p class="auth-brand-copy">
-        One place to access your profile, sessions, and connected tools without a cluttered front door.
-      </p>
+      <h1>Sign in to Continental.</h1>
+      <p class="auth-brand-copy">Use one account for dashboard access.</p>
       <ul class="auth-brand-list" aria-label="Authentication highlights">
         <li>Email and username sign-in</li>
-        <li>Dedicated MFA verification step</li>
-        <li>Secure session cookies across the dashboard</li>
+        <li>MFA support</li>
+        <li>Secure sessions</li>
       </ul>
-      <p class="auth-brand-footnote">
-        Best results come from opening this flow in a normal browser window with cookies enabled.
-      </p>
+      <p class="auth-brand-footnote">Enable cookies for sign-in.</p>
     </aside>
 
     <section class="auth-panel">
       <div class="auth-panel-heading">
         <p class="auth-eyebrow">Secure access</p>
-        <h2 id="auth-title">Access your dashboard</h2>
-        <p class="auth-panel-copy">
-          Sign in with your username or email, or create a new account and verify it before first use.
-        </p>
+        <h2 id="auth-title">Access your account</h2>
+        <p class="auth-panel-copy">Sign in or create a new account.</p>
       </div>
 
       <div id="status-banner" class="status-banner" data-status="info" aria-live="polite" aria-atomic="true"></div>
@@ -79,7 +73,7 @@
                   required
                 />
               </div>
-              <p id="login-identifier-hint" class="field-hint">Use your email or username. Returning after a long break? Your email still works, and password reset can re-sync older accounts.</p>
+              <p id="login-identifier-hint" class="field-hint">Use your email or username.</p>
               <p id="login-identifier-error" class="field-error"></p>
             </div>
 
@@ -104,22 +98,28 @@
             </div>
 
             <div class="inline-actions">
-              <p class="field-hint">Passwords are never stored in the popup UI after the page closes.</p>
+              <p class="field-hint">Your password is not stored after you close the page.</p>
               <a id="forgot-password-link" class="text-link" href="reset-password.html">Forgot password?</a>
             </div>
           </div>
 
           <div class="passkey-actions">
             <button id="login-passkey-btn" class="secondary-btn" type="button">Sign in with passkey</button>
-            <p class="field-hint">Use a saved passkey instead of typing your password or MFA code.</p>
+            <p class="field-hint">Use a saved passkey instead of a password.</p>
+          </div>
+
+          <div class="oauth-actions">
+            <button id="login-github-btn" class="secondary-btn" type="button">Continue with GitHub</button>
+            <p class="field-hint">
+              Use a linked GitHub account, or create a new Continental ID account from a verified
+              GitHub email.
+            </p>
           </div>
 
           <div id="login-mfa-step" class="mfa-step" aria-live="polite">
             <div class="mfa-step-head">
               <p class="mfa-step-title">Second step required</p>
-              <p id="login-mfa-copy" class="mfa-step-copy">
-                Your password was accepted. Finish sign-in with your authenticator app or a backup code.
-              </p>
+              <p id="login-mfa-copy" class="mfa-step-copy">Finish sign-in with your authenticator app or a backup code.</p>
             </div>
 
             <div class="mfa-switcher" role="tablist" aria-label="Verification method">
@@ -162,7 +162,7 @@
                     aria-describedby="login-mfa-code-hint login-mfa-code-error"
                   />
                 </div>
-                <p id="login-mfa-code-hint" class="field-hint">Codes from your authenticator app expire quickly.</p>
+                <p id="login-mfa-code-hint" class="field-hint">Authenticator codes expire quickly.</p>
                 <p id="login-mfa-code-error" class="field-error"></p>
               </div>
             </div>
@@ -181,12 +181,12 @@
                     aria-describedby="login-backup-code-hint login-backup-code-error"
                   />
                 </div>
-                <p id="login-backup-code-hint" class="field-hint">Use a backup code only when your authenticator is unavailable.</p>
+                <p id="login-backup-code-hint" class="field-hint">Use a backup code if your authenticator is unavailable.</p>
                 <p id="login-backup-code-error" class="field-error"></p>
               </div>
             </div>
 
-            <p id="login-mfa-helper" class="helper-message is-visible">Keep this window open until the sign-in finishes.</p>
+            <p id="login-mfa-helper" class="helper-message is-visible">Keep this window open.</p>
 
             <div class="mfa-actions">
               <button id="login-mfa-back-btn" class="ghost-btn" type="button">Edit sign-in details</button>
@@ -198,7 +198,7 @@
 
         <div id="verification-actions" class="verification-actions" aria-live="polite">
           <button id="resend-verification-btn" class="secondary-btn" type="button">Send new verification link</button>
-          <button id="verification-reset-btn" class="ghost-btn" type="button">Reset password instead</button>
+          <button id="verification-reset-btn" class="ghost-btn" type="button">Reset password</button>
         </div>
       </section>
 
@@ -221,7 +221,7 @@
               />
             </div>
             <p id="register-username-hint" class="field-hint">
-              Letters, numbers, dots, hyphens, and underscores only. This is your sign-in handle.
+              Letters, numbers, dots, hyphens, and underscores only.
             </p>
             <p id="register-username-error" class="field-error"></p>
           </div>
@@ -255,7 +255,7 @@
                 required
               />
             </div>
-            <p id="register-email-hint" class="field-hint">You will verify this address before first sign-in.</p>
+            <p id="register-email-hint" class="field-hint">You will verify this email before sign-in.</p>
             <p id="register-email-error" class="field-error"></p>
           </div>
 
@@ -284,7 +284,7 @@
                 Use at least 8 characters with uppercase, lowercase, and a number.
               </p>
             </div>
-            <p id="register-password-hint" class="field-hint">Stronger passwords also use length and uncommon combinations.</p>
+            <p id="register-password-hint" class="field-hint">Longer passwords are stronger.</p>
             <p id="register-password-error" class="field-error"></p>
           </div>
 
@@ -315,7 +315,7 @@
       <div class="auth-divider"></div>
 
       <div class="auth-meta">
-        <span>Cookies are used for secure sign-in and session continuity.</span>
+        <span>Cookies keep you signed in.</span>
         <a id="open-full-page-link" class="text-link" href="">Open full-page login</a>
       </div>
     </section>

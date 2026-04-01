@@ -178,6 +178,7 @@ const browserProtectedAuthRoutes = new Set([
   '/passkeys/authenticate/verify',
   '/passkeys/register/options',
   '/passkeys/register/verify',
+  '/oauth/github/link-start',
 ]);
 
 const requireTrustedBrowserOrigin = (req, res, next) => {

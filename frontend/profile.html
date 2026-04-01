@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="night">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -12,27 +12,27 @@
   />
   <style>
     :root {
-      color-scheme: light;
-      --bg-1: #f8f0e5;
-      --bg-2: #e7eee8;
-      --bg-3: #d9e4ed;
-      --panel: rgba(255, 255, 255, 0.82);
-      --panel-strong: rgba(255, 255, 255, 0.94);
-      --panel-soft: rgba(249, 246, 240, 0.9);
-      --text: #17212b;
-      --muted: #61707d;
-      --line: rgba(23, 33, 43, 0.1);
-      --line-strong: rgba(23, 33, 43, 0.16);
-      --primary: #0f6f63;
-      --primary-strong: #0b5a50;
-      --primary-soft: rgba(15, 111, 99, 0.12);
-      --secondary: #bb7e41;
-      --secondary-soft: rgba(187, 126, 65, 0.14);
-      --shadow: 0 28px 80px rgba(18, 28, 39, 0.1);
-      --shadow-soft: 0 16px 36px rgba(18, 28, 39, 0.08);
-      --ring: rgba(15, 111, 99, 0.24);
-      --success: #17724f;
-      --warning: #b9772a;
+      color-scheme: dark;
+      --bg-1: #0b151b;
+      --bg-2: #102229;
+      --bg-3: #163640;
+      --panel: rgba(9, 18, 25, 0.72);
+      --panel-strong: rgba(9, 18, 25, 0.9);
+      --panel-soft: rgba(14, 27, 35, 0.94);
+      --text: #edf3ef;
+      --muted: #a0aea9;
+      --line: rgba(255, 255, 255, 0.08);
+      --line-strong: rgba(255, 255, 255, 0.16);
+      --primary: #a7d8c3;
+      --primary-strong: #81c7ae;
+      --primary-soft: rgba(167, 216, 195, 0.12);
+      --secondary: #f0bd86;
+      --secondary-soft: rgba(240, 189, 134, 0.14);
+      --shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
+      --shadow-soft: 0 14px 34px rgba(0, 0, 0, 0.2);
+      --ring: rgba(167, 216, 195, 0.26);
+      --success: #90d5ab;
+      --warning: #f3ba77;
     }
 
     * {
@@ -307,9 +307,9 @@
       padding: 0.9rem 1rem;
       border-radius: 16px;
       border: 1px solid var(--line);
-      background: #fff;
+      background: var(--panel-soft);
       color: var(--text);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
 
     input::placeholder {
@@ -339,14 +339,14 @@
       gap: 0.8rem;
       border-style: dashed;
       background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(250, 247, 241, 0.82));
+        linear-gradient(180deg, rgba(11, 23, 31, 0.9), rgba(15, 30, 39, 0.92));
     }
 
     .profile-sheet {
       display: grid;
       gap: 1.2rem;
       background:
-        linear-gradient(160deg, rgba(255, 255, 255, 0.86), rgba(248, 244, 237, 0.82));
+        linear-gradient(160deg, rgba(10, 20, 28, 0.92), rgba(16, 31, 40, 0.88));
     }
 
     .profile-top {
@@ -428,7 +428,7 @@
       padding: 0.46rem 0.78rem;
       border-radius: 999px;
       border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.72);
+      background: rgba(255, 255, 255, 0.04);
       color: var(--text);
       font-size: 0.88rem;
       font-weight: 700;
@@ -436,7 +436,7 @@
 
     .chip.accent {
       border-color: color-mix(in srgb, var(--primary) 34%, var(--line));
-      background: color-mix(in srgb, var(--primary-soft) 90%, white);
+      background: color-mix(in srgb, var(--primary-soft) 92%, rgba(9, 18, 25, 0.9));
       color: var(--primary-strong);
     }
 
@@ -447,24 +447,8 @@
       justify-content: flex-end;
     }
 
-    .spotlight-card {
-      padding: 1rem 1.1rem;
-      border-radius: 22px;
-      border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--line));
-      background:
-        radial-gradient(circle at top right, rgba(15, 111, 99, 0.12), transparent 32%),
-        linear-gradient(140deg, rgba(255, 255, 255, 0.82), rgba(242, 249, 247, 0.86));
-    }
-
-    .spotlight-card p {
-      margin: 0.45rem 0 0;
-      font-size: 1.05rem;
-      color: var(--text);
-    }
-
     .profile-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 1rem;
     }
 
@@ -488,14 +472,12 @@
       white-space: pre-wrap;
     }
 
-    .facts-grid,
     .links-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.75rem;
     }
 
-    .fact-card,
     .link-card {
       padding: 0.9rem 1rem;
       border-radius: 18px;
@@ -505,7 +487,6 @@
       gap: 0.25rem;
     }
 
-    .fact-card strong,
     .link-card strong {
       font-size: 0.82rem;
       text-transform: uppercase;
@@ -513,7 +494,6 @@
       color: var(--muted);
     }
 
-    .fact-card span,
     .link-card span,
     .link-card a {
       font-weight: 700;
@@ -525,7 +505,7 @@
       display: grid;
       gap: 1rem;
       background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(250, 247, 241, 0.84));
+        linear-gradient(180deg, rgba(9, 18, 25, 0.92), rgba(14, 27, 35, 0.94));
     }
 
     .directory-head {
@@ -564,7 +544,7 @@
     .result-card:hover {
       transform: translateY(-2px);
       border-color: color-mix(in srgb, var(--primary) 28%, var(--line));
-      box-shadow: 0 20px 36px rgba(18, 28, 39, 0.1);
+      box-shadow: 0 20px 36px rgba(0, 0, 0, 0.24);
       text-decoration: none;
     }
 
@@ -596,16 +576,11 @@
       font-weight: 600;
     }
 
-    .result-headline {
-      margin: 0;
-      color: var(--muted);
-    }
-
     .empty-state {
       padding: 1rem 1.1rem;
       border-radius: 20px;
       border: 1px dashed var(--line-strong);
-      background: rgba(255, 255, 255, 0.68);
+      background: rgba(255, 255, 255, 0.04);
       color: var(--muted);
     }
 
@@ -622,7 +597,6 @@
     @media (max-width: 880px) {
       .profile-top,
       .profile-grid,
-      .facts-grid,
       .links-grid {
         grid-template-columns: 1fr;
       }
@@ -1038,15 +1012,11 @@
       return '';
     };
 
-    const getProfileSummary = (profile) => {
-      const parts = [
-        safeText(profile?.profile?.role),
-        safeText(profile?.profile?.organization) ? `at ${safeText(profile.profile.organization)}` : '',
-      ].filter(Boolean);
-
-      if (parts.length) return parts.join(' ');
-      return safeText(profile?.profile?.headline) || 'Public Continental ID profile';
-    };
+    const getProfileSummary = (profile) =>
+      safeText(profile?.profile?.headline) ||
+      safeText(profile?.profile?.currentFocus) ||
+      safeText(profile?.profile?.bio).slice(0, 140) ||
+      'Public Continental ID profile';
 
     const renderProfilePlaceholder = ({
       title = 'Browse public profiles',
@@ -1074,15 +1044,6 @@
       const text = safeText(value);
       if (!text) return null;
       return createElement('span', `chip${accent ? ' accent' : ''}`, text);
-    };
-
-    const createFactCard = (label, value) => {
-      const text = safeText(value);
-      if (!text) return null;
-
-      const card = createElement('article', 'fact-card');
-      appendChildren(card, [createElement('strong', '', label), createElement('span', '', text)]);
-      return card;
     };
 
     const createLinkCard = (label, value, href) => {
@@ -1130,15 +1091,9 @@
       const summary = createElement('p', 'identity-summary', getProfileSummary(profile));
 
       const chipRow = createElement('div', 'chip-row');
-      const joined = profile.createdAt ? `Joined ${formatDate(profile.createdAt)}` : '';
       const chipValues = [
-        safeText(profile?.profile?.role),
-        safeText(profile?.profile?.organization),
         safeText(profile?.profile?.location),
-        safeText(profile?.profile?.pronouns),
-        safeText(profile?.profile?.language),
-        safeText(profile?.profile?.timezone),
-        joined,
+        profile.createdAt ? `Joined ${formatDate(profile.createdAt)}` : '',
       ];
 
       for (const value of chipValues) {
@@ -1178,15 +1133,6 @@
       appendChildren(top, [head, actions]);
       article.appendChild(top);
 
-      if (safeText(profile?.profile?.currentFocus)) {
-        const spotlight = createElement('section', 'spotlight-card');
-        appendChildren(spotlight, [
-          createElement('p', 'eyebrow', 'Current focus'),
-          createElement('p', '', safeText(profile.profile.currentFocus)),
-        ]);
-        article.appendChild(spotlight);
-      }
-
       const grid = createElement('div', 'profile-grid');
 
       if (safeText(profile?.profile?.bio)) {
@@ -1198,33 +1144,13 @@
         grid.appendChild(bioCard);
       }
 
-      const focusAreas = normalizeFocusAreas(profile?.profile?.focusAreas);
-      if (focusAreas.length) {
-        const focusCard = createElement('section', 'section-card');
-        const chips = createElement('div', 'chip-row');
-        for (const area of focusAreas) {
-          const chip = createChip(area, true);
-          if (chip) chips.appendChild(chip);
-        }
-        appendChildren(focusCard, [createElement('p', 'eyebrow', 'Focus areas'), chips]);
+      if (safeText(profile?.profile?.currentFocus)) {
+        const focusCard = createElement('section', 'section-card wide');
+        appendChildren(focusCard, [
+          createElement('p', 'eyebrow', 'Current focus'),
+          createElement('p', '', safeText(profile.profile.currentFocus)),
+        ]);
         grid.appendChild(focusCard);
-      }
-
-      const facts = [
-        createFactCard('Role', safeText(profile?.profile?.role)),
-        createFactCard('Organization', safeText(profile?.profile?.organization)),
-        createFactCard('Location', safeText(profile?.profile?.location)),
-        createFactCard('Pronouns', safeText(profile?.profile?.pronouns)),
-        createFactCard('Language', safeText(profile?.profile?.language)),
-        createFactCard('Timezone', safeText(profile?.profile?.timezone)),
-      ].filter(Boolean);
-
-      if (facts.length) {
-        const factsCard = createElement('section', 'section-card');
-        const factsGrid = createElement('div', 'facts-grid');
-        appendChildren(factsGrid, facts);
-        appendChildren(factsCard, [createElement('p', 'eyebrow', 'Quick facts'), factsGrid]);
-        grid.appendChild(factsCard);
       }
 
       const links = [];
@@ -1278,21 +1204,6 @@
       appendChildren(copy, [title, handle, summary]);
       appendChildren(head, [createAvatar(profile, true), copy]);
       card.appendChild(head);
-
-      const headline = safeText(profile?.profile?.headline);
-      if (headline && headline !== summary.textContent) {
-        card.appendChild(createElement('p', 'result-headline', headline));
-      }
-
-      const focusAreas = normalizeFocusAreas(profile?.profile?.focusAreas);
-      if (focusAreas.length) {
-        const chips = createElement('div', 'chip-row');
-        for (const area of focusAreas.slice(0, 3)) {
-          const chip = createChip(area);
-          if (chip) chips.appendChild(chip);
-        }
-        card.appendChild(chips);
-      }
 
       return card;
     };
@@ -1360,7 +1271,7 @@
       renderResults(data.results, trimmedQuery
         ? {
             title: 'Search results',
-            copy: `Showing public profiles that match “${trimmedQuery}”. Search includes names, handles, roles, organizations, and other visible public fields.`,
+            copy: `Showing public profiles that match “${trimmedQuery}”. Search includes names, handles, and visible public profile text.`,
             emptyMessage: `No public profiles matched “${trimmedQuery}”.`,
           }
         : {

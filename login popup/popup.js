@@ -128,6 +128,7 @@ const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 const loginBtn = document.getElementById('login-btn');
 const loginPasskeyBtn = document.getElementById('login-passkey-btn');
+const loginGithubBtn = document.getElementById('login-github-btn');
 const registerBtn = document.getElementById('register-btn');
 const loginPrimaryFields = document.getElementById('login-primary-fields');
 const loginMfaStep = document.getElementById('login-mfa-step');
@@ -346,6 +347,14 @@ const getRedirectUrl = () => {
   }
 
   return redirectUrl.toString();
+};
+
+const buildGithubOauthStartUrl = () => {
+  const startUrl = new URL(`${getAuthApiBase()}/oauth/github/start`);
+  startUrl.searchParams.set('origin', targetOrigin || DEFAULT_DASHBOARD_ORIGIN);
+  startUrl.searchParams.set('redirect', getRedirectUrl());
+  startUrl.searchParams.set('returnTo', window.location.href);
+  return startUrl.toString();
 };
 
 const setStatus = (message, tone = 'error') => {
@@ -942,6 +951,19 @@ const handlePasskeySignIn = async () => {
   }
 };
 
+const handleGithubSignIn = async () => {
+  setBusy(loginGithubBtn, true, 'Continue with GitHub', 'Redirecting...');
+  setStatus('Opening GitHub sign-in...', 'info');
+
+  try {
+    await ensureApiBaseUrl();
+    window.location.assign(buildGithubOauthStartUrl());
+  } catch (error) {
+    setStatus(getRequestErrorMessage(error, 'Could not start GitHub sign-in.'), 'error');
+    setBusy(loginGithubBtn, false, 'Continue with GitHub', 'Redirecting...');
+  }
+};
+
 loginToggle.addEventListener('click', () => switchTabs('login'));
 registerToggle.addEventListener('click', () => switchTabs('register'));
 loginToggle.addEventListener('keydown', handleAuthTabKeydown);
@@ -972,6 +994,10 @@ openFullPageLink.rel = 'noopener noreferrer';
 if (loginPasskeyBtn) {
   loginPasskeyBtn.disabled = !window.WebAuthnJson?.isSupported?.();
   loginPasskeyBtn.addEventListener('click', handlePasskeySignIn);
+}
+
+if (loginGithubBtn) {
+  loginGithubBtn.addEventListener('click', handleGithubSignIn);
 }
 
 for (const toggle of document.querySelectorAll('[data-password-toggle]')) {

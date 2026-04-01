@@ -506,7 +506,16 @@ body.auth-page {
   gap: 8px;
 }
 
+.oauth-actions {
+  display: grid;
+  gap: 8px;
+}
+
 .passkey-actions .secondary-btn {
+  width: 100%;
+}
+
+.oauth-actions .secondary-btn {
   width: 100%;
 }
 

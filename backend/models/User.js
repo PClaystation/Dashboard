@@ -85,6 +85,21 @@ const passkeySchema = new mongoose.Schema(
   { _id: false }
 );
 
+const oauthIdentitySchema = new mongoose.Schema(
+  {
+    provider: { type: String, required: true, trim: true, lowercase: true, maxlength: 40 },
+    providerUserId: { type: String, required: true, trim: true, maxlength: 160 },
+    username: { type: String, default: '', trim: true, maxlength: 120 },
+    email: { type: String, default: '', trim: true, lowercase: true, maxlength: 320 },
+    emailVerified: { type: Boolean, default: false },
+    profileUrl: { type: String, default: '', trim: true, maxlength: 1000 },
+    avatarUrl: { type: String, default: '', trim: true, maxlength: 1000 },
+    linkedAt: { type: Date, default: Date.now },
+    lastUsedAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     email: {
@@ -172,6 +187,10 @@ const userSchema = new mongoose.Schema(
       apple: { type: String, default: '' },
       microsoft: { type: String, default: '' },
     },
+    oauthIdentities: {
+      type: [oauthIdentitySchema],
+      default: [],
+    },
     preferences: {
       profilePublic: { type: Boolean, default: true },
       searchable: { type: Boolean, default: true },
@@ -244,6 +263,10 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ 'security.passkeys.credentialId': 1 }, { unique: true, sparse: true });
+userSchema.index(
+  { 'oauthIdentities.provider': 1, 'oauthIdentities.providerUserId': 1 },
+  { unique: true, sparse: true }
+);
 
 userSchema.pre('save', async function onSave(next) {
   if (!this.displayName && this.email) {

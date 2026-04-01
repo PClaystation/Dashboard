@@ -179,10 +179,7 @@ const dom = {
   profileSaveBtn: document.getElementById('profile-save-btn'),
   profileUsername: document.getElementById('profile-username'),
   profileDisplayName: document.getElementById('profile-display-name'),
-  profilePronouns: document.getElementById('profile-pronouns'),
   profileHeadline: document.getElementById('profile-headline'),
-  profileRole: document.getElementById('profile-role'),
-  profileOrganization: document.getElementById('profile-organization'),
   profileEmail: document.getElementById('profile-email'),
   profileEmailCurrentPassword: document.getElementById('profile-email-current-password'),
   profileAvatarPreview: document.getElementById('profile-avatar-preview'),
@@ -193,11 +190,7 @@ const dom = {
   profileAvatarRemoveBtn: document.getElementById('profile-avatar-remove-btn'),
   profileLocation: document.getElementById('profile-location'),
   profileWebsite: document.getElementById('profile-website'),
-  profileTimezone: document.getElementById('profile-timezone'),
-  profileLanguage: document.getElementById('profile-language'),
-  profileCurrentFocus: document.getElementById('profile-current-focus'),
   profileBio: document.getElementById('profile-bio'),
-  profileFocusAreas: document.getElementById('profile-focus-areas'),
   profileId: document.getElementById('profile-id'),
   profileCreated: document.getElementById('profile-created'),
   profilePublicLink: document.getElementById('profile-public-link'),
@@ -216,7 +209,6 @@ const dom = {
   profilePreviewVisibleCount: document.getElementById('profile-preview-visible-count'),
   profilePreviewLinkedCount: document.getElementById('profile-preview-linked-count'),
   profilePreviewMemberSince: document.getElementById('profile-preview-member-since'),
-  profilePreviewFocus: document.getElementById('profile-preview-focus'),
   profilePreviewSections: document.getElementById('profile-preview-sections'),
   profilePreviewNote: document.getElementById('profile-preview-note'),
   profileProgressBar: document.getElementById('profile-progress-bar'),
@@ -236,6 +228,9 @@ const dom = {
   linkedDiscord: document.getElementById('linked-discord'),
   linkedApple: document.getElementById('linked-apple'),
   linkedMicrosoft: document.getElementById('linked-microsoft'),
+  oauthGithubStatus: document.getElementById('oauth-github-status'),
+  oauthGithubConnectBtn: document.getElementById('oauth-github-connect-btn'),
+  oauthGithubUnlinkBtn: document.getElementById('oauth-github-unlink-btn'),
 
   passwordForm: document.getElementById('password-form'),
   passwordSaveBtn: document.getElementById('password-save-btn'),
@@ -279,16 +274,9 @@ const dom = {
   privacyPublic: document.getElementById('privacy-public'),
   privacySearchable: document.getElementById('privacy-searchable'),
   publicFieldHeadline: document.getElementById('public-field-headline'),
-  publicFieldRole: document.getElementById('public-field-role'),
-  publicFieldOrganization: document.getElementById('public-field-organization'),
   publicFieldBio: document.getElementById('public-field-bio'),
-  publicFieldCurrentFocus: document.getElementById('public-field-current-focus'),
-  publicFieldFocusAreas: document.getElementById('public-field-focus-areas'),
-  publicFieldPronouns: document.getElementById('public-field-pronouns'),
   publicFieldLocation: document.getElementById('public-field-location'),
   publicFieldWebsite: document.getElementById('public-field-website'),
-  publicFieldTimezone: document.getElementById('public-field-timezone'),
-  publicFieldLanguage: document.getElementById('public-field-language'),
   publicFieldLinked: document.getElementById('public-field-linked'),
   publicFieldMemberSince: document.getElementById('public-field-member-since'),
   publicProfileSummary: document.getElementById('public-profile-summary'),
@@ -400,16 +388,9 @@ const normalizeActivitySummary = (summary = {}) => ({
 
 const normalizePublicProfileSettings = (settings = {}) => ({
   headline: Boolean(settings?.headline),
-  role: Boolean(settings?.role),
-  organization: Boolean(settings?.organization),
   bio: Boolean(settings?.bio),
-  currentFocus: Boolean(settings?.currentFocus),
-  focusAreas: Boolean(settings?.focusAreas),
-  pronouns: Boolean(settings?.pronouns),
   location: Boolean(settings?.location),
   website: Boolean(settings?.website),
-  timezone: Boolean(settings?.timezone),
-  language: Boolean(settings?.language),
   linkedAccounts: Boolean(settings?.linkedAccounts),
   memberSince: Boolean(settings?.memberSince),
 });
@@ -683,6 +664,70 @@ const formatDateCompact = (value, options = {}) => {
   });
 };
 
+const getOauthProviderLabel = (provider) => {
+  const normalized = safeText(provider).toLowerCase();
+  if (normalized === 'github') return 'GitHub';
+  return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : 'Identity provider';
+};
+
+const normalizeOauthProviderState = (provider, source = {}) => ({
+  provider: safeText(source?.provider || provider).toLowerCase() || safeText(provider).toLowerCase(),
+  linked: Boolean(source?.linked),
+  available: Boolean(source?.available),
+  username: safeText(source?.username),
+  email: safeText(source?.email),
+  profileUrl: safeText(source?.profileUrl),
+  linkedAt: source?.linkedAt || null,
+  lastUsedAt: source?.lastUsedAt || null,
+});
+
+const renderOauthProviders = (user = state.user) => {
+  if (!user) {
+    if (dom.oauthGithubStatus) {
+      dom.oauthGithubStatus.textContent = 'Sign in to manage verified identity providers.';
+    }
+    if (dom.oauthGithubConnectBtn) {
+      dom.oauthGithubConnectBtn.hidden = false;
+      dom.oauthGithubConnectBtn.disabled = true;
+    }
+    if (dom.oauthGithubUnlinkBtn) {
+      dom.oauthGithubUnlinkBtn.hidden = true;
+      dom.oauthGithubUnlinkBtn.disabled = true;
+    }
+    return;
+  }
+
+  const github = normalizeOauthProviderState('github', user?.oauthProviders?.github);
+
+  if (dom.oauthGithubStatus) {
+    if (github.linked) {
+      const identityBits = [
+        github.username ? `@${github.username}` : '',
+        github.email ? github.email : '',
+      ].filter(Boolean);
+      const identityText = identityBits.length ? identityBits.join(' | ') : 'GitHub account linked';
+      const activityText = github.lastUsedAt ? `Last used ${formatDate(github.lastUsedAt)}.` : 'Ready for sign-in.';
+      dom.oauthGithubStatus.textContent = `${identityText}. ${activityText}`;
+    } else if (!github.available) {
+      dom.oauthGithubStatus.textContent =
+        'GitHub sign-in is not configured on this deployment yet.';
+    } else {
+      dom.oauthGithubStatus.textContent =
+        'Link GitHub to add a verified sign-in method and provider-backed identity.';
+    }
+  }
+
+  if (dom.oauthGithubConnectBtn) {
+    dom.oauthGithubConnectBtn.hidden = github.linked;
+    dom.oauthGithubConnectBtn.disabled = !github.available || github.linked;
+  }
+
+  if (dom.oauthGithubUnlinkBtn) {
+    dom.oauthGithubUnlinkBtn.hidden = !github.linked;
+    dom.oauthGithubUnlinkBtn.disabled = !github.linked;
+  }
+};
+
 const getLocalDayKey = (value) => {
   const date = new Date(value || '');
   if (Number.isNaN(date.getTime())) return '';
@@ -924,12 +969,6 @@ const getAccountHealthContributors = (user = state.user) => {
       max: 4,
     },
     {
-      title: 'Timezone',
-      detail: safeText(user.profile?.timezone) ? 'Timezone helps support account scheduling and context.' : 'Timezone is still missing.',
-      points: safeText(user.profile?.timezone) ? 8 : 0,
-      max: 8,
-    },
-    {
       title: 'Recovery website',
       detail: safeText(user.profile?.website) ? 'A website or portfolio is on file.' : 'No website or portfolio is listed.',
       points: safeText(user.profile?.website) ? 5 : 0,
@@ -1136,21 +1175,26 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = REQUEST_TIMEOUT_M
   }
 };
 
-const openLoginPopup = () => {
+const openPopupWindow = (url, name = 'LoginPopup') => {
   const width = 860;
   const height = 780;
   const left = window.screenX + (window.outerWidth - width) / 2;
   const top = window.screenY + (window.outerHeight - height) / 2;
-  const popupUrl = buildLoginPopupUrl();
+  const popupUrl = String(url || buildLoginPopupUrl());
 
   if (state.loginPopupWindow && !state.loginPopupWindow.closed) {
+    try {
+      state.loginPopupWindow.location.href = popupUrl;
+    } catch {
+      // Ignore cross-origin navigation access errors and just focus the window.
+    }
     state.loginPopupWindow.focus();
     return state.loginPopupWindow;
   }
 
   state.loginPopupWindow = window.open(
-    popupUrl.toString(),
-    'LoginPopup',
+    popupUrl,
+    name,
     [
       'popup=yes',
       `width=${width}`,
@@ -1164,6 +1208,8 @@ const openLoginPopup = () => {
 
   return state.loginPopupWindow;
 };
+
+const openLoginPopup = () => openPopupWindow(buildLoginPopupUrl().toString(), 'LoginPopup');
 
 const openLoginPage = () => {
   window.location.assign(buildLoginPopupUrl().toString());
@@ -1186,6 +1232,8 @@ const closeLoginPopup = () => {
   if (state.loginPopupWindow && !state.loginPopupWindow.closed) {
     state.loginPopupWindow.close();
   }
+
+  state.loginPopupWindow = null;
 };
 
 const isTrustedLoginOrigin = (origin) => {
@@ -1257,6 +1305,7 @@ const clearDashboardUi = () => {
   renderBackupCodes([]);
   renderMfaState();
   renderPasskeys();
+  renderOauthProviders(null);
 
   if (dom.insightLast7) dom.insightLast7.textContent = '0';
   if (dom.insightLast30) dom.insightLast30.textContent = '0';
@@ -1737,22 +1786,6 @@ const renderProfileChecklist = (user = state.user) => {
       complete: Boolean(safeText(user.profile?.headline)),
     },
     {
-      title: 'Public context added',
-      detail:
-        safeText(user.profile?.role) ||
-        safeText(user.profile?.organization) ||
-        safeText(user.profile?.currentFocus) ||
-        normalizeFocusAreas(user.profile?.focusAreas).length
-          ? 'Role, organization, or focus details are ready.'
-          : 'Add role, organization, or focus areas so the public profile is more useful.',
-      complete: Boolean(
-        safeText(user.profile?.role) ||
-          safeText(user.profile?.organization) ||
-          safeText(user.profile?.currentFocus) ||
-          normalizeFocusAreas(user.profile?.focusAreas).length
-      ),
-    },
-    {
       title: 'Email verified',
       detail: user.isVerified ? 'Verification complete.' : 'Verify to reduce lockout risk.',
       complete: Boolean(user.isVerified),
@@ -1761,11 +1794,6 @@ const renderProfileChecklist = (user = state.user) => {
       title: 'Location added',
       detail: safeText(user.profile?.location) ? 'Location is on file.' : 'Add a location for context.',
       complete: Boolean(safeText(user.profile?.location)),
-    },
-    {
-      title: 'Timezone added',
-      detail: safeText(user.profile?.timezone) ? 'Timezone is set.' : 'Set a timezone for accurate scheduling.',
-      complete: Boolean(safeText(user.profile?.timezone)),
     },
     {
       title: 'Public profile ready',
@@ -1908,16 +1936,11 @@ const getRecommendedActions = (user = state.user) => {
     });
   }
 
-  if (
-    !safeText(user.profile?.role) &&
-    !safeText(user.profile?.organization) &&
-    !safeText(user.profile?.currentFocus) &&
-    !normalizeFocusAreas(user.profile?.focusAreas).length
-  ) {
+  if (!safeText(user.profile?.headline) && !safeText(user.profile?.bio) && !safeText(user.profile?.website)) {
     actions.push({
       tone: 'neutral',
       title: 'Add public context',
-      detail: 'Role, organization, focus, and tags make the public profile more useful to scan and search.',
+      detail: 'A headline, short bio, or website makes the public profile more useful to scan and share.',
       actionLabel: 'Edit profile',
       onAction: () => switchTab('profile'),
     });
@@ -2034,16 +2057,9 @@ const getPublicProfileUrl = (username = state.user?.username) => {
 const getPublicVisibilityInputs = () =>
   [
     dom.publicFieldHeadline,
-    dom.publicFieldRole,
-    dom.publicFieldOrganization,
     dom.publicFieldBio,
-    dom.publicFieldCurrentFocus,
-    dom.publicFieldFocusAreas,
-    dom.publicFieldPronouns,
     dom.publicFieldLocation,
     dom.publicFieldWebsite,
-    dom.publicFieldTimezone,
-    dom.publicFieldLanguage,
     dom.publicFieldLinked,
     dom.publicFieldMemberSince,
   ].filter(Boolean);
@@ -2176,16 +2192,9 @@ const createPreviewSection = (title, body, tone = 'neutral') => {
 const getDraftPublicProfilePreview = (user = state.user) => {
   const visible = {
     headline: Boolean(dom.publicFieldHeadline?.checked),
-    role: Boolean(dom.publicFieldRole?.checked),
-    organization: Boolean(dom.publicFieldOrganization?.checked),
     bio: Boolean(dom.publicFieldBio?.checked),
-    currentFocus: Boolean(dom.publicFieldCurrentFocus?.checked),
-    focusAreas: Boolean(dom.publicFieldFocusAreas?.checked),
-    pronouns: Boolean(dom.publicFieldPronouns?.checked),
     location: Boolean(dom.publicFieldLocation?.checked),
     website: Boolean(dom.publicFieldWebsite?.checked),
-    timezone: Boolean(dom.publicFieldTimezone?.checked),
-    language: Boolean(dom.publicFieldLanguage?.checked),
     linkedAccounts: Boolean(dom.publicFieldLinked?.checked),
     memberSince: Boolean(dom.publicFieldMemberSince?.checked),
   };
@@ -2193,16 +2202,9 @@ const getDraftPublicProfilePreview = (user = state.user) => {
   const username = safeText(readDraftInputValue(dom.profileUsername, user?.username || '')).toLowerCase();
   const displayName = safeText(readDraftInputValue(dom.profileDisplayName, user?.displayName || ''));
   const headline = safeText(readDraftInputValue(dom.profileHeadline, user?.profile?.headline || ''));
-  const role = safeText(readDraftInputValue(dom.profileRole, user?.profile?.role || ''));
-  const organization = safeText(readDraftInputValue(dom.profileOrganization, user?.profile?.organization || ''));
-  const pronouns = safeText(readDraftInputValue(dom.profilePronouns, user?.profile?.pronouns || ''));
   const location = safeText(readDraftInputValue(dom.profileLocation, user?.profile?.location || ''));
   const website = safeText(readDraftInputValue(dom.profileWebsite, user?.profile?.website || ''));
-  const timezone = safeText(readDraftInputValue(dom.profileTimezone, user?.profile?.timezone || ''));
-  const language = safeText(readDraftInputValue(dom.profileLanguage, user?.profile?.language || ''));
-  const currentFocus = safeText(readDraftInputValue(dom.profileCurrentFocus, user?.profile?.currentFocus || ''));
   const bio = safeText(readDraftInputValue(dom.profileBio, user?.profile?.bio || ''));
-  const focusAreas = normalizeFocusAreas(readDraftInputValue(dom.profileFocusAreas, user?.profile?.focusAreas || ''));
   const linkedAccounts = getDraftLinkedAccounts(user);
   const { isPublic, searchable, visibleCount } = getDraftPublicProfileState(user);
 
@@ -2212,16 +2214,9 @@ const getDraftPublicProfilePreview = (user = state.user) => {
     handle: username ? `@${username}` : 'No public handle yet',
     displayName: displayName || getIdentityName(user),
     headline,
-    role,
-    organization,
-    pronouns,
     location,
     website,
-    timezone,
-    language,
-    currentFocus,
     bio,
-    focusAreas,
     linkedAccounts,
     isPublic,
     searchable,
@@ -2258,24 +2253,19 @@ const renderPublicProfilePreview = (user = state.user) => {
           : 'Add a headline and choose whether it should appear publicly.';
   }
 
-  const summaryParts = [];
-  if (draft.visible.role && draft.role) summaryParts.push(draft.role);
-  if (draft.visible.organization && draft.organization) summaryParts.push(draft.organization);
-  if (draft.visible.currentFocus && draft.currentFocus) summaryParts.push(`Current focus: ${draft.currentFocus}`);
-
   if (dom.profilePreviewSummary) {
-    dom.profilePreviewSummary.textContent = summaryParts.length
-      ? summaryParts.join(' | ')
-      : 'Role, organization, and current focus will appear here when those public fields are enabled.';
+    dom.profilePreviewSummary.textContent =
+      draft.visible.bio && draft.bio
+        ? draft.bio.slice(0, 140)
+        : draft.visible.location && draft.location
+          ? draft.location
+          : 'Bio, location, and links will appear here when those public fields are enabled.';
   }
 
   if (dom.profilePreviewMeta) {
     dom.profilePreviewMeta.innerHTML = '';
     const metaValues = [
-      draft.visible.pronouns && draft.pronouns ? draft.pronouns : '',
       draft.visible.location && draft.location ? draft.location : '',
-      draft.visible.timezone && draft.timezone ? draft.timezone : '',
-      draft.visible.language && draft.language ? draft.language.toUpperCase() : '',
       draft.isPublic ? 'Public page ready' : 'Private preview',
     ].filter(Boolean);
 
@@ -2300,32 +2290,11 @@ const renderPublicProfilePreview = (user = state.user) => {
       draft.visible.memberSince && draft.memberSince ? formatDateCompact(draft.memberSince, { year: 'numeric' }) : 'Hidden';
   }
 
-  if (dom.profilePreviewFocus) {
-    dom.profilePreviewFocus.innerHTML = '';
-    if (draft.visible.focusAreas && draft.focusAreas.length) {
-      for (const area of draft.focusAreas) {
-        const chip = document.createElement('span');
-        chip.className = 'preview-chip';
-        chip.textContent = area;
-        dom.profilePreviewFocus.appendChild(chip);
-      }
-    } else {
-      const empty = document.createElement('span');
-      empty.className = 'preview-empty';
-      empty.textContent = 'Focus tags are hidden or not set.';
-      dom.profilePreviewFocus.appendChild(empty);
-    }
-  }
-
   dom.profilePreviewSections.innerHTML = '';
   const sections = [];
 
   if (draft.visible.bio && draft.bio) {
     sections.push(createPreviewSection('Bio', draft.bio));
-  }
-
-  if (draft.visible.currentFocus && draft.currentFocus) {
-    sections.push(createPreviewSection('Current focus', draft.currentFocus, 'accent'));
   }
 
   if (draft.visible.website && draft.website) {
@@ -2515,21 +2484,12 @@ const fillSummary = (user) => {
 const fillProfile = (user) => {
   if (dom.profileUsername) dom.profileUsername.value = user.username || '';
   if (dom.profileDisplayName) dom.profileDisplayName.value = user.displayName || '';
-  if (dom.profilePronouns) dom.profilePronouns.value = user.profile?.pronouns || '';
   if (dom.profileHeadline) dom.profileHeadline.value = user.profile?.headline || '';
-  if (dom.profileRole) dom.profileRole.value = user.profile?.role || '';
-  if (dom.profileOrganization) dom.profileOrganization.value = user.profile?.organization || '';
   if (dom.profileEmail) dom.profileEmail.value = user.email || '';
   if (dom.profileEmailCurrentPassword) dom.profileEmailCurrentPassword.value = '';
   if (dom.profileLocation) dom.profileLocation.value = user.profile?.location || '';
   if (dom.profileWebsite) dom.profileWebsite.value = user.profile?.website || '';
-  if (dom.profileTimezone) dom.profileTimezone.value = user.profile?.timezone || '';
-  if (dom.profileLanguage) dom.profileLanguage.value = user.profile?.language || '';
-  if (dom.profileCurrentFocus) dom.profileCurrentFocus.value = user.profile?.currentFocus || '';
   if (dom.profileBio) dom.profileBio.value = user.profile?.bio || '';
-  if (dom.profileFocusAreas) {
-    dom.profileFocusAreas.value = normalizeFocusAreas(user.profile?.focusAreas).join(', ');
-  }
   if (dom.profileId) dom.profileId.value = user.continentalId || user.userId || '';
   if (dom.profileCreated) dom.profileCreated.value = formatDate(user.createdAt);
 
@@ -2550,6 +2510,7 @@ const fillLinkedAccounts = (user) => {
   if (dom.linkedDiscord) dom.linkedDiscord.value = linked.discord || '';
   if (dom.linkedApple) dom.linkedApple.value = linked.apple || '';
   if (dom.linkedMicrosoft) dom.linkedMicrosoft.value = linked.microsoft || '';
+  renderOauthProviders(user);
   renderPublicProfilePreview(user);
 };
 
@@ -2562,16 +2523,9 @@ const fillPreferences = (user) => {
   if (dom.privacyPublic) dom.privacyPublic.checked = Boolean(prefs.profilePublic);
   if (dom.privacySearchable) dom.privacySearchable.checked = Boolean(prefs.searchable);
   if (dom.publicFieldHeadline) dom.publicFieldHeadline.checked = publicProfile.headline;
-  if (dom.publicFieldRole) dom.publicFieldRole.checked = publicProfile.role;
-  if (dom.publicFieldOrganization) dom.publicFieldOrganization.checked = publicProfile.organization;
   if (dom.publicFieldBio) dom.publicFieldBio.checked = publicProfile.bio;
-  if (dom.publicFieldCurrentFocus) dom.publicFieldCurrentFocus.checked = publicProfile.currentFocus;
-  if (dom.publicFieldFocusAreas) dom.publicFieldFocusAreas.checked = publicProfile.focusAreas;
-  if (dom.publicFieldPronouns) dom.publicFieldPronouns.checked = publicProfile.pronouns;
   if (dom.publicFieldLocation) dom.publicFieldLocation.checked = publicProfile.location;
   if (dom.publicFieldWebsite) dom.publicFieldWebsite.checked = publicProfile.website;
-  if (dom.publicFieldTimezone) dom.publicFieldTimezone.checked = publicProfile.timezone;
-  if (dom.publicFieldLanguage) dom.publicFieldLanguage.checked = publicProfile.language;
   if (dom.publicFieldLinked) dom.publicFieldLinked.checked = publicProfile.linkedAccounts;
   if (dom.publicFieldMemberSince) dom.publicFieldMemberSince.checked = publicProfile.memberSince;
 
@@ -3545,6 +3499,7 @@ const loadLinkedAccounts = async () => {
   const data = await apiRequest('/linked', { method: 'GET', auth: true });
   if (!state.user) state.user = {};
   state.user.linkedAccounts = data.linkedAccounts || state.user.linkedAccounts || {};
+  state.user.oauthProviders = data.oauthProviders || state.user.oauthProviders || {};
   fillLinkedAccounts(state.user);
 };
 
@@ -3761,14 +3716,10 @@ const handleProfileSave = async (event) => {
 
   const username = safeText(dom.profileUsername?.value).toLowerCase();
   const displayName = safeText(dom.profileDisplayName?.value);
-  const pronouns = safeText(dom.profilePronouns?.value);
   const headline = safeText(dom.profileHeadline?.value);
-  const role = safeText(dom.profileRole?.value);
-  const organization = safeText(dom.profileOrganization?.value);
   const email = safeText(dom.profileEmail?.value).toLowerCase();
   const avatar = normalizeAvatarInput(state.profileAvatarDraft || dom.profileAvatarUrl?.value);
   const website = normalizeWebsiteInput(dom.profileWebsite?.value);
-  const focusAreas = normalizeFocusAreas(dom.profileFocusAreas?.value);
   const currentEmail = safeText(state.user?.email).toLowerCase();
   const emailChanged = email !== currentEmail;
   const currentPassword = dom.profileEmailCurrentPassword?.value || '';
@@ -3819,10 +3770,10 @@ const handleProfileSave = async (event) => {
     const profilePayload = {
       username,
       displayName,
-      pronouns,
       headline,
-      role,
-      organization,
+      pronouns: '',
+      role: '',
+      organization: '',
       email,
       currentPassword,
       mfaCode: emailChangeMfa.mfaCode,
@@ -3830,10 +3781,10 @@ const handleProfileSave = async (event) => {
       avatar: avatar || '',
       location: safeText(dom.profileLocation?.value),
       website,
-      timezone: safeText(dom.profileTimezone?.value),
-      language: safeText(dom.profileLanguage?.value),
-      currentFocus: safeText(dom.profileCurrentFocus?.value),
-      focusAreas,
+      timezone: '',
+      language: '',
+      currentFocus: '',
+      focusAreas: [],
       bio: safeText(dom.profileBio?.value),
     };
 
@@ -3918,6 +3869,60 @@ const handleLinkedSave = async (event) => {
     showToast(err.message, 'error');
   } finally {
     setButtonBusy(dom.linkedSaveBtn, false);
+  }
+};
+
+const handleGithubLink = async () => {
+  setButtonBusy(dom.oauthGithubConnectBtn, true, 'Opening GitHub...');
+
+  try {
+    const data = await apiRequest('/oauth/github/link-start', {
+      method: 'POST',
+      body: {
+        origin: window.location.origin,
+        redirect: window.location.href,
+        returnTo: window.location.href,
+      },
+    });
+
+    const popup = openPopupWindow(data.url, 'IdentityProviderPopup');
+    if (!popup) {
+      window.location.assign(data.url);
+      return;
+    }
+
+    popup.focus();
+    showToast('GitHub authorization opened in a new window.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    setButtonBusy(dom.oauthGithubConnectBtn, false);
+    renderOauthProviders(state.user);
+  }
+};
+
+const handleGithubUnlink = async () => {
+  const providerLabel = getOauthProviderLabel('github');
+  if (!window.confirm(`Unlink ${providerLabel} from this Continental ID account?`)) {
+    return;
+  }
+
+  setButtonBusy(dom.oauthGithubUnlinkBtn, true, 'Unlinking...');
+
+  try {
+    const data = await apiRequest('/oauth/github', {
+      method: 'DELETE',
+      body: {},
+    });
+
+    syncUiWithUser(normalizeUserPayload(data));
+    showToast(data.message || `${providerLabel} unlinked.`, 'success');
+    setSyncStatus(new Date());
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    setButtonBusy(dom.oauthGithubUnlinkBtn, false);
+    renderOauthProviders(state.user);
   }
 };
 
@@ -4184,16 +4189,16 @@ const buildPreferencesPayload = () => ({
   searchable: Boolean(dom.privacySearchable?.checked),
   publicProfile: {
     headline: Boolean(dom.publicFieldHeadline?.checked),
-    role: Boolean(dom.publicFieldRole?.checked),
-    organization: Boolean(dom.publicFieldOrganization?.checked),
+    role: false,
+    organization: false,
     bio: Boolean(dom.publicFieldBio?.checked),
-    currentFocus: Boolean(dom.publicFieldCurrentFocus?.checked),
-    focusAreas: Boolean(dom.publicFieldFocusAreas?.checked),
-    pronouns: Boolean(dom.publicFieldPronouns?.checked),
+    currentFocus: false,
+    focusAreas: false,
+    pronouns: false,
     location: Boolean(dom.publicFieldLocation?.checked),
     website: Boolean(dom.publicFieldWebsite?.checked),
-    timezone: Boolean(dom.publicFieldTimezone?.checked),
-    language: Boolean(dom.publicFieldLanguage?.checked),
+    timezone: false,
+    language: false,
     linkedAccounts: Boolean(dom.publicFieldLinked?.checked),
     memberSince: Boolean(dom.publicFieldMemberSince?.checked),
   },
@@ -4604,6 +4609,12 @@ const setupEventHandlers = () => {
     dom.linkedForm.addEventListener('input', () => renderPublicProfilePreview(state.user));
     dom.linkedForm.addEventListener('change', () => renderPublicProfilePreview(state.user));
   }
+  if (dom.oauthGithubConnectBtn) {
+    dom.oauthGithubConnectBtn.addEventListener('click', handleGithubLink);
+  }
+  if (dom.oauthGithubUnlinkBtn) {
+    dom.oauthGithubUnlinkBtn.addEventListener('click', handleGithubUnlink);
+  }
   if (dom.passwordForm) dom.passwordForm.addEventListener('submit', handlePasswordSave);
   if (dom.securityForm) dom.securityForm.addEventListener('submit', handleSecuritySave);
   if (dom.mfaSetupBtn) dom.mfaSetupBtn.addEventListener('click', handleMfaSetup);
@@ -4639,16 +4650,9 @@ const setupEventHandlers = () => {
     dom.privacyPublic,
     dom.privacySearchable,
     dom.publicFieldHeadline,
-    dom.publicFieldRole,
-    dom.publicFieldOrganization,
     dom.publicFieldBio,
-    dom.publicFieldCurrentFocus,
-    dom.publicFieldFocusAreas,
-    dom.publicFieldPronouns,
     dom.publicFieldLocation,
     dom.publicFieldWebsite,
-    dom.publicFieldTimezone,
-    dom.publicFieldLanguage,
     dom.publicFieldLinked,
     dom.publicFieldMemberSince,
   ]) {
@@ -4803,7 +4807,21 @@ const setupEventHandlers = () => {
 
   window.addEventListener('message', async (event) => {
     if (!isTrustedLoginOrigin(event.origin)) return;
-    if (!event.data || event.data.type !== 'LOGIN_SUCCESS') return;
+    const messageType = safeText(event.data?.type);
+    if (!messageType) return;
+
+    if (messageType === 'OAUTH_LINKED') {
+      try {
+        await Promise.all([loadCurrentUser(), loadLinkedAccounts()]);
+        closeLoginPopup();
+        showToast(`${getOauthProviderLabel(event.data?.provider)} linked successfully.`, 'success');
+      } catch (err) {
+        showToast(err.message || 'The identity provider was linked, but the dashboard could not refresh.', 'warn');
+      }
+      return;
+    }
+
+    if (messageType !== 'LOGIN_SUCCESS') return;
 
     const refreshed = await refreshSession();
     if (!refreshed.ok) {

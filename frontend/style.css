@@ -1554,6 +1554,40 @@ footer {
   grid-template-columns: 1fr;
 }
 
+.oauth-provider-stack {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.oauth-provider-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+}
+
+.oauth-provider-copy {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.oauth-provider-copy h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.oauth-provider-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .progress-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -1950,6 +1984,16 @@ footer {
 .passkey-card {
   display: grid;
   gap: 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .oauth-provider-card {
+    grid-template-columns: 1fr;
+  }
+
+  .oauth-provider-actions {
+    justify-content: flex-start;
+  }
 }
 
 .mini-bars {

@@ -15,6 +15,8 @@ router.post('/reset-password', ctrl.resetPassword);
 router.get('/verify-email', verifyEmailCtrl.verifyEmail);
 router.get('/public-search', ctrl.searchPublicProfiles);
 router.get('/public/:username', ctrl.getPublicProfile);
+router.get('/oauth/:provider/start', ctrl.startOauthLogin);
+router.get('/oauth/:provider/callback', ctrl.finishOauthCallback);
 router.post('/passkeys/authenticate/options', ctrl.beginPasskeyAuthentication);
 router.post('/passkeys/authenticate/verify', ctrl.finishPasskeyAuthentication);
 
@@ -29,6 +31,8 @@ router.patch('/preferences', auth, ctrl.updatePreferences);
 
 router.get('/linked', auth, ctrl.getLinkedAccounts);
 router.patch('/linked', auth, ctrl.updateLinkedAccounts);
+router.post('/oauth/:provider/link-start', auth, ctrl.startOauthLink);
+router.delete('/oauth/:provider', auth, ctrl.unlinkOauthProvider);
 
 router.get('/activity', auth, ctrl.getActivity);
 

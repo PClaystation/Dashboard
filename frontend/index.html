@@ -416,10 +416,6 @@
                   <input id="profile-display-name" name="displayName" type="text" minlength="2" maxlength="60" required />
                 </label>
                 <label>
-                  Pronouns
-                  <input id="profile-pronouns" name="pronouns" type="text" maxlength="40" placeholder="she/her" />
-                </label>
-                <label>
                   Headline
                   <input
                     id="profile-headline"
@@ -427,20 +423,6 @@
                     type="text"
                     maxlength="100"
                     placeholder="Building a cleaner account system"
-                  />
-                </label>
-                <label>
-                  Role / title
-                  <input id="profile-role" name="role" type="text" maxlength="100" placeholder="Product designer" />
-                </label>
-                <label>
-                  Organization
-                  <input
-                    id="profile-organization"
-                    name="organization"
-                    type="text"
-                    maxlength="100"
-                    placeholder="Continental Studio"
                   />
                 </label>
                 <label>
@@ -465,38 +447,9 @@
                   Website
                   <input id="profile-website" name="website" type="url" maxlength="240" placeholder="https://example.com" />
                 </label>
-                <label>
-                  Timezone
-                  <input id="profile-timezone" name="timezone" type="text" maxlength="80" placeholder="Europe/Stockholm" />
-                </label>
-                <label>
-                  Language
-                  <input id="profile-language" name="language" type="text" maxlength="32" placeholder="en" />
-                </label>
-                <label class="wide-field">
-                  Current focus
-                  <input
-                    id="profile-current-focus"
-                    name="currentFocus"
-                    type="text"
-                    maxlength="160"
-                    placeholder="Improving the public profile experience and account accessibility"
-                  />
-                </label>
                 <label class="wide-field">
                   Bio
                   <textarea id="profile-bio" name="bio" rows="4" maxlength="320" placeholder="Tell us about you"></textarea>
-                </label>
-                <label class="wide-field">
-                  Focus areas
-                  <input
-                    id="profile-focus-areas"
-                    name="focusAreas"
-                    type="text"
-                    maxlength="240"
-                    placeholder="Identity, accessibility, design systems, security"
-                  />
-                  <small>Comma-separated topics shown as tags on your public profile.</small>
                 </label>
                 <label>
                   Continental ID
@@ -575,47 +528,12 @@
                       </span>
                       <input id="public-field-headline" type="checkbox" />
                     </label>
-                    <label class="visibility-toggle" for="public-field-role">
-                      <span>
-                        <strong>Role / title</strong>
-                        <small>Explain what you do in a few words.</small>
-                      </span>
-                      <input id="public-field-role" type="checkbox" />
-                    </label>
-                    <label class="visibility-toggle" for="public-field-organization">
-                      <span>
-                        <strong>Organization</strong>
-                        <small>Show the team, company, or community you represent.</small>
-                      </span>
-                      <input id="public-field-organization" type="checkbox" />
-                    </label>
                     <label class="visibility-toggle" for="public-field-bio">
                       <span>
                         <strong>Bio</strong>
                         <small>Longer personal summary and context.</small>
                       </span>
                       <input id="public-field-bio" type="checkbox" />
-                    </label>
-                    <label class="visibility-toggle" for="public-field-current-focus">
-                      <span>
-                        <strong>Current focus</strong>
-                        <small>Highlight what you are working on right now.</small>
-                      </span>
-                      <input id="public-field-current-focus" type="checkbox" />
-                    </label>
-                    <label class="visibility-toggle" for="public-field-focus-areas">
-                      <span>
-                        <strong>Focus areas</strong>
-                        <small>Surface tags people can search and scan quickly.</small>
-                      </span>
-                      <input id="public-field-focus-areas" type="checkbox" />
-                    </label>
-                    <label class="visibility-toggle" for="public-field-pronouns">
-                      <span>
-                        <strong>Pronouns</strong>
-                        <small>Personal identity and address preference.</small>
-                      </span>
-                      <input id="public-field-pronouns" type="checkbox" />
                     </label>
                     <label class="visibility-toggle" for="public-field-location">
                       <span>
@@ -630,20 +548,6 @@
                         <small>Link to a homepage, portfolio, or project hub.</small>
                       </span>
                       <input id="public-field-website" type="checkbox" />
-                    </label>
-                    <label class="visibility-toggle" for="public-field-timezone">
-                      <span>
-                        <strong>Timezone</strong>
-                        <small>Useful for async teamwork and scheduling.</small>
-                      </span>
-                      <input id="public-field-timezone" type="checkbox" />
-                    </label>
-                    <label class="visibility-toggle" for="public-field-language">
-                      <span>
-                        <strong>Language</strong>
-                        <small>Show your preferred language code.</small>
-                      </span>
-                      <input id="public-field-language" type="checkbox" />
                     </label>
                     <label class="visibility-toggle" for="public-field-linked">
                       <span>
@@ -688,7 +592,7 @@
                       Add a headline to make the public page easier to scan.
                     </p>
                     <p id="profile-preview-summary" class="helper-line">
-                      Role, organization, and focus details will appear here as you edit.
+                      Bio, location, and links will appear here as you edit.
                     </p>
                   </div>
                 </div>
@@ -710,7 +614,6 @@
                   </div>
                 </div>
 
-                <div id="profile-preview-focus" class="preview-chip-list"></div>
                 <div id="profile-preview-sections" class="preview-section-list"></div>
                 <p id="profile-preview-note" class="helper-line">
                   This preview follows your current visibility toggles, even before you save.
@@ -736,6 +639,36 @@
                   <h3>External profiles</h3>
                 </div>
               </div>
+
+              <div class="oauth-provider-stack">
+                <article id="oauth-github-card" class="oauth-provider-card">
+                  <div class="oauth-provider-copy">
+                    <p class="eyebrow">Verified identity</p>
+                    <h4>GitHub sign-in</h4>
+                    <p id="oauth-github-status" class="helper-line">
+                      GitHub sign-in is loading.
+                    </p>
+                  </div>
+                  <div class="oauth-provider-actions">
+                    <button id="oauth-github-connect-btn" class="secondary-btn" type="button">
+                      Connect GitHub
+                    </button>
+                    <button
+                      id="oauth-github-unlink-btn"
+                      class="danger-btn"
+                      type="button"
+                      hidden
+                    >
+                      Unlink
+                    </button>
+                  </div>
+                </article>
+              </div>
+
+              <p class="helper-line">
+                Verified identity providers are used for sign-in and secure account linking. The
+                profile fields below still control what appears on your public profile.
+              </p>
 
               <form id="linked-form" class="form-grid">
                 <label>
