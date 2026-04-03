@@ -1,29 +1,29 @@
 :root,
 html[data-theme='graphite'] {
   color-scheme: dark;
-  --bg-1: #111317;
-  --bg-2: #171a1f;
-  --bg-3: #222733;
-  --surface: rgba(20, 23, 28, 0.82);
-  --surface-strong: rgba(24, 28, 34, 0.94);
-  --surface-muted: rgba(28, 33, 41, 0.94);
+  --bg-1: #0f141c;
+  --bg-2: #161c26;
+  --bg-3: #232d3b;
+  --surface: rgba(20, 26, 35, 0.82);
+  --surface-strong: rgba(25, 31, 42, 0.94);
+  --surface-muted: rgba(30, 38, 50, 0.94);
   --text: #eef1f6;
-  --muted: #a3aab7;
-  --line: rgba(188, 195, 209, 0.13);
-  --line-strong: rgba(188, 195, 209, 0.23);
-  --primary: #5e6f8f;
-  --primary-strong: #7889aa;
-  --primary-soft: rgba(94, 111, 143, 0.16);
-  --secondary: #8d97a8;
-  --secondary-soft: rgba(141, 151, 168, 0.12);
-  --danger: #d58682;
-  --warning: #c6a26e;
-  --success: #7ea28f;
+  --muted: #a8b2c3;
+  --line: rgba(184, 196, 216, 0.14);
+  --line-strong: rgba(184, 196, 216, 0.24);
+  --primary: #6c84af;
+  --primary-strong: #8fa6cf;
+  --primary-soft: rgba(108, 132, 175, 0.2);
+  --secondary: #9aa6bb;
+  --secondary-soft: rgba(154, 166, 187, 0.14);
+  --danger: #d98a87;
+  --warning: #d0ab73;
+  --success: #82ab98;
   --shadow: 0 24px 60px rgba(5, 7, 11, 0.36);
   --shadow-soft: 0 10px 28px rgba(5, 7, 11, 0.24);
-  --ring: rgba(120, 138, 170, 0.28);
-  --ambient-top: rgba(112, 129, 163, 0.12);
-  --ambient-bottom: rgba(68, 76, 95, 0.16);
+  --ring: rgba(128, 153, 196, 0.32);
+  --ambient-top: rgba(108, 132, 175, 0.18);
+  --ambient-bottom: rgba(72, 91, 128, 0.2);
   --density-pad: 1.2rem;
   --density-gap: 1rem;
   --sidebar-width: 308px;
@@ -207,17 +207,31 @@ body {
   position: absolute;
   left: 1rem;
   top: 1rem;
-  padding: 0.8rem 1rem;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
   border-radius: 14px;
-  border: 1px solid var(--line);
+  border: 0;
   background: color-mix(in srgb, var(--surface-strong) 96%, var(--bg-2));
   color: var(--text);
   z-index: 10004;
-  transform: translateY(calc(-100% - 1rem));
 }
 
 .skip-link:focus {
-  transform: translateY(0);
+  width: auto;
+  height: auto;
+  padding: 0.8rem 1rem;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  white-space: normal;
+  border: 1px solid var(--line);
 }
 
 body::before,
