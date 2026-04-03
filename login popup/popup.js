@@ -8,7 +8,7 @@ const PREFERRED_API_ORIGINS = Array.isArray(AUTH_CONFIG.preferredApiOrigins)
   ? AUTH_CONFIG.preferredApiOrigins
   : [];
 const HOSTED_API_BASE_URL =
-  AUTH_CONFIG.hostedApiBaseUrl || 'https://mpmc.ddns.net';
+  AUTH_CONFIG.hostedApiBaseUrl || 'https://auth.continental-hub.com';
 const API_BASE_STORAGE_KEY = 'continental.authApiBaseUrl';
 const OAUTH_PROVIDERS = ['github', 'google', 'discord'];
 const USERNAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?$/;

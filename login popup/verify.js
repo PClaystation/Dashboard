@@ -6,7 +6,7 @@ const PREFERRED_API_ORIGINS = Array.isArray(AUTH_CONFIG.preferredApiOrigins)
   ? AUTH_CONFIG.preferredApiOrigins
   : [];
 const HOSTED_API_BASE_URL =
-  AUTH_CONFIG.hostedApiBaseUrl || 'https://mpmc.ddns.net';
+  AUTH_CONFIG.hostedApiBaseUrl || 'https://auth.continental-hub.com';
 const API_BASE_STORAGE_KEY = 'continental.authApiBaseUrl';
 const params = new URLSearchParams(window.location.search);
 const token = String(params.get('token') || '').trim();

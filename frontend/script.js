@@ -14,7 +14,7 @@ const PREFERRED_API_BASE_URLS = [
   'https://continental-hub.com',
   'https://login.continental-hub.com',
 ];
-const HOSTED_API_BASE_URL = 'https://mpmc.ddns.net';
+const HOSTED_API_BASE_URL = 'https://auth.continental-hub.com';
 const API_BASE_STORAGE_KEY = 'continental.authApiBaseUrl';
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -382,6 +382,15 @@ const dom = {
 const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
 const safeText = (value) => String(value || '').trim();
 const readDraftInputValue = (element, fallback = '') => (element ? element.value : fallback);
+const TRUSTED_API_MESSAGE_ORIGINS = new Set([
+  'https://api.continental-hub.com',
+  'https://auth.continental-hub.com',
+  'https://id.continental-hub.com',
+  'https://backend.continental-hub.com',
+  'https://continental-hub.com',
+  'https://login.continental-hub.com',
+  'https://mpmc.ddns.net',
+]);
 const normalizeApiBaseUrl = (value) => {
   if (!value) return '';
 
@@ -1714,6 +1723,7 @@ const isTrustedLoginOrigin = (origin) => {
   if (!origin) return false;
   if (origin === window.location.origin) return true;
   if (loginPopupOrigin && origin === loginPopupOrigin) return true;
+  if (TRUSTED_API_MESSAGE_ORIGINS.has(origin)) return true;
 
   try {
     const parsed = new URL(origin);

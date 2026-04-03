@@ -27,5 +27,5 @@ window.__AUTH_CONFIG__ = {
     'https://login.continental-hub.com',
   ],
   defaultDashboardOrigin: 'https://dashboard.continental-hub.com',
-  hostedApiBaseUrl: 'https://mpmc.ddns.net',
+  hostedApiBaseUrl: 'https://auth.continental-hub.com',
 };
