@@ -34,13 +34,16 @@
         <div class="brand-copy">
           <p class="eyebrow">Identity workspace</p>
           <h1>Continental ID Dashboard</h1>
+          <p class="brand-subline">Manage profile, access, security, and account visibility from one place.</p>
         </div>
       </div>
 
       <div class="header-meta">
-        <span id="connection-status" class="connection-tag">Online</span>
-        <span id="sync-status" class="connection-tag">Not synced yet</span>
-        <span id="status" class="status-tag">Checking login...</span>
+        <div class="header-signal-row">
+          <span id="connection-status" class="connection-tag">Online</span>
+          <span id="sync-status" class="connection-tag">Not synced yet</span>
+        </div>
+        <span id="status" class="status-tag" aria-live="polite">Checking login...</span>
       </div>
 
       <div class="header-actions">
@@ -87,20 +90,19 @@
           <button id="tab-settings" class="tab-btn" data-tab="settings" type="button" role="tab" aria-controls="settings" aria-selected="false">Settings</button>
         </nav>
 
-        <section id="profile-checklist-card" class="sidebar-card">
+        <section class="sidebar-card">
           <div class="section-heading compact-heading">
             <div>
-              <p class="eyebrow">Service search</p>
-              <h2>Quick access</h2>
+              <p class="eyebrow">Workspace</p>
+              <h2>Quick tools</h2>
             </div>
-            <button id="favorite-filter-btn" class="ghost-btn" type="button">Pinned only</button>
           </div>
-
-          <label class="search-field">
-            <span class="sr-only">Filter services</span>
-            <input id="service-filter" type="search" placeholder="Search services or press Cmd/Ctrl+K" />
-          </label>
-          <p id="service-results-count" class="helper-line">4 services</p>
+          <p class="helper-line">Open the service launcher, jump to pending edits, or use keyboard shortcuts without leaving the current tab.</p>
+          <div class="sidebar-action-stack">
+            <button id="open-launcher-btn" class="secondary-btn" type="button">Open launcher</button>
+            <button id="jump-unsaved-btn" class="ghost-btn" type="button">Review unsaved</button>
+          </div>
+          <p class="helper-line keyboard-hint">Shortcuts: Cmd/Ctrl+K launcher, / activity filter, Alt+1..5 switch tabs.</p>
         </section>
 
         <section class="sidebar-card">
@@ -179,8 +181,8 @@
             <article class="section-card">
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">More to review</p>
-                  <h3>Secondary actions</h3>
+                  <p class="eyebrow">Next steps</p>
+                  <h3>Recommended actions</h3>
                 </div>
               </div>
               <div id="action-center" class="action-list"></div>
@@ -234,7 +236,19 @@
                   <p class="eyebrow">Services</p>
                   <h3>Launch your tools</h3>
                 </div>
+                <button id="service-launcher-btn" class="ghost-btn" type="button">Open launcher</button>
               </div>
+
+              <div class="service-panel-toolbar">
+                <label class="search-field service-search-field">
+                  <span class="sr-only">Filter services</span>
+                  <input id="service-filter" type="search" placeholder="Search services, or press Cmd/Ctrl+K" />
+                </label>
+                <button id="favorite-filter-btn" class="ghost-btn" type="button">Pinned only</button>
+              </div>
+              <p id="service-results-count" class="helper-line" aria-live="polite">4 services</p>
+              <div id="pinned-services" class="pinned-service-strip" hidden></div>
+              <p class="helper-line keyboard-hint">Pinned services stay at the top. The launcher gives you a faster jump list with search.</p>
 
               <ul id="service-list" class="card-list">
                 <li
@@ -349,8 +363,24 @@
             </div>
           </div>
 
+          <nav class="section-nav" aria-label="Profile sections">
+            <button class="section-nav-btn" data-scroll-target="profile-basics-card" type="button">Basics</button>
+            <button class="section-nav-btn" data-scroll-target="profile-visibility-card" type="button">Public profile</button>
+            <button class="section-nav-btn" data-scroll-target="profile-preview-card" type="button">Preview</button>
+            <button class="section-nav-btn" data-tab-target="settings" type="button">Settings</button>
+          </nav>
+
           <div class="stack-grid">
-            <article class="section-card">
+            <article id="profile-basics-card" class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Profile basics</p>
+                  <h3>Edit your identity</h3>
+                </div>
+                <span id="profile-form-state" class="inline-chip save-state-chip">Saved</span>
+              </div>
+              <p class="helper-line section-intro">Update your private account details first, then decide what should appear publicly.</p>
+
               <div id="verification-panel" class="verification-panel" hidden>
                 <p id="verification-helper" class="helper-line">Email not verified.</p>
                 <button id="verification-resend-btn" class="secondary-btn" type="button">
@@ -486,13 +516,15 @@
               </form>
             </article>
 
-            <article class="section-card">
+            <article id="profile-visibility-card" class="section-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Public presence</p>
                   <h3>Visibility & sharing</h3>
                 </div>
+                <span id="privacy-form-state" class="inline-chip save-state-chip">Saved</span>
               </div>
+              <p class="helper-line section-intro">Shape the live public profile separately from your private account information.</p>
 
               <form id="privacy-form" class="form-grid compact-form">
                 <div class="public-profile-summary-card wide-field">
@@ -573,7 +605,7 @@
               </form>
             </article>
 
-            <article class="section-card">
+            <article id="profile-preview-card" class="section-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Live draft</p>
@@ -631,13 +663,21 @@
             </div>
           </div>
 
+          <nav class="section-nav" aria-label="Settings sections">
+            <button class="section-nav-btn" data-scroll-target="settings-identities-card" type="button">Identities</button>
+            <button class="section-nav-btn" data-scroll-target="settings-notifications-card" type="button">Notifications</button>
+            <button class="section-nav-btn" data-scroll-target="settings-appearance-card" type="button">Appearance</button>
+            <button class="section-nav-btn" data-scroll-target="settings-danger-card" type="button">Danger zone</button>
+          </nav>
+
           <div class="stack-grid">
-            <article class="section-card">
+            <article id="settings-identities-card" class="section-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Connected identities</p>
                   <h3>External profiles</h3>
                 </div>
+                <span id="linked-form-state" class="inline-chip save-state-chip">Saved</span>
               </div>
 
               <div class="oauth-provider-stack">
@@ -655,6 +695,56 @@
                     </button>
                     <button
                       id="oauth-github-unlink-btn"
+                      class="danger-btn"
+                      type="button"
+                      hidden
+                    >
+                      Unlink
+                    </button>
+                  </div>
+                </article>
+
+                <article id="oauth-google-card" class="oauth-provider-card">
+                  <div class="oauth-provider-copy">
+                    <p class="eyebrow">Verified identity</p>
+                    <h4>Google sign-in</h4>
+                    <p id="oauth-google-status" class="helper-line">
+                      Google sign-in is loading.
+                    </p>
+                  </div>
+                  <div class="oauth-provider-actions">
+                    <button id="oauth-google-connect-btn" class="secondary-btn" type="button">
+                      Connect Google
+                    </button>
+                    <button
+                      id="oauth-google-unlink-btn"
+                      class="danger-btn"
+                      type="button"
+                      hidden
+                    >
+                      Unlink
+                    </button>
+                  </div>
+                </article>
+
+                <article id="oauth-microsoft-card" class="oauth-provider-card">
+                  <div class="oauth-provider-copy">
+                    <p class="eyebrow">Verified identity</p>
+                    <h4>Microsoft sign-in</h4>
+                    <p id="oauth-microsoft-status" class="helper-line">
+                      Microsoft sign-in is loading.
+                    </p>
+                  </div>
+                  <div class="oauth-provider-actions">
+                    <button
+                      id="oauth-microsoft-connect-btn"
+                      class="secondary-btn"
+                      type="button"
+                    >
+                      Connect Microsoft
+                    </button>
+                    <button
+                      id="oauth-microsoft-unlink-btn"
                       class="danger-btn"
                       type="button"
                       hidden
@@ -707,12 +797,13 @@
               </form>
             </article>
 
-            <article class="section-card">
+            <article id="settings-notifications-card" class="section-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Delivery</p>
                   <h3>Notifications</h3>
                 </div>
+                <span id="notification-form-state" class="inline-chip save-state-chip">Saved</span>
               </div>
 
               <form id="notification-form" class="form-grid compact-form">
@@ -740,12 +831,13 @@
               </form>
             </article>
 
-            <article class="section-card">
+            <article id="settings-appearance-card" class="section-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Environment</p>
                   <h3>Appearance & Layout</h3>
                 </div>
+                <span id="appearance-form-state" class="inline-chip save-state-chip">Saved</span>
               </div>
 
               <form id="appearance-form" class="form-grid">
@@ -787,7 +879,7 @@
               </form>
             </article>
 
-            <article class="section-card danger-card">
+            <article id="settings-danger-card" class="section-card danger-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Permanent action</p>
@@ -818,60 +910,88 @@
             </div>
           </div>
 
+          <nav class="section-nav" aria-label="Security sections">
+            <button class="section-nav-btn" data-scroll-target="security-guided-card" type="button">Guided setup</button>
+            <button class="section-nav-btn" data-scroll-target="security-password-card" type="button">Password</button>
+            <button class="section-nav-btn" data-scroll-target="security-mfa-card" type="button">MFA</button>
+            <button class="section-nav-btn" data-scroll-target="security-advanced-card" type="button">Advanced</button>
+          </nav>
+
           <div class="stack-grid">
-            <article class="section-card">
-              <div class="section-heading">
-                <div>
-                  <p class="eyebrow">Overview</p>
-                  <h3>Security posture</h3>
+            <div class="security-guided-grid">
+              <article class="section-card">
+                <div class="section-heading">
+                  <div>
+                    <p class="eyebrow">Overview</p>
+                    <h3>Security posture</h3>
+                  </div>
+                  <span id="security-posture-chip" class="inline-chip">Loading</span>
                 </div>
-                <span id="security-posture-chip" class="inline-chip">Loading</span>
-              </div>
 
-              <div class="security-overview">
-                <div id="security-score-ring" class="score-ring" aria-hidden="true">
-                  <div class="score-ring-inner">
-                    <strong id="security-score-number">0</strong>
-                    <span>health</span>
+                <div class="security-overview">
+                  <div id="security-score-ring" class="score-ring" aria-hidden="true">
+                    <div class="score-ring-inner">
+                      <strong id="security-score-number">0</strong>
+                      <span>health</span>
+                    </div>
+                  </div>
+
+                  <div class="security-overview-copy">
+                    <p id="security-score-summary" class="helper-line">
+                      Security signals will appear once your account data loads.
+                    </p>
+
+                    <div class="security-mini-grid">
+                      <div class="security-mini-card">
+                        <span>Sessions</span>
+                        <strong id="security-metric-sessions">0</strong>
+                      </div>
+                      <div class="security-mini-card">
+                        <span>Known devices</span>
+                        <strong id="security-metric-devices">0</strong>
+                      </div>
+                      <div class="security-mini-card">
+                        <span>Trusted devices</span>
+                        <strong id="security-metric-trusted-devices">0</strong>
+                      </div>
+                      <div class="security-mini-card">
+                        <span>New devices</span>
+                        <strong id="security-metric-new-devices">0</strong>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div class="security-overview-copy">
-                  <p id="security-score-summary" class="helper-line">
-                    Security signals will appear once your account data loads.
-                  </p>
+                <div id="security-breakdown" class="security-breakdown-list"></div>
+              </article>
 
-                  <div class="security-mini-grid">
-                    <div class="security-mini-card">
-                      <span>Sessions</span>
-                      <strong id="security-metric-sessions">0</strong>
-                    </div>
-                    <div class="security-mini-card">
-                      <span>Known devices</span>
-                      <strong id="security-metric-devices">0</strong>
-                    </div>
-                    <div class="security-mini-card">
-                      <span>Trusted devices</span>
-                      <strong id="security-metric-trusted-devices">0</strong>
-                    </div>
-                    <div class="security-mini-card">
-                      <span>New devices</span>
-                      <strong id="security-metric-new-devices">0</strong>
-                    </div>
+              <article id="security-guided-card" class="section-card security-guided-card">
+                <div class="section-heading">
+                  <div>
+                    <p class="eyebrow">Priority task</p>
+                    <h3 id="security-guidance-title">Review your sign-in protections</h3>
                   </div>
+                  <span class="inline-chip">Guided</span>
                 </div>
-              </div>
+                <p id="security-guidance-copy" class="helper-line">
+                  The dashboard will suggest the most important security task once account data loads.
+                </p>
+                <div class="security-guidance-actions">
+                  <button id="security-guidance-btn" class="primary-btn" type="button">Open security task</button>
+                  <button class="secondary-btn" data-scroll-target="security-advanced-card" type="button">Open advanced controls</button>
+                </div>
+              </article>
+            </div>
 
-              <div id="security-breakdown" class="security-breakdown-list"></div>
-            </article>
-
-            <article class="section-card">
+            <div class="security-primary-grid">
+            <article id="security-password-card" class="section-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Credentials</p>
                   <h3>Password</h3>
                 </div>
               </div>
+              <p class="helper-line section-intro">Use this only when you need to rotate the existing password. Stronger options live below.</p>
 
               <form id="password-form" class="form-grid">
                 <label>
@@ -894,13 +1014,14 @@
               </form>
             </article>
 
-            <article class="section-card">
+            <article id="security-mfa-card" class="section-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Verification</p>
                   <h3>Multi-factor authentication</h3>
                 </div>
               </div>
+              <p class="helper-line section-intro">Set up an authenticator app to add a second factor before the account is reused elsewhere.</p>
 
               <div class="stack-grid">
                 <div class="mfa-status-card">
@@ -913,36 +1034,84 @@
                 </div>
 
                 <div id="mfa-setup-panel" class="mfa-setup-panel" hidden>
-                  <p class="helper-line">Scan or copy the secret, then enter a code.</p>
+                  <p class="helper-line">Use Authy or any other authenticator app to scan the QR code, then confirm with the 6-digit code it generates.</p>
                   <label>
                     Current password
                     <input id="mfa-current-password" type="password" autocomplete="current-password" />
                   </label>
-                  <label class="wide-field">
-                    Authenticator secret
-                    <input id="mfa-secret" type="text" readonly />
-                  </label>
-                  <label class="wide-field">
-                    OTPAuth URL
-                    <input id="mfa-otpauth-url" type="text" readonly />
-                  </label>
-                  <label>
-                    6-digit code
-                    <input id="mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
-                  </label>
-                  <button id="mfa-enable-btn" class="primary-btn" type="button">Enable MFA</button>
-                  <div id="mfa-backup-codes" class="backup-code-list"></div>
+                  <div class="mfa-setup-flow">
+                    <section class="mfa-step-card">
+                      <div class="mfa-step-card-head">
+                        <span class="mfa-step-badge">1</span>
+                        <div>
+                          <h4>Scan the QR code</h4>
+                          <p>Open Authy, tap add account, and scan this code.</p>
+                        </div>
+                      </div>
+                      <div id="mfa-qr-shell" class="mfa-qr-shell" hidden>
+                        <img id="mfa-qr-image" alt="QR code for authenticator app setup" />
+                      </div>
+                    </section>
+
+                    <section class="mfa-step-card">
+                      <div class="mfa-step-card-head">
+                        <span class="mfa-step-badge">2</span>
+                        <div>
+                          <h4>Use the setup key if scanning is unavailable</h4>
+                          <p>Most apps accept the key below if you prefer to enter it manually.</p>
+                        </div>
+                      </div>
+                      <div class="mfa-inline-field">
+                        <label class="wide-field">
+                          Setup key
+                          <input id="mfa-secret" type="text" readonly />
+                        </label>
+                        <button id="mfa-copy-secret-btn" class="secondary-btn" type="button">Copy Key</button>
+                      </div>
+                      <details class="mfa-advanced-details">
+                        <summary>Advanced setup details</summary>
+                        <div class="mfa-inline-field mfa-inline-field-advanced">
+                          <label class="wide-field">
+                            OTPAuth URL
+                            <input id="mfa-otpauth-url" type="text" readonly />
+                          </label>
+                          <button id="mfa-copy-otpauth-btn" class="secondary-btn" type="button">Copy URL</button>
+                        </div>
+                      </details>
+                    </section>
+
+                    <section class="mfa-step-card">
+                      <div class="mfa-step-card-head">
+                        <span class="mfa-step-badge">3</span>
+                        <div>
+                          <h4>Confirm the connection</h4>
+                          <p>Enter the current 6-digit code from your authenticator app to finish setup.</p>
+                        </div>
+                      </div>
+                      <label>
+                        6-digit code
+                        <input id="mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+                      </label>
+                      <button id="mfa-enable-btn" class="primary-btn" type="button">Turn On MFA</button>
+                    </section>
+                  </div>
+
+                  <div class="mfa-backup-codes-panel">
+                    <p class="helper-line">Save these backup codes somewhere safe. Each code works once.</p>
+                    <div id="mfa-backup-codes" class="backup-code-list"></div>
+                  </div>
                 </div>
               </div>
             </article>
 
-            <article class="section-card">
+            <article id="security-passkey-card" class="section-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Passwordless</p>
                   <h3>Passkeys</h3>
                 </div>
               </div>
+              <p class="helper-line section-intro">Add a device-backed passkey for faster sign-in and better phishing resistance.</p>
 
               <div class="stack-grid">
                 <div class="mfa-status-card">
@@ -972,55 +1141,70 @@
               </div>
             </article>
 
-            <article class="section-card">
+            </div>
+
+            <article id="security-advanced-card" class="section-card advanced-card">
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">Monitoring</p>
-                  <h3>Security settings</h3>
+                  <p class="eyebrow">Advanced access</p>
+                  <h3>Alerts, sessions, and devices</h3>
                 </div>
+                <span class="inline-chip">Advanced</span>
               </div>
+              <p class="helper-line section-intro">Lower-frequency controls stay here so the core sign-in tasks remain easier to scan.</p>
 
-              <form id="security-form" class="inline-form">
-                <label class="toggle-label" for="login-alerts-toggle">
-                  <input id="login-alerts-toggle" type="checkbox" />
-                  Send alerts for suspicious sign-in activity
-                </label>
-                <button id="security-save-btn" class="secondary-btn" type="submit">Save Security</button>
-              </form>
-            </article>
+              <div class="advanced-security-grid">
+                <section class="advanced-security-panel">
+                  <div class="section-heading compact-heading">
+                    <div>
+                      <p class="eyebrow">Monitoring</p>
+                      <h4>Security settings</h4>
+                    </div>
+                    <span id="security-form-state" class="inline-chip save-state-chip">Saved</span>
+                  </div>
+                  <form id="security-form" class="inline-form">
+                    <label class="toggle-label" for="login-alerts-toggle">
+                      <input id="login-alerts-toggle" type="checkbox" />
+                      Send alerts for suspicious sign-in activity
+                    </label>
+                    <button id="security-save-btn" class="secondary-btn" type="submit">Save Security</button>
+                  </form>
+                </section>
 
-            <article class="section-card">
-              <div class="section-heading">
-                <div>
-                  <p class="eyebrow">Devices</p>
-                  <h3>Sessions</h3>
-                </div>
-                <div class="activity-toolbar">
-                  <button id="sessions-refresh-btn" class="secondary-btn" type="button">Refresh Sessions</button>
-                  <button id="sessions-revoke-others-btn" class="secondary-btn" type="button">Revoke Other Sessions</button>
-                  <button id="sessions-revoke-all-btn" class="danger-btn" type="button">Revoke All Sessions</button>
-                </div>
+                <section class="advanced-security-panel">
+                  <div class="section-heading compact-heading">
+                    <div>
+                      <p class="eyebrow">Devices</p>
+                      <h4>Sessions</h4>
+                    </div>
+                    <div class="activity-toolbar">
+                      <button id="sessions-refresh-btn" class="secondary-btn" type="button">Refresh Sessions</button>
+                      <button id="sessions-revoke-others-btn" class="secondary-btn" type="button">Revoke Other Sessions</button>
+                      <button id="sessions-revoke-all-btn" class="danger-btn" type="button">Revoke All Sessions</button>
+                    </div>
+                  </div>
+
+                  <ul id="sessions-list" class="activity-list">
+                    <li>Loading sessions...</li>
+                  </ul>
+                </section>
+
+                <section class="advanced-security-panel">
+                  <div class="section-heading compact-heading">
+                    <div>
+                      <p class="eyebrow">Hardware</p>
+                      <h4>Known devices</h4>
+                    </div>
+                    <div class="activity-toolbar">
+                      <button id="devices-refresh-btn" class="secondary-btn" type="button">Refresh Devices</button>
+                    </div>
+                  </div>
+
+                  <ul id="devices-list" class="activity-list">
+                    <li>Loading devices...</li>
+                  </ul>
+                </section>
               </div>
-
-              <ul id="sessions-list" class="activity-list">
-                <li>Loading sessions...</li>
-              </ul>
-            </article>
-
-            <article class="section-card">
-              <div class="section-heading">
-                <div>
-                  <p class="eyebrow">Hardware</p>
-                  <h3>Known devices</h3>
-                </div>
-                <div class="activity-toolbar">
-                  <button id="devices-refresh-btn" class="secondary-btn" type="button">Refresh Devices</button>
-                </div>
-              </div>
-
-              <ul id="devices-list" class="activity-list">
-                <li>Loading devices...</li>
-              </ul>
             </article>
           </div>
         </section>
@@ -1087,6 +1271,34 @@
         </section>
 
       </main>
+    </div>
+
+    <div id="save-reminder" class="save-reminder" hidden>
+      <div class="save-reminder-copy">
+        <p class="mini-label">Unsaved changes</p>
+        <strong id="save-reminder-text">You have unsaved changes.</strong>
+      </div>
+      <button id="save-reminder-jump-btn" class="secondary-btn" type="button">Review now</button>
+    </div>
+
+    <div id="launcher-modal" class="launcher-modal" hidden>
+      <div id="launcher-overlay" class="launcher-overlay" aria-hidden="true"></div>
+      <div class="launcher-panel" role="dialog" aria-modal="true" aria-labelledby="launcher-title">
+        <div class="launcher-header">
+          <div>
+            <p class="eyebrow">Quick switch</p>
+            <h2 id="launcher-title">Service launcher</h2>
+          </div>
+          <button id="launcher-close-btn" class="ghost-btn" type="button">Close</button>
+        </div>
+        <label class="search-field launcher-search-field">
+          <span class="sr-only">Search launcher services</span>
+          <input id="launcher-search" type="search" placeholder="Search pinned or available services" />
+        </label>
+        <p id="launcher-results-count" class="helper-line" aria-live="polite">4 services</p>
+        <div id="launcher-list" class="launcher-list"></div>
+        <p id="launcher-empty-state" class="empty-state" hidden>No services match this search.</p>
+      </div>
     </div>
 
     <div id="cookie-popup" class="cookie-popup hide">

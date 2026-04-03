@@ -21,11 +21,13 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const ACTIVE_TAB_STORAGE_KEY = 'dashboard.activeTab';
 const SERVICE_FAVORITES_STORAGE_KEY = 'dashboard.serviceFavorites';
 const FAVORITE_SERVICES_ONLY_STORAGE_KEY = 'dashboard.favoriteServicesOnly';
+const SERVICE_RECENT_STORAGE_KEY = 'dashboard.serviceRecent';
 const OVERVIEW_ACTIVITY_LIMIT = 4;
 const AVATAR_UPLOAD_MAX_FILE_BYTES = 5 * 1024 * 1024;
 const AVATAR_UPLOAD_MAX_DIMENSION = 256;
 const AVATAR_DATA_URL_MAX_LENGTH = 350000;
 const AVATAR_ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const OAUTH_PROVIDERS = ['github', 'google', 'microsoft'];
 const BLOCKED_NAME_FRAGMENTS = [
   'anal',
   'anus',
@@ -141,6 +143,7 @@ const dom = {
 
   tabButtons: Array.from(document.querySelectorAll('.tab-btn')),
   tabContents: Array.from(document.querySelectorAll('.tab-content')),
+  sectionNavButtons: Array.from(document.querySelectorAll('[data-scroll-target], [data-tab-target]')),
 
   heroInitials: document.getElementById('hero-initials'),
   heroDisplayName: document.getElementById('hero-display-name'),
@@ -160,6 +163,7 @@ const dom = {
   overviewJumpSecurityBtn: document.getElementById('overview-jump-security-btn'),
   overviewJumpActivityBtn: document.getElementById('overview-jump-activity-btn'),
   profileChecklist: document.getElementById('profile-checklist'),
+  profileFormState: document.getElementById('profile-form-state'),
 
   summaryId: document.getElementById('summary-id'),
   summaryUsername: document.getElementById('summary-username'),
@@ -231,6 +235,12 @@ const dom = {
   oauthGithubStatus: document.getElementById('oauth-github-status'),
   oauthGithubConnectBtn: document.getElementById('oauth-github-connect-btn'),
   oauthGithubUnlinkBtn: document.getElementById('oauth-github-unlink-btn'),
+  oauthGoogleStatus: document.getElementById('oauth-google-status'),
+  oauthGoogleConnectBtn: document.getElementById('oauth-google-connect-btn'),
+  oauthGoogleUnlinkBtn: document.getElementById('oauth-google-unlink-btn'),
+  oauthMicrosoftStatus: document.getElementById('oauth-microsoft-status'),
+  oauthMicrosoftConnectBtn: document.getElementById('oauth-microsoft-connect-btn'),
+  oauthMicrosoftUnlinkBtn: document.getElementById('oauth-microsoft-unlink-btn'),
 
   passwordForm: document.getElementById('password-form'),
   passwordSaveBtn: document.getElementById('password-save-btn'),
@@ -253,14 +263,21 @@ const dom = {
   securityMetricTrustedDevices: document.getElementById('security-metric-trusted-devices'),
   securityMetricNewDevices: document.getElementById('security-metric-new-devices'),
   securityBreakdown: document.getElementById('security-breakdown'),
+  securityGuidanceTitle: document.getElementById('security-guidance-title'),
+  securityGuidanceCopy: document.getElementById('security-guidance-copy'),
+  securityGuidanceBtn: document.getElementById('security-guidance-btn'),
   mfaStatusCopy: document.getElementById('mfa-status-copy'),
   mfaSetupBtn: document.getElementById('mfa-setup-btn'),
   mfaDisableBtn: document.getElementById('mfa-disable-btn'),
   mfaBackupBtn: document.getElementById('mfa-backup-btn'),
   mfaSetupPanel: document.getElementById('mfa-setup-panel'),
   mfaCurrentPassword: document.getElementById('mfa-current-password'),
+  mfaQrShell: document.getElementById('mfa-qr-shell'),
+  mfaQrImage: document.getElementById('mfa-qr-image'),
   mfaSecret: document.getElementById('mfa-secret'),
+  mfaCopySecretBtn: document.getElementById('mfa-copy-secret-btn'),
   mfaOtpAuthUrl: document.getElementById('mfa-otpauth-url'),
+  mfaCopyOtpAuthBtn: document.getElementById('mfa-copy-otpauth-btn'),
   mfaCode: document.getElementById('mfa-code'),
   mfaEnableBtn: document.getElementById('mfa-enable-btn'),
   mfaBackupCodes: document.getElementById('mfa-backup-codes'),
@@ -283,6 +300,7 @@ const dom = {
   publicProfileVisibleCount: document.getElementById('public-profile-visible-count'),
   publicProfilePreviewBtn: document.getElementById('public-profile-preview-btn'),
   publicProfileDirectoryBtn: document.getElementById('public-profile-directory-btn'),
+  privacyFormState: document.getElementById('privacy-form-state'),
 
   notificationForm: document.getElementById('notification-form'),
   notificationSaveBtn: document.getElementById('notification-save-btn'),
@@ -301,6 +319,9 @@ const dom = {
   appearanceReducedMotion: document.getElementById('appearance-reduced-motion'),
   appearanceHighContrast: document.getElementById('appearance-high-contrast'),
   dashboardTipsToggle: document.getElementById('dashboard-tips-toggle'),
+  linkedFormState: document.getElementById('linked-form-state'),
+  notificationFormState: document.getElementById('notification-form-state'),
+  appearanceFormState: document.getElementById('appearance-form-state'),
 
   sessionsList: document.getElementById('sessions-list'),
   sessionsRefreshBtn: document.getElementById('sessions-refresh-btn'),
@@ -333,6 +354,21 @@ const dom = {
   serviceResultsCount: document.getElementById('service-results-count'),
   serviceEmptyState: document.getElementById('service-empty-state'),
   favoriteFilterBtn: document.getElementById('favorite-filter-btn'),
+  pinnedServices: document.getElementById('pinned-services'),
+  openLauncherBtn: document.getElementById('open-launcher-btn'),
+  serviceLauncherBtn: document.getElementById('service-launcher-btn'),
+  jumpUnsavedBtn: document.getElementById('jump-unsaved-btn'),
+  saveReminder: document.getElementById('save-reminder'),
+  saveReminderText: document.getElementById('save-reminder-text'),
+  saveReminderJumpBtn: document.getElementById('save-reminder-jump-btn'),
+  securityFormState: document.getElementById('security-form-state'),
+  launcherModal: document.getElementById('launcher-modal'),
+  launcherOverlay: document.getElementById('launcher-overlay'),
+  launcherCloseBtn: document.getElementById('launcher-close-btn'),
+  launcherSearch: document.getElementById('launcher-search'),
+  launcherList: document.getElementById('launcher-list'),
+  launcherResultsCount: document.getElementById('launcher-results-count'),
+  launcherEmptyState: document.getElementById('launcher-empty-state'),
 
   cookiePopup: document.getElementById('cookie-popup'),
   cookieAcceptBtn: document.getElementById('cookie-accept'),
@@ -600,9 +636,13 @@ const state = {
   lastSyncAt: null,
   favoriteServices: new Set(readStoredArray(SERVICE_FAVORITES_STORAGE_KEY)),
   favoriteServicesOnly: localStorage.getItem(FAVORITE_SERVICES_ONLY_STORAGE_KEY) === 'true',
+  recentServices: readStoredArray(SERVICE_RECENT_STORAGE_KEY).map((value) => safeText(value).toLowerCase()).filter(Boolean),
   activeTab: 'overview',
   profileAvatarDraft: '',
   mfaSetup: null,
+  launcherOpen: false,
+  launcherActiveIndex: 0,
+  launcherLastFocusedElement: null,
 };
 
 const requiresSensitiveActionMfa = () => Boolean(state.user?.security?.mfa?.enabled);
@@ -667,6 +707,8 @@ const formatDateCompact = (value, options = {}) => {
 const getOauthProviderLabel = (provider) => {
   const normalized = safeText(provider).toLowerCase();
   if (normalized === 'github') return 'GitHub';
+  if (normalized === 'google') return 'Google';
+  if (normalized === 'microsoft') return 'Microsoft';
   return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : 'Identity provider';
 };
 
@@ -681,50 +723,89 @@ const normalizeOauthProviderState = (provider, source = {}) => ({
   lastUsedAt: source?.lastUsedAt || null,
 });
 
+const getOauthProviderElements = (provider) => {
+  const normalized = safeText(provider).toLowerCase();
+  if (normalized === 'github') {
+    return {
+      status: dom.oauthGithubStatus,
+      connectBtn: dom.oauthGithubConnectBtn,
+      unlinkBtn: dom.oauthGithubUnlinkBtn,
+    };
+  }
+  if (normalized === 'google') {
+    return {
+      status: dom.oauthGoogleStatus,
+      connectBtn: dom.oauthGoogleConnectBtn,
+      unlinkBtn: dom.oauthGoogleUnlinkBtn,
+    };
+  }
+  if (normalized === 'microsoft') {
+    return {
+      status: dom.oauthMicrosoftStatus,
+      connectBtn: dom.oauthMicrosoftConnectBtn,
+      unlinkBtn: dom.oauthMicrosoftUnlinkBtn,
+    };
+  }
+
+  return {
+    status: null,
+    connectBtn: null,
+    unlinkBtn: null,
+  };
+};
+
 const renderOauthProviders = (user = state.user) => {
   if (!user) {
-    if (dom.oauthGithubStatus) {
-      dom.oauthGithubStatus.textContent = 'Sign in to manage verified identity providers.';
-    }
-    if (dom.oauthGithubConnectBtn) {
-      dom.oauthGithubConnectBtn.hidden = false;
-      dom.oauthGithubConnectBtn.disabled = true;
-    }
-    if (dom.oauthGithubUnlinkBtn) {
-      dom.oauthGithubUnlinkBtn.hidden = true;
-      dom.oauthGithubUnlinkBtn.disabled = true;
+    for (const provider of OAUTH_PROVIDERS) {
+      const elements = getOauthProviderElements(provider);
+      if (elements.status) {
+        elements.status.textContent = 'Sign in to manage verified identity providers.';
+      }
+      if (elements.connectBtn) {
+        elements.connectBtn.hidden = false;
+        elements.connectBtn.disabled = true;
+      }
+      if (elements.unlinkBtn) {
+        elements.unlinkBtn.hidden = true;
+        elements.unlinkBtn.disabled = true;
+      }
     }
     return;
   }
 
-  const github = normalizeOauthProviderState('github', user?.oauthProviders?.github);
+  for (const provider of OAUTH_PROVIDERS) {
+    const oauthProvider = normalizeOauthProviderState(provider, user?.oauthProviders?.[provider]);
+    const providerLabel = getOauthProviderLabel(provider);
+    const elements = getOauthProviderElements(provider);
 
-  if (dom.oauthGithubStatus) {
-    if (github.linked) {
-      const identityBits = [
-        github.username ? `@${github.username}` : '',
-        github.email ? github.email : '',
-      ].filter(Boolean);
-      const identityText = identityBits.length ? identityBits.join(' | ') : 'GitHub account linked';
-      const activityText = github.lastUsedAt ? `Last used ${formatDate(github.lastUsedAt)}.` : 'Ready for sign-in.';
-      dom.oauthGithubStatus.textContent = `${identityText}. ${activityText}`;
-    } else if (!github.available) {
-      dom.oauthGithubStatus.textContent =
-        'GitHub sign-in is not configured on this deployment yet.';
-    } else {
-      dom.oauthGithubStatus.textContent =
-        'Link GitHub to add a verified sign-in method and provider-backed identity.';
+    if (elements.status) {
+      if (oauthProvider.linked) {
+        const identityBits = [
+          oauthProvider.username ? `@${oauthProvider.username}` : '',
+          oauthProvider.email ? oauthProvider.email : '',
+        ].filter(Boolean);
+        const identityText =
+          identityBits.length ? identityBits.join(' | ') : `${providerLabel} account linked`;
+        const activityText = oauthProvider.lastUsedAt
+          ? `Last used ${formatDate(oauthProvider.lastUsedAt)}.`
+          : 'Ready for sign-in.';
+        elements.status.textContent = `${identityText}. ${activityText}`;
+      } else if (!oauthProvider.available) {
+        elements.status.textContent = `${providerLabel} sign-in is not configured on this deployment yet.`;
+      } else {
+        elements.status.textContent = `Link ${providerLabel} to add a verified sign-in method and provider-backed identity.`;
+      }
     }
-  }
 
-  if (dom.oauthGithubConnectBtn) {
-    dom.oauthGithubConnectBtn.hidden = github.linked;
-    dom.oauthGithubConnectBtn.disabled = !github.available || github.linked;
-  }
+    if (elements.connectBtn) {
+      elements.connectBtn.hidden = oauthProvider.linked;
+      elements.connectBtn.disabled = !oauthProvider.available || oauthProvider.linked;
+    }
 
-  if (dom.oauthGithubUnlinkBtn) {
-    dom.oauthGithubUnlinkBtn.hidden = !github.linked;
-    dom.oauthGithubUnlinkBtn.disabled = !github.linked;
+    if (elements.unlinkBtn) {
+      elements.unlinkBtn.hidden = !oauthProvider.linked;
+      elements.unlinkBtn.disabled = !oauthProvider.linked;
+    }
   }
 };
 
@@ -784,6 +865,51 @@ const persistServicePreferences = () => {
     state.favoriteServicesOnly ? 'true' : 'false'
   );
 };
+
+const persistRecentServices = () => {
+  writeStoredArray(SERVICE_RECENT_STORAGE_KEY, state.recentServices.slice(0, 6));
+};
+
+const trackServiceLaunch = (key) => {
+  const normalizedKey = safeText(key).toLowerCase();
+  if (!normalizedKey) return;
+
+  state.recentServices = [normalizedKey, ...state.recentServices.filter((entry) => entry !== normalizedKey)].slice(0, 6);
+  persistRecentServices();
+};
+
+const getRecentServiceIndex = (key) => {
+  const normalizedKey = safeText(key).toLowerCase();
+  const index = state.recentServices.indexOf(normalizedKey);
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+};
+
+const getServiceEntries = () =>
+  dom.serviceCards.map((card) => {
+    const key = safeText(card.dataset.key).toLowerCase();
+    const link = card.querySelector('.service-link');
+    return {
+      key,
+      title: safeText(card.dataset.title),
+      category: safeText(card.dataset.category),
+      description: safeText(card.dataset.description),
+      href: safeText(link?.href),
+      card,
+      pinned: state.favoriteServices.has(key),
+      recentIndex: getRecentServiceIndex(key),
+    };
+  });
+
+const sortServiceEntries = (entries) =>
+  [...entries].sort((left, right) => {
+    if (left.pinned !== right.pinned) {
+      return left.pinned ? -1 : 1;
+    }
+    if (left.recentIndex !== right.recentIndex) {
+      return left.recentIndex - right.recentIndex;
+    }
+    return left.title.localeCompare(right.title);
+  });
 
 const getActiveSessionCount = () =>
   Number(state.user?.security?.activeSessions ?? state.sessions.length ?? 0);
@@ -1048,14 +1174,135 @@ const setButtonBusy = (button, busy, busyLabel) => {
   }
 };
 
+const getFormMeta = (form) => {
+  if (form === dom.profileForm) {
+    return {
+      label: 'Profile basics',
+      tabId: 'profile',
+      sectionId: 'profile-basics-card',
+      statusEl: dom.profileFormState,
+      focusEl: dom.profileUsername,
+    };
+  }
+  if (form === dom.privacyForm) {
+    return {
+      label: 'Public profile',
+      tabId: 'profile',
+      sectionId: 'profile-visibility-card',
+      statusEl: dom.privacyFormState,
+      focusEl: dom.privacyPublic,
+    };
+  }
+  if (form === dom.linkedForm) {
+    return {
+      label: 'Connected identities',
+      tabId: 'settings',
+      sectionId: 'settings-identities-card',
+      statusEl: dom.linkedFormState,
+      focusEl: dom.linkedGoogle,
+    };
+  }
+  if (form === dom.notificationForm) {
+    return {
+      label: 'Notifications',
+      tabId: 'settings',
+      sectionId: 'settings-notifications-card',
+      statusEl: dom.notificationFormState,
+      focusEl: dom.notifyEmail,
+    };
+  }
+  if (form === dom.appearanceForm) {
+    return {
+      label: 'Appearance',
+      tabId: 'settings',
+      sectionId: 'settings-appearance-card',
+      statusEl: dom.appearanceFormState,
+      focusEl: dom.appearanceTheme,
+    };
+  }
+  if (form === dom.securityForm) {
+    return {
+      label: 'Security alerts',
+      tabId: 'security',
+      sectionId: 'security-advanced-card',
+      statusEl: dom.securityFormState,
+      focusEl: dom.loginAlertsToggle,
+    };
+  }
+
+  return null;
+};
+
+const getFormStateLabel = (stateName) => {
+  if (stateName === 'dirty') return 'Unsaved';
+  if (stateName === 'saving') return 'Saving...';
+  if (stateName === 'error') return 'Needs review';
+  return 'Saved';
+};
+
+const setFormState = (form, stateName = 'saved', customLabel = '') => {
+  if (!form) return;
+
+  form.dataset.saveState = stateName;
+  const meta = getFormMeta(form);
+  if (meta?.statusEl) {
+    meta.statusEl.dataset.state = stateName;
+    meta.statusEl.textContent = customLabel || getFormStateLabel(stateName);
+  }
+};
+
+const getDirtyForms = () => trackedForms.filter((form) => form?.dataset.dirty === 'true');
+
+const updateSaveReminder = () => {
+  const dirtyForms = getDirtyForms();
+  const dirtyLabels = dirtyForms
+    .map((form) => getFormMeta(form)?.label)
+    .filter(Boolean);
+
+  if (dom.saveReminder) {
+    dom.saveReminder.hidden = dirtyLabels.length === 0;
+  }
+
+  if (dom.saveReminderText) {
+    if (!dirtyLabels.length) {
+      dom.saveReminderText.textContent = 'All tracked sections are saved.';
+    } else if (dirtyLabels.length === 1) {
+      dom.saveReminderText.textContent = `${dirtyLabels[0]} has unsaved changes.`;
+    } else {
+      dom.saveReminderText.textContent = `${dirtyLabels.length} sections have unsaved changes.`;
+    }
+  }
+
+  if (dom.jumpUnsavedBtn) {
+    dom.jumpUnsavedBtn.disabled = dirtyLabels.length === 0;
+    dom.jumpUnsavedBtn.textContent = dirtyLabels.length ? 'Review unsaved' : 'All saved';
+  }
+};
+
 const markFormDirty = (form) => {
   if (!form) return;
   form.dataset.dirty = 'true';
+  setFormState(form, 'dirty');
+  updateSaveReminder();
 };
 
-const markFormClean = (form) => {
+const markFormClean = (form, label = 'Saved') => {
   if (!form) return;
   form.dataset.dirty = 'false';
+  setFormState(form, 'saved', label);
+  updateSaveReminder();
+};
+
+const setFormError = (form, label = 'Needs review') => {
+  if (!form) return;
+  setFormState(form, 'error', label);
+  updateSaveReminder();
+};
+
+const setFormSaving = (form, label = 'Saving...') => {
+  if (!form) return;
+  setFormState(form, 'saving', label);
+  updateSaveReminder();
 };
 
 const hasUnsavedChanges = () => trackedForms.some((form) => form?.dataset.dirty === 'true');
@@ -1065,6 +1312,7 @@ const setupUnsavedChangeTracking = () => {
     if (!form) continue;
 
     form.dataset.dirty = 'false';
+    setFormState(form, 'saved');
 
     form.addEventListener('input', () => {
       markFormDirty(form);
@@ -1073,6 +1321,8 @@ const setupUnsavedChangeTracking = () => {
       markFormDirty(form);
     });
   }
+
+  updateSaveReminder();
 };
 
 const showToast = (message, type = 'success', timeoutMs = 3200) => {
@@ -1112,6 +1362,41 @@ const setSyncStatus = (date = null) => {
     return;
   }
   dom.syncStatus.textContent = `Synced ${formatDate(date)}`;
+};
+
+const scrollToSection = (sectionId, focusEl = null) => {
+  const section = document.getElementById(sectionId);
+  if (section) {
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  const target = focusEl || section?.querySelector('input, select, textarea, button, [href]');
+  if (target && typeof target.focus === 'function') {
+    window.setTimeout(() => {
+      target.focus({ preventScroll: true });
+    }, 120);
+  }
+};
+
+const jumpToForm = (form) => {
+  const meta = getFormMeta(form);
+  if (!meta) return;
+
+  switchTab(meta.tabId);
+  window.setTimeout(() => {
+    scrollToSection(meta.sectionId, meta.focusEl);
+  }, 80);
+};
+
+const jumpToFirstDirtyForm = () => {
+  const [firstDirtyForm] = getDirtyForms();
+  if (firstDirtyForm) {
+    jumpToForm(firstDirtyForm);
+    return true;
+  }
+
+  showToast('All tracked sections are already saved.', 'success', 2200);
+  return false;
 };
 
 const clearStoredAuth = () => {
@@ -1250,6 +1535,7 @@ const isTrustedLoginOrigin = (origin) => {
 };
 
 const clearDashboardUi = () => {
+  closeLauncher();
   state.user = null;
   state.activity = [];
   state.auditEvents = [];
@@ -1296,6 +1582,7 @@ const clearDashboardUi = () => {
   if (dom.activityFilter) dom.activityFilter.value = '';
   if (dom.activityKind) dom.activityKind.value = 'all';
   if (dom.serviceFilter) dom.serviceFilter.value = '';
+  if (dom.launcherSearch) dom.launcherSearch.value = '';
   if (dom.activityList) dom.activityList.innerHTML = '<li>No recent activity.</li>';
   if (dom.overviewActivityList) dom.overviewActivityList.innerHTML = '<li>No recent activity.</li>';
   if (dom.sessionsList) dom.sessionsList.innerHTML = '<li>No active sessions found.</li>';
@@ -1314,7 +1601,9 @@ const clearDashboardUi = () => {
   renderVerificationState();
   renderActionCenter(null);
   renderProfileChecklist(null);
+  renderSecurityPosture(null);
   renderServices();
+  renderLauncher();
   renderAvatarPreviews(null);
 
   applyAppearance({
@@ -1331,7 +1620,7 @@ const setLoggedOutUI = () => {
   clearStoredAuth();
   clearDashboardUi();
 
-  setStatus('Not logged in - click to sign in', {
+  setStatus('Signed out. Click here to sign in.', {
     clickable: true,
     onClick: () => {
       promptSignIn();
@@ -2359,6 +2648,7 @@ const refreshDraftPublicProfileUi = () => {
 
 const renderSecurityPosture = (user = state.user) => {
   if (!dom.securityBreakdown) return;
+  renderSecurityGuidance(user);
 
   const health = computeAccountHealth(user);
   const contributors = getAccountHealthContributors(user);
@@ -2425,6 +2715,94 @@ const renderSecurityPosture = (user = state.user) => {
     card.appendChild(meter);
     card.appendChild(detail);
     dom.securityBreakdown.appendChild(card);
+  }
+};
+
+const openSecuritySection = (sectionId, focusEl = null) => {
+  switchTab('security');
+  window.setTimeout(() => {
+    scrollToSection(sectionId, focusEl);
+  }, 80);
+};
+
+const getSecurityGuidance = (user = state.user) => {
+  if (!user) {
+    return {
+      title: 'Sign in to review security',
+      detail: 'Your priority security recommendation appears after the dashboard loads account, session, and device data.',
+      actionLabel: '',
+      onAction: null,
+    };
+  }
+
+  const migration = getMigrationState(user);
+  const activeSessions = Math.max(0, getActiveSessionCount());
+
+  if (migration.shouldResetPassword) {
+    return {
+      title: 'Rotate the password for this returning account',
+      detail: 'This account has older sign-in history. Refresh the password before relying on it again.',
+      actionLabel: 'Open password',
+      onAction: () => openSecuritySection('security-password-card', dom.currentPassword),
+    };
+  }
+
+  if (!user.security?.mfa?.enabled) {
+    return {
+      title: state.mfaSetup?.secret ? 'Finish MFA setup' : 'Turn on MFA',
+      detail: state.mfaSetup?.secret
+        ? 'Your authenticator secret is ready. Confirm the current 6-digit code to finish setup.'
+        : 'Add an authenticator app so password-only sign-in is no longer the weakest point on this account.',
+      actionLabel: state.mfaSetup?.secret ? 'Finish MFA' : 'Set up MFA',
+      onAction: () => openSecuritySection('security-mfa-card', state.mfaSetup?.secret ? dom.mfaCode : dom.mfaSetupBtn),
+    };
+  }
+
+  if (!Number(user.security?.passkeys?.count || 0)) {
+    return {
+      title: 'Add a passkey',
+      detail: 'A passkey gives you faster sign-in and better phishing resistance than passwords alone.',
+      actionLabel: 'Open passkeys',
+      onAction: () => openSecuritySection('security-passkey-card', dom.passkeyCurrentPassword),
+    };
+  }
+
+  if (!user.security?.loginAlerts) {
+    return {
+      title: 'Enable suspicious sign-in alerts',
+      detail: 'Turn on alerts so you get notified when unusual sign-in activity is detected.',
+      actionLabel: 'Open alerts',
+      onAction: () => openSecuritySection('security-advanced-card', dom.loginAlertsToggle),
+    };
+  }
+
+  if (activeSessions > 1) {
+    return {
+      title: 'Review active sessions',
+      detail: `${activeSessions} sessions are currently open. Revoke any device you no longer recognize or use.`,
+      actionLabel: 'Review sessions',
+      onAction: () => openSecuritySection('security-advanced-card', dom.sessionsRevokeOthersBtn),
+    };
+  }
+
+  return {
+    title: 'Security looks healthy',
+    detail: 'MFA, passkeys, alerts, and session hygiene are all in a solid state. Use advanced controls only when something changes.',
+    actionLabel: 'View advanced controls',
+    onAction: () => openSecuritySection('security-advanced-card', dom.loginAlertsToggle),
+  };
+};
+
+const renderSecurityGuidance = (user = state.user) => {
+  const guidance = getSecurityGuidance(user);
+
+  if (dom.securityGuidanceTitle) dom.securityGuidanceTitle.textContent = guidance.title;
+  if (dom.securityGuidanceCopy) dom.securityGuidanceCopy.textContent = guidance.detail;
+  if (dom.securityGuidanceBtn) {
+    const actionable = Boolean(guidance.actionLabel && typeof guidance.onAction === 'function');
+    dom.securityGuidanceBtn.hidden = !actionable;
+    dom.securityGuidanceBtn.textContent = guidance.actionLabel || 'Open';
+    dom.securityGuidanceBtn.onclick = actionable ? guidance.onAction : null;
   }
 };
 
@@ -3107,7 +3485,7 @@ const renderMfaState = (user = state.user) => {
     if (mfa.enabled) {
       dom.mfaStatusCopy.textContent = `MFA on. Backup codes: ${mfa.backupCodesRemaining}. Last used: ${formatDate(mfa.lastUsedAt)}.`;
     } else if (state.mfaSetup?.secret) {
-      dom.mfaStatusCopy.textContent = 'Finish setup below.';
+      dom.mfaStatusCopy.textContent = 'Setup in progress. Scan the QR code or use the setup key below, then enter the 6-digit code from your app.';
     } else {
       dom.mfaStatusCopy.textContent = 'MFA off.';
     }
@@ -3118,6 +3496,14 @@ const renderMfaState = (user = state.user) => {
   if (dom.mfaBackupBtn) dom.mfaBackupBtn.disabled = !mfa.enabled;
   if (dom.mfaSetupPanel) dom.mfaSetupPanel.hidden = !state.mfaSetup?.secret;
   if (dom.mfaCurrentPassword && !state.mfaSetup?.secret) dom.mfaCurrentPassword.value = '';
+  if (dom.mfaQrShell) dom.mfaQrShell.hidden = !state.mfaSetup?.qrCodeDataUrl;
+  if (dom.mfaQrImage) {
+    if (state.mfaSetup?.qrCodeDataUrl) {
+      dom.mfaQrImage.src = state.mfaSetup.qrCodeDataUrl;
+    } else {
+      dom.mfaQrImage.removeAttribute('src');
+    }
+  }
   if (dom.mfaSecret) dom.mfaSecret.value = safeText(state.mfaSetup?.secret);
   if (dom.mfaOtpAuthUrl) dom.mfaOtpAuthUrl.value = safeText(state.mfaSetup?.otpAuthUrl);
 };
@@ -3374,51 +3760,153 @@ const renderDevices = () => {
   }
 };
 
+const launchService = (entry) => {
+  if (!entry?.href) return;
+  trackServiceLaunch(entry.key);
+  renderServices();
+  renderLauncher();
+  window.open(entry.href, '_blank', 'noopener');
+  closeLauncher();
+};
+
+const renderPinnedServices = (entries) => {
+  if (!dom.pinnedServices) return;
+
+  dom.pinnedServices.innerHTML = '';
+  const pinnedEntries = entries.filter((entry) => entry.pinned);
+  dom.pinnedServices.hidden = pinnedEntries.length === 0;
+
+  for (const entry of pinnedEntries) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'pinned-service-pill';
+    button.textContent = entry.title;
+    button.addEventListener('click', () => launchService(entry));
+    dom.pinnedServices.appendChild(button);
+  }
+};
+
+const setLauncherActiveIndex = (nextIndex) => {
+  if (!dom.launcherList) return;
+
+  const items = Array.from(dom.launcherList.querySelectorAll('.launcher-item'));
+  if (!items.length) {
+    state.launcherActiveIndex = 0;
+    return;
+  }
+
+  state.launcherActiveIndex = (nextIndex + items.length) % items.length;
+  items.forEach((item, index) => {
+    const active = index === state.launcherActiveIndex;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+};
+
+const renderLauncher = () => {
+  if (!dom.launcherList) return;
+
+  const query = safeText(dom.launcherSearch?.value).toLowerCase();
+  const entries = sortServiceEntries(getServiceEntries()).filter((entry) => {
+    const searchText = `${entry.title} ${entry.category} ${entry.description}`.toLowerCase();
+    return !query || searchText.includes(query);
+  });
+
+  dom.launcherList.innerHTML = '';
+  state.launcherActiveIndex = 0;
+
+  if (dom.launcherResultsCount) {
+    dom.launcherResultsCount.textContent = `${entries.length} service${entries.length === 1 ? '' : 's'} available`;
+  }
+
+  if (dom.launcherEmptyState) {
+    dom.launcherEmptyState.hidden = entries.length !== 0;
+  }
+
+  for (const entry of entries) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'launcher-item';
+
+    const head = document.createElement('div');
+    head.className = 'launcher-item-head';
+
+    const title = document.createElement('strong');
+    title.textContent = entry.title;
+    head.appendChild(title);
+
+    const chip = document.createElement('span');
+    chip.className = 'inline-chip';
+    chip.textContent = entry.pinned ? 'Pinned' : entry.category || 'Service';
+    head.appendChild(chip);
+
+    const detail = document.createElement('p');
+    detail.textContent = entry.description || 'Open service.';
+
+    button.appendChild(head);
+    button.appendChild(detail);
+    button.addEventListener('mouseenter', () => {
+      const items = Array.from(dom.launcherList.querySelectorAll('.launcher-item'));
+      setLauncherActiveIndex(items.indexOf(button));
+    });
+    button.addEventListener('click', () => launchService(entry));
+    dom.launcherList.appendChild(button);
+  }
+
+  setLauncherActiveIndex(0);
+};
+
+const openLauncher = () => {
+  if (!dom.launcherModal) return;
+
+  state.launcherOpen = true;
+  state.launcherLastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  dom.launcherModal.hidden = false;
+  document.body.classList.add('launcher-open');
+  if (dom.launcherSearch) {
+    dom.launcherSearch.value = safeText(dom.serviceFilter?.value);
+  }
+  renderLauncher();
+  window.setTimeout(() => dom.launcherSearch?.focus(), 40);
+};
+
+const closeLauncher = () => {
+  if (!dom.launcherModal) return;
+
+  state.launcherOpen = false;
+  dom.launcherModal.hidden = true;
+  document.body.classList.remove('launcher-open');
+  state.launcherLastFocusedElement?.focus?.();
+};
+
 const renderServices = () => {
   if (!dom.serviceList || !dom.serviceCards.length) return;
 
   const query = safeText(dom.serviceFilter?.value).toLowerCase();
-  const sortedCards = [...dom.serviceCards].sort((leftCard, rightCard) => {
-    const leftKey = safeText(leftCard.dataset.key).toLowerCase();
-    const rightKey = safeText(rightCard.dataset.key).toLowerCase();
-    const leftPinned = state.favoriteServices.has(leftKey);
-    const rightPinned = state.favoriteServices.has(rightKey);
-
-    if (leftPinned !== rightPinned) {
-      return leftPinned ? -1 : 1;
-    }
-
-    return safeText(leftCard.dataset.title).localeCompare(safeText(rightCard.dataset.title));
-  });
-
+  const entries = sortServiceEntries(getServiceEntries());
   let visibleCount = 0;
 
-  for (const card of sortedCards) {
-    const key = safeText(card.dataset.key).toLowerCase();
-    const searchText = [
-      card.dataset.title,
-      card.dataset.category,
-      card.dataset.description,
-    ]
-      .map((value) => safeText(value).toLowerCase())
-      .join(' ');
-    const pinned = state.favoriteServices.has(key);
-    const matchesQuery = !query || searchText.includes(query);
-    const visible = matchesQuery && (!state.favoriteServicesOnly || pinned);
+  for (const entry of entries) {
+    const searchText = `${entry.title} ${entry.category} ${entry.description}`.toLowerCase();
+    const visible = (!query || searchText.includes(query)) && (!state.favoriteServicesOnly || entry.pinned);
 
-    card.classList.toggle('hidden', !visible);
-    card.classList.toggle('pinned', pinned);
+    entry.card.classList.toggle('hidden', !visible);
+    entry.card.classList.toggle('pinned', entry.pinned);
 
-    const pinButton = card.querySelector('.service-pin-btn');
+    const pinButton = entry.card.querySelector('.service-pin-btn');
     if (pinButton) {
-      pinButton.textContent = pinned ? 'Pinned' : 'Pin';
-      pinButton.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+      pinButton.textContent = entry.pinned ? 'Pinned' : 'Pin';
+      pinButton.setAttribute('aria-pressed', entry.pinned ? 'true' : 'false');
     }
 
-    dom.serviceList.appendChild(card);
-
+    dom.serviceList.appendChild(entry.card);
     if (visible) visibleCount += 1;
   }
+
+  renderPinnedServices(entries.filter((entry) => {
+    const searchText = `${entry.title} ${entry.category} ${entry.description}`.toLowerCase();
+    return (!query || searchText.includes(query)) && (!state.favoriteServicesOnly || entry.pinned);
+  }));
 
   if (dom.favoriteFilterBtn) {
     dom.favoriteFilterBtn.classList.toggle('active', state.favoriteServicesOnly);
@@ -3426,12 +3914,21 @@ const renderServices = () => {
   }
 
   if (dom.serviceResultsCount) {
-    const prefix = state.favoriteServicesOnly ? 'Pinned: ' : '';
-    dom.serviceResultsCount.textContent = `${prefix}${visibleCount} service${visibleCount === 1 ? '' : 's'}`;
+    if (query) {
+      dom.serviceResultsCount.textContent = `${visibleCount} result${visibleCount === 1 ? '' : 's'} for "${query}"`;
+    } else if (state.favoriteServicesOnly) {
+      dom.serviceResultsCount.textContent = `${visibleCount} pinned service${visibleCount === 1 ? '' : 's'}`;
+    } else {
+      dom.serviceResultsCount.textContent = `${visibleCount} service${visibleCount === 1 ? '' : 's'} available`;
+    }
   }
 
   if (dom.serviceEmptyState) {
     dom.serviceEmptyState.hidden = visibleCount !== 0;
+  }
+
+  if (state.launcherOpen) {
+    renderLauncher();
   }
 };
 
@@ -3459,7 +3956,7 @@ const syncUiWithUser = (user) => {
   renderPublicProfilePreview(user);
   renderSecurityPosture(user);
 
-  const statusText = `Logged in as: ${getUserHandle(user) || user.email || user.displayName || user.userId}`;
+  const statusText = `Workspace ready for ${getUserHandle(user) || user.email || user.displayName || user.userId}`;
   setStatus(statusText, { clickable: false });
 
   if (dom.logoutBtn) {
@@ -3764,6 +4261,7 @@ const handleProfileSave = async (event) => {
     return;
   }
 
+  setFormSaving(dom.profileForm);
   setButtonBusy(dom.profileSaveBtn, true, 'Saving...');
 
   try {
@@ -3795,7 +4293,7 @@ const handleProfileSave = async (event) => {
     syncUiWithUser(normalizeUserPayload(profileResult));
 
     if (dom.profileEmailCurrentPassword) dom.profileEmailCurrentPassword.value = '';
-    markFormClean(dom.profileForm);
+    markFormClean(dom.profileForm, 'Saved just now');
     showToast(
       profileResult.message || 'Profile updated.',
       profileResult.verificationEmail?.sent === false ? 'warn' : 'success'
@@ -3810,6 +4308,7 @@ const handleProfileSave = async (event) => {
 
     setSyncStatus(new Date());
   } catch (err) {
+    setFormError(dom.profileForm);
     showToast(err.message, 'error');
   } finally {
     setButtonBusy(dom.profileSaveBtn, false);
@@ -3844,6 +4343,7 @@ const handleResendVerification = async () => {
 const handleLinkedSave = async (event) => {
   event.preventDefault();
 
+  setFormSaving(dom.linkedForm);
   setButtonBusy(dom.linkedSaveBtn, true, 'Saving...');
 
   try {
@@ -3862,21 +4362,26 @@ const handleLinkedSave = async (event) => {
     });
 
     syncUiWithUser(normalizeUserPayload(data));
-    markFormClean(dom.linkedForm);
+    markFormClean(dom.linkedForm, 'Saved just now');
     showToast('External profiles updated.', 'success');
     setSyncStatus(new Date());
   } catch (err) {
+    setFormError(dom.linkedForm);
     showToast(err.message, 'error');
   } finally {
     setButtonBusy(dom.linkedSaveBtn, false);
   }
 };
 
-const handleGithubLink = async () => {
-  setButtonBusy(dom.oauthGithubConnectBtn, true, 'Opening GitHub...');
+const handleOauthLink = async (provider) => {
+  const normalizedProvider = safeText(provider).toLowerCase();
+  const providerLabel = getOauthProviderLabel(normalizedProvider);
+  const elements = getOauthProviderElements(normalizedProvider);
+
+  setButtonBusy(elements.connectBtn, true, `Opening ${providerLabel}...`);
 
   try {
-    const data = await apiRequest('/oauth/github/link-start', {
+    const data = await apiRequest(`/oauth/${encodeURIComponent(normalizedProvider)}/link-start`, {
       method: 'POST',
       body: {
         origin: window.location.origin,
@@ -3892,25 +4397,27 @@ const handleGithubLink = async () => {
     }
 
     popup.focus();
-    showToast('GitHub authorization opened in a new window.', 'success');
+    showToast(`${providerLabel} authorization opened in a new window.`, 'success');
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    setButtonBusy(dom.oauthGithubConnectBtn, false);
+    setButtonBusy(elements.connectBtn, false);
     renderOauthProviders(state.user);
   }
 };
 
-const handleGithubUnlink = async () => {
-  const providerLabel = getOauthProviderLabel('github');
+const handleOauthUnlink = async (provider) => {
+  const normalizedProvider = safeText(provider).toLowerCase();
+  const providerLabel = getOauthProviderLabel(normalizedProvider);
+  const elements = getOauthProviderElements(normalizedProvider);
   if (!window.confirm(`Unlink ${providerLabel} from this Continental ID account?`)) {
     return;
   }
 
-  setButtonBusy(dom.oauthGithubUnlinkBtn, true, 'Unlinking...');
+  setButtonBusy(elements.unlinkBtn, true, 'Unlinking...');
 
   try {
-    const data = await apiRequest('/oauth/github', {
+    const data = await apiRequest(`/oauth/${encodeURIComponent(normalizedProvider)}`, {
       method: 'DELETE',
       body: {},
     });
@@ -3921,7 +4428,7 @@ const handleGithubUnlink = async () => {
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    setButtonBusy(dom.oauthGithubUnlinkBtn, false);
+    setButtonBusy(elements.unlinkBtn, false);
     renderOauthProviders(state.user);
   }
 };
@@ -3970,6 +4477,7 @@ const handlePasswordSave = async (event) => {
 const handleSecuritySave = async (event) => {
   event.preventDefault();
 
+  setFormSaving(dom.securityForm);
   setButtonBusy(dom.securitySaveBtn, true, 'Saving...');
 
   try {
@@ -3981,10 +4489,11 @@ const handleSecuritySave = async (event) => {
     });
 
     syncUiWithUser(normalizeUserPayload(data));
-    markFormClean(dom.securityForm);
+    markFormClean(dom.securityForm, 'Saved just now');
     showToast('Security settings updated.', 'success');
     setSyncStatus(new Date());
   } catch (err) {
+    setFormError(dom.securityForm);
     showToast(err.message, 'error');
   } finally {
     setButtonBusy(dom.securitySaveBtn, false);
@@ -4081,10 +4590,9 @@ const handleMfaSetup = async () => {
     });
 
     state.mfaSetup = data.setup || null;
-    if (dom.mfaCurrentPassword) dom.mfaCurrentPassword.value = '';
     renderBackupCodes(data.setup?.backupCodes || []);
     renderMfaState(state.user);
-    showToast('Authenticator setup created.', 'success');
+    showToast('Authenticator setup ready. Scan the QR code to continue.', 'success');
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
@@ -4123,6 +4631,24 @@ const handleMfaEnable = async () => {
     showToast(err.message, 'error');
   } finally {
     setButtonBusy(dom.mfaEnableBtn, false);
+  }
+};
+
+const handleCopyMfaSecret = async () => {
+  try {
+    await copyTextToClipboard(state.mfaSetup?.secret);
+    showToast('Setup key copied.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
+const handleCopyMfaOtpAuthUrl = async () => {
+  try {
+    await copyTextToClipboard(state.mfaSetup?.otpAuthUrl);
+    showToast('OTPAuth URL copied.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
   }
 };
 
@@ -4219,6 +4745,17 @@ const buildPreferencesPayload = () => ({
 });
 
 const savePreferences = async (button, successMessage = 'Preferences saved.') => {
+  const allPreferenceForms = [dom.privacyForm, dom.notificationForm, dom.appearanceForm].filter(Boolean);
+  const dirtyPreferenceForms = allPreferenceForms.filter((form) => form?.dataset.dirty === 'true');
+  const relatedForm = button === dom.privacySaveBtn
+    ? dom.privacyForm
+    : button === dom.notificationSaveBtn
+      ? dom.notificationForm
+      : dom.appearanceForm;
+  const formsToSave = dirtyPreferenceForms.length ? dirtyPreferenceForms : [relatedForm].filter(Boolean);
+  for (const form of formsToSave) {
+    setFormSaving(form);
+  }
   setButtonBusy(button, true, 'Saving...');
 
   try {
@@ -4229,12 +4766,15 @@ const savePreferences = async (button, successMessage = 'Preferences saved.') =>
 
     syncUiWithUser(normalizeUserPayload(data));
     setDashboardTipsEnabled(Boolean(dom.dashboardTipsToggle?.checked));
-    markFormClean(dom.privacyForm);
-    markFormClean(dom.notificationForm);
-    markFormClean(dom.appearanceForm);
+    for (const form of formsToSave) {
+      markFormClean(form, 'Saved just now');
+    }
     showToast(successMessage, 'success');
     setSyncStatus(new Date());
   } catch (err) {
+    for (const form of formsToSave) {
+      setFormError(form);
+    }
     showToast(err.message, 'error');
   } finally {
     setButtonBusy(button, false);
@@ -4376,7 +4916,7 @@ const getTabUrl = (tabId) => {
 const getTabFromUrl = () => normalizeTabId(new URL(window.location.href).searchParams.get('tab'));
 
 const switchTab = (tabId, options = {}) => {
-  const { historyMode = 'push' } = options;
+  const { historyMode = 'push', focusPanel = false } = options;
   const nextTabId = normalizeTabId(tabId);
 
   if (state.activeTab === nextTabId && historyMode === 'push') {
@@ -4396,6 +4936,10 @@ const switchTab = (tabId, options = {}) => {
     const active = panel.id === nextTabId;
     panel.classList.toggle('active', active);
     panel.hidden = !active;
+    if (active && focusPanel) {
+      panel.tabIndex = -1;
+      window.setTimeout(() => panel.focus({ preventScroll: true }), 40);
+    }
   }
 
   localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, nextTabId);
@@ -4417,6 +4961,31 @@ const setupTabs = () => {
       if (!tabId) return;
       switchTab(tabId, { historyMode: 'push' });
     });
+
+    button.addEventListener('keydown', (event) => {
+      const currentIndex = dom.tabButtons.indexOf(button);
+      if (currentIndex === -1) return;
+
+      let nextIndex = currentIndex;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+        nextIndex = (currentIndex + 1) % dom.tabButtons.length;
+      } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+        nextIndex = (currentIndex - 1 + dom.tabButtons.length) % dom.tabButtons.length;
+      } else if (event.key === 'Home') {
+        nextIndex = 0;
+      } else if (event.key === 'End') {
+        nextIndex = dom.tabButtons.length - 1;
+      } else {
+        return;
+      }
+
+      event.preventDefault();
+      const nextButton = dom.tabButtons[nextIndex];
+      nextButton?.focus();
+      if (nextButton?.dataset?.tab) {
+        switchTab(nextButton.dataset.tab, { historyMode: 'push', focusPanel: true });
+      }
+    });
   }
 
   window.addEventListener('popstate', () => {
@@ -4428,6 +4997,24 @@ const setupTabs = () => {
   const savedTab = normalizeTabId(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY));
   const initialTab = url.searchParams.has('tab') ? urlTab : savedTab || 'overview';
   switchTab(initialTab, { historyMode: 'replace' });
+};
+
+const setupSectionNavButtons = () => {
+  for (const button of dom.sectionNavButtons) {
+    button.addEventListener('click', () => {
+      const tabTarget = safeText(button.dataset.tabTarget);
+      const scrollTarget = safeText(button.dataset.scrollTarget);
+
+      if (tabTarget) {
+        switchTab(tabTarget, { historyMode: 'push', focusPanel: true });
+        return;
+      }
+
+      if (scrollTarget) {
+        scrollToSection(scrollTarget);
+      }
+    });
+  }
 };
 
 const setupServiceFiltering = () => {
@@ -4447,6 +5034,7 @@ const setupServiceFiltering = () => {
 
   for (const card of dom.serviceCards) {
     const pinButton = card.querySelector('.service-pin-btn');
+    const serviceLink = card.querySelector('.service-link');
     if (!pinButton) continue;
 
     pinButton.addEventListener('click', (event) => {
@@ -4465,6 +5053,13 @@ const setupServiceFiltering = () => {
       persistServicePreferences();
       renderServices();
     });
+
+    if (serviceLink) {
+      serviceLink.addEventListener('click', () => {
+        const key = safeText(card.dataset.key).toLowerCase();
+        trackServiceLaunch(key);
+      });
+    }
   }
 
   renderServices();
@@ -4481,10 +5076,15 @@ const setupKeyboardShortcuts = () => {
     const isModifier = event.metaKey || event.ctrlKey;
     const key = safeText(event.key).toLowerCase();
 
+    if (state.launcherOpen && key === 'escape') {
+      event.preventDefault();
+      closeLauncher();
+      return;
+    }
+
     if (isModifier && key === 'k') {
       event.preventDefault();
-      dom.serviceFilter?.focus();
-      showToast('Service filter focused. Start typing to filter cards.', 'success', 2200);
+      openLauncher();
       return;
     }
 
@@ -4511,13 +5111,14 @@ const setupKeyboardShortcuts = () => {
 
     if (!isEditableTarget(event.target) && key === '?') {
       event.preventDefault();
-      showToast('Shortcuts: Cmd/Ctrl+K filter services, Cmd/Ctrl+Shift+R refresh, Alt+1..5 switch tabs.', 'warn', 5000);
+      showToast('Shortcuts: Cmd/Ctrl+K launcher, Cmd/Ctrl+Shift+R refresh, Alt+1..5 switch tabs.', 'warn', 5000);
     }
   });
 };
 
 const setupEventHandlers = () => {
   setupTabs();
+  setupSectionNavButtons();
   setupServiceFiltering();
   setupUnsavedChangeTracking();
   setupKeyboardShortcuts();
@@ -4530,6 +5131,45 @@ const setupEventHandlers = () => {
 
   if (dom.logoutBtn) dom.logoutBtn.addEventListener('click', doLogout);
   if (dom.refreshDataBtn) dom.refreshDataBtn.addEventListener('click', runManualRefresh);
+  if (dom.openLauncherBtn) dom.openLauncherBtn.addEventListener('click', openLauncher);
+  if (dom.serviceLauncherBtn) dom.serviceLauncherBtn.addEventListener('click', openLauncher);
+  if (dom.jumpUnsavedBtn) dom.jumpUnsavedBtn.addEventListener('click', jumpToFirstDirtyForm);
+  if (dom.saveReminderJumpBtn) dom.saveReminderJumpBtn.addEventListener('click', jumpToFirstDirtyForm);
+  if (dom.launcherCloseBtn) dom.launcherCloseBtn.addEventListener('click', closeLauncher);
+  if (dom.launcherOverlay) dom.launcherOverlay.addEventListener('click', closeLauncher);
+  if (dom.launcherSearch) {
+    dom.launcherSearch.addEventListener('input', renderLauncher);
+    dom.launcherSearch.addEventListener('keydown', (event) => {
+      const items = Array.from(dom.launcherList?.querySelectorAll('.launcher-item') || []);
+      if (!items.length) {
+        if (event.key === 'Escape') closeLauncher();
+        return;
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setLauncherActiveIndex(state.launcherActiveIndex + 1);
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setLauncherActiveIndex(state.launcherActiveIndex - 1);
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        items[state.launcherActiveIndex]?.click();
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeLauncher();
+      }
+    });
+  }
 
   if (dom.headerExportJsonBtn) {
     dom.headerExportJsonBtn.addEventListener('click', async () => {
@@ -4609,15 +5249,20 @@ const setupEventHandlers = () => {
     dom.linkedForm.addEventListener('input', () => renderPublicProfilePreview(state.user));
     dom.linkedForm.addEventListener('change', () => renderPublicProfilePreview(state.user));
   }
-  if (dom.oauthGithubConnectBtn) {
-    dom.oauthGithubConnectBtn.addEventListener('click', handleGithubLink);
-  }
-  if (dom.oauthGithubUnlinkBtn) {
-    dom.oauthGithubUnlinkBtn.addEventListener('click', handleGithubUnlink);
+  for (const provider of OAUTH_PROVIDERS) {
+    const elements = getOauthProviderElements(provider);
+    if (elements.connectBtn) {
+      elements.connectBtn.addEventListener('click', () => handleOauthLink(provider));
+    }
+    if (elements.unlinkBtn) {
+      elements.unlinkBtn.addEventListener('click', () => handleOauthUnlink(provider));
+    }
   }
   if (dom.passwordForm) dom.passwordForm.addEventListener('submit', handlePasswordSave);
   if (dom.securityForm) dom.securityForm.addEventListener('submit', handleSecuritySave);
   if (dom.mfaSetupBtn) dom.mfaSetupBtn.addEventListener('click', handleMfaSetup);
+  if (dom.mfaCopySecretBtn) dom.mfaCopySecretBtn.addEventListener('click', handleCopyMfaSecret);
+  if (dom.mfaCopyOtpAuthBtn) dom.mfaCopyOtpAuthBtn.addEventListener('click', handleCopyMfaOtpAuthUrl);
   if (dom.mfaEnableBtn) dom.mfaEnableBtn.addEventListener('click', handleMfaEnable);
   if (dom.mfaDisableBtn) dom.mfaDisableBtn.addEventListener('click', handleMfaDisable);
   if (dom.mfaBackupBtn) dom.mfaBackupBtn.addEventListener('click', handleMfaBackupCodes);

@@ -10,6 +10,7 @@ const PREFERRED_API_ORIGINS = Array.isArray(AUTH_CONFIG.preferredApiOrigins)
 const HOSTED_API_BASE_URL =
   AUTH_CONFIG.hostedApiBaseUrl || 'https://mpmc.ddns.net';
 const API_BASE_STORAGE_KEY = 'continental.authApiBaseUrl';
+const OAUTH_PROVIDERS = ['github', 'google', 'microsoft'];
 const USERNAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BLOCKED_NAME_FRAGMENTS = [
@@ -129,6 +130,8 @@ const registerForm = document.getElementById('register-form');
 const loginBtn = document.getElementById('login-btn');
 const loginPasskeyBtn = document.getElementById('login-passkey-btn');
 const loginGithubBtn = document.getElementById('login-github-btn');
+const loginGoogleBtn = document.getElementById('login-google-btn');
+const loginMicrosoftBtn = document.getElementById('login-microsoft-btn');
 const registerBtn = document.getElementById('register-btn');
 const loginPrimaryFields = document.getElementById('login-primary-fields');
 const loginMfaStep = document.getElementById('login-mfa-step');
@@ -349,8 +352,25 @@ const getRedirectUrl = () => {
   return redirectUrl.toString();
 };
 
-const buildGithubOauthStartUrl = () => {
-  const startUrl = new URL(`${getAuthApiBase()}/oauth/github/start`);
+const getOauthProviderLabel = (provider) => {
+  const normalized = safeText(provider).toLowerCase();
+  if (normalized === 'github') return 'GitHub';
+  if (normalized === 'google') return 'Google';
+  if (normalized === 'microsoft') return 'Microsoft';
+  return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : 'Identity provider';
+};
+
+const getOauthProviderButton = (provider) => {
+  const normalized = safeText(provider).toLowerCase();
+  if (normalized === 'github') return loginGithubBtn;
+  if (normalized === 'google') return loginGoogleBtn;
+  if (normalized === 'microsoft') return loginMicrosoftBtn;
+  return null;
+};
+
+const buildOauthStartUrl = (provider) => {
+  const normalized = safeText(provider).toLowerCase();
+  const startUrl = new URL(`${getAuthApiBase()}/oauth/${encodeURIComponent(normalized)}/start`);
   startUrl.searchParams.set('origin', targetOrigin || DEFAULT_DASHBOARD_ORIGIN);
   startUrl.searchParams.set('redirect', getRedirectUrl());
   startUrl.searchParams.set('returnTo', window.location.href);
@@ -951,16 +971,20 @@ const handlePasskeySignIn = async () => {
   }
 };
 
-const handleGithubSignIn = async () => {
-  setBusy(loginGithubBtn, true, 'Continue with GitHub', 'Redirecting...');
-  setStatus('Opening GitHub sign-in...', 'info');
+const handleOauthSignIn = async (provider) => {
+  const normalizedProvider = safeText(provider).toLowerCase();
+  const providerLabel = getOauthProviderLabel(normalizedProvider);
+  const providerButton = getOauthProviderButton(normalizedProvider);
+
+  setBusy(providerButton, true, `Continue with ${providerLabel}`, 'Redirecting...');
+  setStatus(`Opening ${providerLabel} sign-in...`, 'info');
 
   try {
     await ensureApiBaseUrl();
-    window.location.assign(buildGithubOauthStartUrl());
+    window.location.assign(buildOauthStartUrl(normalizedProvider));
   } catch (error) {
-    setStatus(getRequestErrorMessage(error, 'Could not start GitHub sign-in.'), 'error');
-    setBusy(loginGithubBtn, false, 'Continue with GitHub', 'Redirecting...');
+    setStatus(getRequestErrorMessage(error, `Could not start ${providerLabel} sign-in.`), 'error');
+    setBusy(providerButton, false, `Continue with ${providerLabel}`, 'Redirecting...');
   }
 };
 
@@ -996,8 +1020,11 @@ if (loginPasskeyBtn) {
   loginPasskeyBtn.addEventListener('click', handlePasskeySignIn);
 }
 
-if (loginGithubBtn) {
-  loginGithubBtn.addEventListener('click', handleGithubSignIn);
+for (const provider of OAUTH_PROVIDERS) {
+  const providerButton = getOauthProviderButton(provider);
+  if (providerButton) {
+    providerButton.addEventListener('click', () => handleOauthSignIn(provider));
+  }
 }
 
 for (const toggle of document.querySelectorAll('[data-password-toggle]')) {

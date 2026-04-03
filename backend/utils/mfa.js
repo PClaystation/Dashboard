@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const QRCode = require('qrcode');
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const DEFAULT_PERIOD_SECONDS = 30;
@@ -112,12 +113,23 @@ const buildOtpAuthUrl = ({ secret, accountName, issuer = 'Continental ID' }) => 
   return url.toString();
 };
 
+const buildOtpAuthQrDataUrl = async (otpAuthUrl) => {
+  if (!otpAuthUrl) return '';
+
+  return QRCode.toDataURL(otpAuthUrl, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 220,
+  });
+};
+
 const generateBackupCodes = (count = 8) =>
   Array.from({ length: count }, () =>
     `${crypto.randomBytes(2).toString('hex')}-${crypto.randomBytes(2).toString('hex')}`.toUpperCase()
   );
 
 module.exports = {
+  buildOtpAuthQrDataUrl,
   buildOtpAuthUrl,
   generateBackupCodes,
   generateMfaSecret,

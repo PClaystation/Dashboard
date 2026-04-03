@@ -13,6 +13,7 @@ const User = require('../models/User');
 const sendEmail = require('../utils/email');
 const { createEmailVerificationToken } = require('../utils/emailVerification');
 const {
+  buildOtpAuthQrDataUrl,
   buildOtpAuthUrl,
   generateBackupCodes,
   generateMfaSecret,
@@ -75,6 +76,13 @@ const WEBAUTHN_DEFAULT_RP_ID = process.env.WEBAUTHN_RP_ID || 'continental-hub.co
 const WEBAUTHN_CONTINENTAL_HOST_SUFFIX = '.continental-hub.com';
 const OAUTH_STATE_TTL_SEC = 10 * 60;
 const OAUTH_PROVIDER_GITHUB = 'github';
+const OAUTH_PROVIDER_GOOGLE = 'google';
+const OAUTH_PROVIDER_MICROSOFT = 'microsoft';
+const OAUTH_PROVIDERS = [
+  OAUTH_PROVIDER_GITHUB,
+  OAUTH_PROVIDER_GOOGLE,
+  OAUTH_PROVIDER_MICROSOFT,
+];
 
 const LINKED_PROVIDERS = [
   'google',
@@ -483,16 +491,33 @@ const readOauthStateToken = (state) => {
   }
 };
 
-const resolveGithubCallbackUrl = (req) => {
-  const explicit = resolveAbsoluteUrl(process.env.GITHUB_OAUTH_CALLBACK_URL);
+const getOauthProviderLabel = (provider) => {
+  const normalized = sanitizeText(provider, 40).toLowerCase();
+  if (normalized === OAUTH_PROVIDER_GITHUB) return 'GitHub';
+  if (normalized === OAUTH_PROVIDER_GOOGLE) return 'Google';
+  if (normalized === OAUTH_PROVIDER_MICROSOFT) return 'Microsoft';
+  return 'OAuth provider';
+};
+
+const resolveOauthCallbackUrl = (provider, req) => {
+  const normalized = sanitizeText(provider, 40).toLowerCase();
+  const envKeyMap = {
+    [OAUTH_PROVIDER_GITHUB]: 'GITHUB_OAUTH_CALLBACK_URL',
+    [OAUTH_PROVIDER_GOOGLE]: 'GOOGLE_OAUTH_CALLBACK_URL',
+    [OAUTH_PROVIDER_MICROSOFT]: 'MICROSOFT_OAUTH_CALLBACK_URL',
+  };
+  const explicit = resolveAbsoluteUrl(process.env[envKeyMap[normalized]]);
   if (explicit) return explicit;
 
   const requestOrigin = getRequestOrigin(req);
   if (!requestOrigin) {
-    throw createHttpError(500, 'GitHub OAuth callback URL is not configured.');
+    throw createHttpError(
+      500,
+      `${getOauthProviderLabel(normalized)} OAuth callback URL is not configured.`
+    );
   }
 
-  return new URL('/api/auth/oauth/github/callback', requestOrigin).toString();
+  return new URL(`/api/auth/oauth/${normalized}/callback`, requestOrigin).toString();
 };
 
 const getGithubOauthConfig = (req) => {
@@ -504,12 +529,78 @@ const getGithubOauthConfig = (req) => {
 
   return {
     provider: OAUTH_PROVIDER_GITHUB,
+    label: getOauthProviderLabel(OAUTH_PROVIDER_GITHUB),
     clientId,
     clientSecret,
-    callbackUrl: resolveGithubCallbackUrl(req),
+    callbackUrl: resolveOauthCallbackUrl(OAUTH_PROVIDER_GITHUB, req),
     authorizeUrl: 'https://github.com/login/oauth/authorize',
     tokenUrl: 'https://github.com/login/oauth/access_token',
     scopes: ['read:user', 'user:email'],
+    authorizeParams: {
+      allow_signup: 'true',
+    },
+    tokenRequestFormat: 'form',
+    profileStrategy: 'github',
+  };
+};
+
+const getGoogleOauthConfig = (req) => {
+  const clientId = sanitizeText(process.env.GOOGLE_CLIENT_ID, 200);
+  const clientSecret = sanitizeText(process.env.GOOGLE_CLIENT_SECRET, 400);
+  if (!clientId || !clientSecret) {
+    throw createHttpError(503, 'Google sign-in is not configured on this server.');
+  }
+
+  return {
+    provider: OAUTH_PROVIDER_GOOGLE,
+    label: getOauthProviderLabel(OAUTH_PROVIDER_GOOGLE),
+    clientId,
+    clientSecret,
+    callbackUrl: resolveOauthCallbackUrl(OAUTH_PROVIDER_GOOGLE, req),
+    authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    userInfoUrl: 'https://openidconnect.googleapis.com/v1/userinfo',
+    scopes: ['openid', 'email', 'profile'],
+    authorizeParams: {
+      prompt: 'select_account',
+    },
+    tokenRequestFormat: 'form',
+    requireAuthorizationCodeGrant: true,
+    profileStrategy: 'oidc',
+    trustEmailWithoutExplicitVerification: false,
+  };
+};
+
+const getMicrosoftOauthConfig = (req) => {
+  const clientId = sanitizeText(process.env.MICROSOFT_CLIENT_ID || process.env.AZURE_CLIENT_ID, 200);
+  const clientSecret = sanitizeText(
+    process.env.MICROSOFT_CLIENT_SECRET || process.env.AZURE_CLIENT_SECRET,
+    400
+  );
+  const tenant =
+    sanitizeText(process.env.MICROSOFT_TENANT_ID || process.env.AZURE_TENANT_ID, 120) ||
+    'common';
+  if (!clientId || !clientSecret) {
+    throw createHttpError(503, 'Microsoft sign-in is not configured on this server.');
+  }
+
+  return {
+    provider: OAUTH_PROVIDER_MICROSOFT,
+    label: getOauthProviderLabel(OAUTH_PROVIDER_MICROSOFT),
+    clientId,
+    clientSecret,
+    callbackUrl: resolveOauthCallbackUrl(OAUTH_PROVIDER_MICROSOFT, req),
+    authorizeUrl: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`,
+    tokenUrl: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
+    userInfoUrl: 'https://graph.microsoft.com/oidc/userinfo',
+    scopes: ['openid', 'email', 'profile'],
+    authorizeParams: {
+      prompt: 'select_account',
+    },
+    tokenRequestFormat: 'form',
+    requireAuthorizationCodeGrant: true,
+    profileStrategy: 'oidc',
+    trustEmailWithoutExplicitVerification: true,
   };
 };
 
@@ -517,6 +608,12 @@ const getOauthProviderConfig = (provider, req) => {
   const normalized = sanitizeText(provider, 40).toLowerCase();
   if (normalized === OAUTH_PROVIDER_GITHUB) {
     return getGithubOauthConfig(req);
+  }
+  if (normalized === OAUTH_PROVIDER_GOOGLE) {
+    return getGoogleOauthConfig(req);
+  }
+  if (normalized === OAUTH_PROVIDER_MICROSOFT) {
+    return getMicrosoftOauthConfig(req);
   }
 
   throw createHttpError(404, 'That identity provider is not supported yet.');
@@ -528,6 +625,18 @@ const isOauthProviderAvailable = (provider) => {
     return Boolean(
       sanitizeText(process.env.GITHUB_CLIENT_ID, 200) &&
         sanitizeText(process.env.GITHUB_CLIENT_SECRET, 400)
+    );
+  }
+  if (normalized === OAUTH_PROVIDER_GOOGLE) {
+    return Boolean(
+      sanitizeText(process.env.GOOGLE_CLIENT_ID, 200) &&
+        sanitizeText(process.env.GOOGLE_CLIENT_SECRET, 400)
+    );
+  }
+  if (normalized === OAUTH_PROVIDER_MICROSOFT) {
+    return Boolean(
+      sanitizeText(process.env.MICROSOFT_CLIENT_ID || process.env.AZURE_CLIENT_ID, 200) &&
+        sanitizeText(process.env.MICROSOFT_CLIENT_SECRET || process.env.AZURE_CLIENT_SECRET, 400)
     );
   }
 
@@ -558,7 +667,7 @@ const findOauthIdentityForUser = (user, provider) =>
 const buildOauthProvidersState = (user) => {
   const providerStates = {};
 
-  for (const provider of [OAUTH_PROVIDER_GITHUB]) {
+  for (const provider of OAUTH_PROVIDERS) {
     providerStates[provider] = {
       ...serializeOauthIdentity(findOauthIdentityForUser(user, provider), { provider }),
       available: isOauthProviderAvailable(provider),
@@ -634,28 +743,42 @@ const removeOauthIdentity = (user, provider) => {
   return true;
 };
 
-const requestGithubAccessToken = async (config, code) => {
+const requestOauthAccessToken = async (config, code) => {
+  const bodyPayload = {
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    code: sanitizeText(code, 4000),
+    redirect_uri: config.callbackUrl,
+  };
+  if (config.requireAuthorizationCodeGrant) {
+    bodyPayload.grant_type = 'authorization_code';
+  }
+
+  const isFormRequest = config.tokenRequestFormat === 'form';
   const response = await fetch(config.tokenUrl, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
-      'Content-Type': 'application/json',
+      'Content-Type': isFormRequest ? 'application/x-www-form-urlencoded' : 'application/json',
       'User-Agent': 'continental-id-auth',
     },
-    body: JSON.stringify({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      code,
-      redirect_uri: config.callbackUrl,
-    }),
+    body: isFormRequest
+      ? new URLSearchParams(bodyPayload).toString()
+      : JSON.stringify(bodyPayload),
   });
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload?.access_token) {
-    throw createHttpError(502, payload?.error_description || 'GitHub token exchange failed.');
+    throw createHttpError(
+      502,
+      payload?.error_description ||
+        payload?.error?.message ||
+        payload?.error ||
+        `${config.label} token exchange failed.`
+    );
   }
 
-  return sanitizeText(payload.access_token, 400);
+  return payload;
 };
 
 const requestGithubProfile = async (accessToken) => {
@@ -690,6 +813,96 @@ const requestGithubProfile = async (accessToken) => {
     profileUrl: sanitizeText(profile.html_url, 1000),
     avatarUrl: sanitizeText(profile.avatar_url, 1000),
   };
+};
+
+const decodeOauthIdTokenClaims = (idToken) => {
+  const token = String(idToken || '').trim();
+  if (!token) return {};
+
+  const decoded = jwt.decode(token, { json: true });
+  return decoded && typeof decoded === 'object' ? decoded : {};
+};
+
+const requestOidcUserInfo = async (config, accessToken) => {
+  const response = await fetch(config.userInfoUrl, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      'User-Agent': 'continental-id-auth',
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.sub) {
+    throw createHttpError(502, `${config.label} profile request failed.`);
+  }
+  return payload;
+};
+
+const requestOidcProfile = async (config, tokenPayload) => {
+  const accessToken = String(tokenPayload?.access_token || '').trim();
+  if (!accessToken) {
+    throw createHttpError(502, `${config.label} token exchange did not return an access token.`);
+  }
+
+  const userInfo = await requestOidcUserInfo(config, accessToken);
+  const idTokenClaims = decodeOauthIdTokenClaims(tokenPayload?.id_token);
+  const claims = {
+    ...idTokenClaims,
+    ...userInfo,
+  };
+  const rawEmail = normalizeEmail(claims.email || claims.preferred_username || '');
+  const email = isValidEmail(rawEmail) ? rawEmail : '';
+  const displayName =
+    sanitizeText(claims.name, 60) ||
+    sanitizeText(claims.given_name, 60) ||
+    sanitizeDisplayName('', email) ||
+    'User';
+  const profileUrl = sanitizeText(claims.profile, 1000);
+  const avatarUrl = sanitizeText(claims.picture, 1000);
+  const emailVerified = hasOwn(claims, 'email_verified')
+    ? Boolean(claims.email_verified)
+    : Boolean(email && config.trustEmailWithoutExplicitVerification);
+
+  return {
+    provider: config.provider,
+    providerUserId: sanitizeText(claims.sub, 160),
+    username: '',
+    displayName,
+    email,
+    emailVerified,
+    profileUrl,
+    avatarUrl,
+  };
+};
+
+const requestOauthIdentityProfile = async (config, tokenPayload) => {
+  if (config.profileStrategy === 'github') {
+    return requestGithubProfile(String(tokenPayload?.access_token || '').trim());
+  }
+
+  if (config.profileStrategy === 'oidc') {
+    return requestOidcProfile(config, tokenPayload);
+  }
+
+  throw createHttpError(500, 'OAuth provider profile strategy is not configured.');
+};
+
+const buildOauthAuthorizeUrl = (config, state) => {
+  const authorizeUrl = new URL(config.authorizeUrl);
+  authorizeUrl.searchParams.set('client_id', config.clientId);
+  authorizeUrl.searchParams.set('redirect_uri', config.callbackUrl);
+  authorizeUrl.searchParams.set('response_type', 'code');
+  authorizeUrl.searchParams.set('scope', config.scopes.join(' '));
+  authorizeUrl.searchParams.set('state', state);
+
+  if (config.authorizeParams && typeof config.authorizeParams === 'object') {
+    for (const [key, value] of Object.entries(config.authorizeParams)) {
+      if (value === undefined || value === null || value === '') continue;
+      authorizeUrl.searchParams.set(key, String(value));
+    }
+  }
+
+  return authorizeUrl.toString();
 };
 
 const renderOauthResultPage = ({
@@ -1699,14 +1912,19 @@ const getPendingMfaSecret = (user) => decryptMfaSecret(user?.security?.mfa?.pend
 const isMfaEnabledForUser = (user) =>
   Boolean(user?.security?.mfa?.enabled && getStoredMfaSecret(user));
 
-const buildMfaSetupPayload = (user, secret, backupCodes) => ({
-  secret,
-  otpAuthUrl: buildOtpAuthUrl({
+const buildMfaSetupPayload = async (user, secret, backupCodes) => {
+  const otpAuthUrl = buildOtpAuthUrl({
     secret,
     accountName: sanitizeText(user?.email || user?.username || user?._id, 120) || 'user',
-  }),
-  backupCodes,
-});
+  });
+
+  return {
+    secret,
+    otpAuthUrl,
+    qrCodeDataUrl: await buildOtpAuthQrDataUrl(otpAuthUrl),
+    backupCodes,
+  };
+};
 
 const verifyBackupCode = (user, backupCode) => {
   const normalized = sanitizeBackupCode(backupCode);
@@ -2457,6 +2675,31 @@ const assignAvailableUsername = async (user, ...candidates) => {
 
   await ensureStoredUsername(user);
   return getDisplayableUsername(user);
+};
+
+const getOauthIdentityUsernameCandidates = (provider, identityProfile = {}) => {
+  const normalizedProvider = sanitizeText(provider, 40).toLowerCase();
+  const emailLocalPart = sanitizeText(
+    normalizeEmail(identityProfile.email).split('@')[0],
+    60
+  );
+
+  return [
+    sanitizeText(identityProfile.username, 120),
+    emailLocalPart,
+    sanitizeText(identityProfile.displayName, 60),
+    `${normalizedProvider}${String(identityProfile.providerUserId || '').slice(-6)}`,
+    `user${crypto.randomBytes(3).toString('hex')}`,
+  ];
+};
+
+const getOauthLinkedAccountAutofillValue = (provider, identityProfile = {}) => {
+  const normalizedProvider = sanitizeText(provider, 40).toLowerCase();
+  if (normalizedProvider === OAUTH_PROVIDER_GITHUB) {
+    return sanitizeText(identityProfile.username, 120);
+  }
+
+  return '';
 };
 
 const applyUsernameChange = async (user, username) => {
@@ -3979,6 +4222,8 @@ exports.updatePreferences = async (req, res) => {
 };
 
 exports.startOauthLogin = async (req, res) => {
+  const providerLabel = getOauthProviderLabel(req.params.provider);
+
   try {
     const config = getOauthProviderConfig(req.params.provider, req);
     const targetOrigin = resolveTrustedOauthAppOrigin(req.query?.origin || DEFAULT_DASHBOARD_ORIGIN);
@@ -3994,20 +4239,12 @@ exports.startOauthLogin = async (req, res) => {
       redirectUrl,
       returnTo,
     });
-
-    const authorizeUrl = new URL(config.authorizeUrl);
-    authorizeUrl.searchParams.set('client_id', config.clientId);
-    authorizeUrl.searchParams.set('redirect_uri', config.callbackUrl);
-    authorizeUrl.searchParams.set('scope', config.scopes.join(' '));
-    authorizeUrl.searchParams.set('state', state);
-    authorizeUrl.searchParams.set('allow_signup', 'true');
-
-    return res.redirect(authorizeUrl.toString());
+    return res.redirect(buildOauthAuthorizeUrl(config, state));
   } catch (err) {
     if (err?.statusCode) {
       return res.status(err.statusCode).send(
         renderOauthResultPage({
-          title: 'GitHub sign-in unavailable',
+          title: `${providerLabel} sign-in unavailable`,
           message: err.message,
           redirectUrl: resolveTrustedOauthRedirectUrl(req.query?.returnTo || req.query?.redirect),
           targetOrigin: resolveTrustedOauthAppOrigin(req.query?.origin || ''),
@@ -4018,8 +4255,8 @@ exports.startOauthLogin = async (req, res) => {
     console.error('Start OAuth login error:', err);
     return res.status(500).send(
       renderOauthResultPage({
-        title: 'GitHub sign-in unavailable',
-        message: 'Could not start GitHub sign-in.',
+        title: `${providerLabel} sign-in unavailable`,
+        message: `Could not start ${providerLabel} sign-in.`,
         redirectUrl: resolveTrustedOauthRedirectUrl(req.query?.returnTo || req.query?.redirect),
         targetOrigin: resolveTrustedOauthAppOrigin(req.query?.origin || ''),
         closeWindow: false,
@@ -4029,6 +4266,8 @@ exports.startOauthLogin = async (req, res) => {
 };
 
 exports.startOauthLink = async (req, res) => {
+  const providerLabel = getOauthProviderLabel(req.params.provider);
+
   try {
     const user = await getUserById(req.user.id);
     if (!user) {
@@ -4051,16 +4290,9 @@ exports.startOauthLink = async (req, res) => {
       returnTo,
     });
 
-    const authorizeUrl = new URL(config.authorizeUrl);
-    authorizeUrl.searchParams.set('client_id', config.clientId);
-    authorizeUrl.searchParams.set('redirect_uri', config.callbackUrl);
-    authorizeUrl.searchParams.set('scope', config.scopes.join(' '));
-    authorizeUrl.searchParams.set('state', state);
-    authorizeUrl.searchParams.set('allow_signup', 'true');
-
     return res.json({
-      message: 'Identity linking ready.',
-      url: authorizeUrl.toString(),
+      message: `${providerLabel} linking ready.`,
+      url: buildOauthAuthorizeUrl(config, state),
       provider: config.provider,
     });
   } catch (err) {
@@ -4076,7 +4308,7 @@ exports.finishOauthCallback = async (req, res) => {
   let statePayload = null;
 
   try {
-    const code = sanitizeText(req.query?.code, 400);
+    const code = sanitizeText(req.query?.code, 4000);
     if (!code) {
       throw createHttpError(400, 'OAuth callback did not include an authorization code.');
     }
@@ -4087,8 +4319,9 @@ exports.finishOauthCallback = async (req, res) => {
       throw createHttpError(400, 'OAuth callback provider mismatch.');
     }
 
-    const accessToken = await requestGithubAccessToken(config, code);
-    const identityProfile = await requestGithubProfile(accessToken);
+    const providerLabel = getOauthProviderLabel(config.provider);
+    const tokenPayload = await requestOauthAccessToken(config, code);
+    const identityProfile = await requestOauthIdentityProfile(config, tokenPayload);
     const targetOrigin = resolveTrustedOauthAppOrigin(statePayload.targetOrigin || '');
     const redirectUrl = resolveTrustedOauthRedirectUrl(statePayload.redirectUrl, targetOrigin);
     const returnTo = resolveTrustedOauthRedirectUrl(statePayload.returnTo || redirectUrl, targetOrigin);
@@ -4104,7 +4337,10 @@ exports.finishOauthCallback = async (req, res) => {
         identityProfile.providerUserId
       );
       if (existingUser && toObjectIdString(existingUser._id) !== toObjectIdString(targetUser._id)) {
-        throw createHttpError(409, 'That GitHub account is already linked to another user.');
+        throw createHttpError(
+          409,
+          `That ${providerLabel} account is already linked to another user.`
+        );
       }
 
       upsertOauthIdentity(targetUser, {
@@ -4112,11 +4348,18 @@ exports.finishOauthCallback = async (req, res) => {
         provider: config.provider,
         lastUsedAt: new Date(),
       });
-      if (!sanitizeText(targetUser.linkedAccounts?.github, 120) && identityProfile.username) {
-        targetUser.linkedAccounts.github = identityProfile.username;
+      const linkedAccountAutofill = getOauthLinkedAccountAutofillValue(
+        config.provider,
+        identityProfile
+      );
+      if (
+        linkedAccountAutofill &&
+        !sanitizeText(targetUser.linkedAccounts?.[config.provider], 120)
+      ) {
+        targetUser.linkedAccounts[config.provider] = linkedAccountAutofill;
       }
 
-      appendAuditEvent(targetUser, req, 'oauth_provider_linked', 'GitHub account linked.', {
+      appendAuditEvent(targetUser, req, 'oauth_provider_linked', `${providerLabel} account linked.`, {
         provider: config.provider,
         username: identityProfile.username,
       });
@@ -4124,8 +4367,8 @@ exports.finishOauthCallback = async (req, res) => {
 
       return res.send(
         renderOauthResultPage({
-          title: 'GitHub linked',
-          message: 'Your GitHub account is now linked to Continental ID.',
+          title: `${providerLabel} linked`,
+          message: `Your ${providerLabel} account is now linked to Continental ID.`,
           redirectUrl: returnTo,
           targetOrigin,
           messagePayload: {
@@ -4143,7 +4386,7 @@ exports.finishOauthCallback = async (req, res) => {
       if (!identityProfile.email || !identityProfile.emailVerified) {
         throw createHttpError(
           400,
-          'GitHub must provide a verified email address before it can create a Continental ID account.'
+          `${providerLabel} must provide a verified email address before it can create a Continental ID account.`
         );
       }
 
@@ -4153,7 +4396,7 @@ exports.finishOauthCallback = async (req, res) => {
       if (existingByEmail) {
         throw createHttpError(
           409,
-          'That email already belongs to a Continental ID account. Sign in normally first, then link GitHub from the dashboard.'
+          `That email already belongs to a Continental ID account. Sign in normally first, then link ${providerLabel} from the dashboard.`
         );
       }
 
@@ -4177,10 +4420,7 @@ exports.finishOauthCallback = async (req, res) => {
 
       await assignAvailableUsername(
         user,
-        identityProfile.username,
-        sanitizeText(identityProfile.displayName, 60),
-        `github${String(identityProfile.providerUserId).slice(-6)}`,
-        `user${crypto.randomBytes(3).toString('hex')}`
+        ...getOauthIdentityUsernameCandidates(config.provider, identityProfile)
       );
     }
 
@@ -4189,8 +4429,12 @@ exports.finishOauthCallback = async (req, res) => {
       provider: config.provider,
       lastUsedAt: new Date(),
     });
-    if (!sanitizeText(user.linkedAccounts?.github, 120) && identityProfile.username) {
-      user.linkedAccounts.github = identityProfile.username;
+    const linkedAccountAutofill = getOauthLinkedAccountAutofillValue(
+      config.provider,
+      identityProfile
+    );
+    if (linkedAccountAutofill && !sanitizeText(user.linkedAccounts?.[config.provider], 120)) {
+      user.linkedAccounts[config.provider] = linkedAccountAutofill;
     }
 
     if (isMfaEnabledForUser(user)) {
@@ -4198,7 +4442,7 @@ exports.finishOauthCallback = async (req, res) => {
         user,
         req,
         'oauth_login_blocked_mfa',
-        'GitHub sign-in was blocked because MFA must be completed through the standard sign-in flow.',
+        `${providerLabel} sign-in was blocked because MFA must be completed through the standard sign-in flow.`,
         {
           provider: config.provider,
         }
@@ -4218,14 +4462,14 @@ exports.finishOauthCallback = async (req, res) => {
     }
 
     if (createdAccount) {
-      appendAuditEvent(user, req, 'oauth_register', 'Account created with GitHub sign-in.', {
+      appendAuditEvent(user, req, 'oauth_register', `Account created with ${providerLabel} sign-in.`, {
         provider: config.provider,
       });
     }
 
     const { sessionTokens } = await issueInteractiveSession(req, user, {
       auditType: 'oauth_login',
-      auditMessage: 'Signed in with GitHub.',
+      auditMessage: `Signed in with ${providerLabel}.`,
       auditMeta: {
         provider: config.provider,
       },
@@ -4235,7 +4479,7 @@ exports.finishOauthCallback = async (req, res) => {
 
     return res.send(
       renderOauthResultPage({
-        title: 'GitHub sign-in complete',
+        title: `${providerLabel} sign-in complete`,
         message: 'Returning to your Continental ID session.',
         redirectUrl,
         targetOrigin,
@@ -4252,9 +4496,10 @@ exports.finishOauthCallback = async (req, res) => {
       statePayload?.returnTo || statePayload?.redirectUrl,
       targetOrigin || DEFAULT_DASHBOARD_ORIGIN
     );
+    const providerLabel = getOauthProviderLabel(statePayload?.provider || req.params.provider);
     const statusCode = err?.statusCode || 500;
     const message =
-      err?.message || 'Could not complete GitHub sign-in right now. Please try again later.';
+      err?.message || `Could not complete ${providerLabel} sign-in right now. Please try again later.`;
 
     if (statusCode >= 500) {
       console.error('Finish OAuth callback error:', err);
@@ -4262,7 +4507,10 @@ exports.finishOauthCallback = async (req, res) => {
 
     return res.status(statusCode).send(
       renderOauthResultPage({
-        title: statusCode >= 500 ? 'GitHub sign-in failed' : 'GitHub sign-in could not continue',
+        title:
+          statusCode >= 500
+            ? `${providerLabel} sign-in failed`
+            : `${providerLabel} sign-in could not continue`,
         message,
         redirectUrl: returnTo,
         targetOrigin,
@@ -4294,7 +4542,7 @@ exports.unlinkOauthProvider = async (req, res) => {
   const provider = sanitizeText(req.params.provider, 40).toLowerCase();
 
   try {
-    if (provider !== OAUTH_PROVIDER_GITHUB) {
+    if (!OAUTH_PROVIDERS.includes(provider)) {
       return res.status(404).json({ message: 'That identity provider is not supported yet.' });
     }
 
@@ -4308,14 +4556,30 @@ exports.unlinkOauthProvider = async (req, res) => {
       return res.status(404).json({ message: 'That provider is not linked to this account.' });
     }
 
-    user.linkedAccounts.github = '';
-
-    appendAuditEvent(user, req, 'oauth_provider_unlinked', 'GitHub account unlinked.', {
-      provider,
+    const linkedAccountAutofill = getOauthLinkedAccountAutofillValue(provider, {
+      username: user.linkedAccounts?.[provider],
     });
+    if (linkedAccountAutofill && sanitizeText(user.linkedAccounts?.[provider], 120) === linkedAccountAutofill) {
+      user.linkedAccounts[provider] = '';
+    }
+
+    appendAuditEvent(
+      user,
+      req,
+      'oauth_provider_unlinked',
+      `${getOauthProviderLabel(provider)} account unlinked.`,
+      {
+      provider,
+      }
+    );
     await user.save();
 
-    return sendUserResponse(res, 200, 'GitHub account unlinked.', user);
+    return sendUserResponse(
+      res,
+      200,
+      `${getOauthProviderLabel(provider)} account unlinked.`,
+      user
+    );
   } catch (err) {
     console.error('Unlink OAuth provider error:', err);
     return res.status(500).json({ message: 'Failed to unlink the identity provider.' });
@@ -4760,7 +5024,7 @@ exports.beginMfaSetup = async (req, res) => {
 
     return res.json({
       message: 'MFA setup ready.',
-      setup: buildMfaSetupPayload(user, secret, backupCodes),
+      setup: await buildMfaSetupPayload(user, secret, backupCodes),
       mfa: getMfaState(user),
     });
   } catch (err) {
