@@ -1694,8 +1694,14 @@ const openPopupWindow = (url, name = 'LoginPopup') => {
 
 const openLoginPopup = () => openPopupWindow(buildLoginPopupUrl().toString(), 'LoginPopup');
 
-const openLoginPage = () => {
-  window.location.assign(buildLoginPopupUrl().toString());
+const openLoginPage = ({ replace = false } = {}) => {
+  const loginUrl = buildLoginPopupUrl().toString();
+  if (replace) {
+    window.location.replace(loginUrl);
+    return;
+  }
+
+  window.location.assign(loginUrl);
 };
 
 const promptSignIn = () => {
@@ -4391,8 +4397,8 @@ const doLogout = async () => {
 
   clearStoredAuth();
   stopSessionAutoRefresh();
-  setLoggedOutUI();
-  showToast('Logged out successfully.', 'success');
+  closeLoginPopup();
+  openLoginPage({ replace: true });
 };
 
 const exportActivityCsv = () => {
