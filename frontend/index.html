@@ -1050,72 +1050,120 @@
                   data-collapsible-label="MFA setup"
                   hidden
                 >
-                  <p class="helper-line">Use Authy or any other authenticator app to scan the QR code, then confirm with the 6-digit code it generates.</p>
-                  <label>
-                    Current password
-                    <input id="mfa-current-password" type="password" autocomplete="current-password" />
-                  </label>
+                  <p class="helper-line">Set up MFA in one place: verify your password, scan the QR code, then enter the 6-digit code from your authenticator app.</p>
                   <div class="mfa-setup-flow">
                     <section class="mfa-step-card">
                       <div class="mfa-step-card-head">
                         <span class="mfa-step-badge">1</span>
                         <div>
-                          <h4>Scan the QR code</h4>
-                          <p>Open Authy, tap add account, and scan this code.</p>
-                        </div>
-                      </div>
-                      <div id="mfa-qr-shell" class="mfa-qr-shell" hidden>
-                        <img id="mfa-qr-image" alt="QR code for authenticator app setup" />
-                      </div>
-                    </section>
-
-                    <section class="mfa-step-card">
-                      <div class="mfa-step-card-head">
-                        <span class="mfa-step-badge">2</span>
-                        <div>
-                          <h4>Use the setup key if scanning is unavailable</h4>
-                          <p>Most apps accept the key below if you prefer to enter it manually.</p>
-                        </div>
-                      </div>
-                      <div class="mfa-inline-field">
-                        <label class="wide-field">
-                          Setup key
-                          <input id="mfa-secret" type="text" readonly />
-                        </label>
-                        <button id="mfa-copy-secret-btn" class="secondary-btn" type="button">Copy Key</button>
-                      </div>
-                      <details class="mfa-advanced-details">
-                        <summary>Advanced setup details</summary>
-                        <div class="mfa-inline-field mfa-inline-field-advanced">
-                          <label class="wide-field">
-                            OTPAuth URL
-                            <input id="mfa-otpauth-url" type="text" readonly />
-                          </label>
-                          <button id="mfa-copy-otpauth-btn" class="secondary-btn" type="button">Copy URL</button>
-                        </div>
-                      </details>
-                    </section>
-
-                    <section class="mfa-step-card">
-                      <div class="mfa-step-card-head">
-                        <span class="mfa-step-badge">3</span>
-                        <div>
-                          <h4>Confirm the connection</h4>
-                          <p>Enter the current 6-digit code from your authenticator app to finish setup.</p>
+                          <h4>Verify it's you</h4>
+                          <p>Enter your current password to generate the QR code and setup key.</p>
                         </div>
                       </div>
                       <label>
-                        6-digit code
-                        <input id="mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+                        Current password
+                        <input id="mfa-current-password" type="password" autocomplete="current-password" />
                       </label>
-                      <button id="mfa-enable-btn" class="primary-btn" type="button">Turn On MFA</button>
+                      <div class="mfa-panel-actions">
+                        <button id="mfa-start-setup-btn" class="primary-btn" type="button">Continue</button>
+                        <button id="mfa-cancel-setup-btn" class="secondary-btn" type="button">Cancel</button>
+                      </div>
                     </section>
+
+                    <div id="mfa-setup-steps" class="mfa-setup-flow" hidden>
+                      <section class="mfa-step-card">
+                        <div class="mfa-step-card-head">
+                          <span class="mfa-step-badge">2</span>
+                          <div>
+                            <h4>Scan the QR code</h4>
+                            <p>Open Authy, tap add account, and scan this code.</p>
+                          </div>
+                        </div>
+                        <div id="mfa-qr-shell" class="mfa-qr-shell" hidden>
+                          <img id="mfa-qr-image" alt="QR code for authenticator app setup" />
+                        </div>
+                      </section>
+
+                      <section class="mfa-step-card">
+                        <div class="mfa-step-card-head">
+                          <span class="mfa-step-badge">3</span>
+                          <div>
+                            <h4>Use the setup key if scanning is unavailable</h4>
+                            <p>Most apps accept the key below if you prefer to enter it manually.</p>
+                          </div>
+                        </div>
+                        <div class="mfa-inline-field">
+                          <label class="wide-field">
+                            Setup key
+                            <input id="mfa-secret" type="text" readonly />
+                          </label>
+                          <button id="mfa-copy-secret-btn" class="secondary-btn" type="button">Copy Key</button>
+                        </div>
+                        <details class="mfa-advanced-details">
+                          <summary>Advanced setup details</summary>
+                          <div class="mfa-inline-field mfa-inline-field-advanced">
+                            <label class="wide-field">
+                              OTPAuth URL
+                              <input id="mfa-otpauth-url" type="text" readonly />
+                            </label>
+                            <button id="mfa-copy-otpauth-btn" class="secondary-btn" type="button">Copy URL</button>
+                          </div>
+                        </details>
+                      </section>
+
+                      <section class="mfa-step-card">
+                        <div class="mfa-step-card-head">
+                          <span class="mfa-step-badge">4</span>
+                          <div>
+                            <h4>Confirm the connection</h4>
+                            <p>Enter the current 6-digit code from your authenticator app to finish setup.</p>
+                          </div>
+                        </div>
+                        <label>
+                          6-digit code
+                          <input id="mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+                        </label>
+                        <button id="mfa-enable-btn" class="primary-btn" type="button">Turn On MFA</button>
+                      </section>
+                    </div>
                   </div>
 
-                  <div class="mfa-backup-codes-panel">
-                    <p class="helper-line">Save these backup codes somewhere safe. Each code works once.</p>
-                    <div id="mfa-backup-codes" class="backup-code-list"></div>
+                </div>
+
+                <div
+                  id="mfa-manage-panel"
+                  class="mfa-setup-panel"
+                  data-collapsible-max-height="320"
+                  data-collapsible-label="MFA action"
+                  hidden
+                >
+                  <div class="mfa-panel-header">
+                    <h4 id="mfa-manage-title">Confirm this action</h4>
+                    <p id="mfa-manage-copy" class="helper-line">Enter your password and a current MFA code or backup code to continue.</p>
                   </div>
+                  <label>
+                    Current password
+                    <input id="mfa-manage-current-password" type="password" autocomplete="current-password" />
+                  </label>
+                  <label>
+                    Authenticator code or backup code
+                    <input
+                      id="mfa-manage-challenge"
+                      type="text"
+                      inputmode="text"
+                      autocomplete="one-time-code"
+                      placeholder="123456 or backup code"
+                    />
+                  </label>
+                  <div class="mfa-panel-actions">
+                    <button id="mfa-manage-confirm-btn" class="danger-btn" type="button">Continue</button>
+                    <button id="mfa-manage-cancel-btn" class="secondary-btn" type="button">Cancel</button>
+                  </div>
+                </div>
+
+                <div id="mfa-backup-codes-panel" class="mfa-setup-panel mfa-backup-codes-panel" hidden>
+                  <p class="helper-line">Save these backup codes somewhere safe. Each code works once.</p>
+                  <div id="mfa-backup-codes" class="backup-code-list"></div>
                 </div>
               </div>
             </article>

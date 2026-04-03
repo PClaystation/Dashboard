@@ -281,6 +281,9 @@ const dom = {
   mfaBackupBtn: document.getElementById('mfa-backup-btn'),
   mfaSetupPanel: document.getElementById('mfa-setup-panel'),
   mfaCurrentPassword: document.getElementById('mfa-current-password'),
+  mfaStartSetupBtn: document.getElementById('mfa-start-setup-btn'),
+  mfaCancelSetupBtn: document.getElementById('mfa-cancel-setup-btn'),
+  mfaSetupSteps: document.getElementById('mfa-setup-steps'),
   mfaQrShell: document.getElementById('mfa-qr-shell'),
   mfaQrImage: document.getElementById('mfa-qr-image'),
   mfaSecret: document.getElementById('mfa-secret'),
@@ -289,7 +292,15 @@ const dom = {
   mfaCopyOtpAuthBtn: document.getElementById('mfa-copy-otpauth-btn'),
   mfaCode: document.getElementById('mfa-code'),
   mfaEnableBtn: document.getElementById('mfa-enable-btn'),
+  mfaBackupCodesPanel: document.getElementById('mfa-backup-codes-panel'),
   mfaBackupCodes: document.getElementById('mfa-backup-codes'),
+  mfaManagePanel: document.getElementById('mfa-manage-panel'),
+  mfaManageTitle: document.getElementById('mfa-manage-title'),
+  mfaManageCopy: document.getElementById('mfa-manage-copy'),
+  mfaManageCurrentPassword: document.getElementById('mfa-manage-current-password'),
+  mfaManageChallenge: document.getElementById('mfa-manage-challenge'),
+  mfaManageConfirmBtn: document.getElementById('mfa-manage-confirm-btn'),
+  mfaManageCancelBtn: document.getElementById('mfa-manage-cancel-btn'),
   passkeyStatusCopy: document.getElementById('passkey-status-copy'),
   passkeyCurrentPassword: document.getElementById('passkey-current-password'),
   passkeyRegisterBtn: document.getElementById('passkey-register-btn'),
@@ -701,6 +712,8 @@ const state = {
   profileAvatarValidationId: 0,
   profileAvatarValidationTimer: null,
   mfaSetup: null,
+  mfaSetupOpen: false,
+  mfaManageMode: '',
   launcherOpen: false,
   launcherActiveIndex: 0,
   launcherLastFocusedElement: null,
@@ -819,6 +832,84 @@ const collectSensitiveActionMfa = (actionLabel) => {
   }
 
   return parsed;
+};
+
+const clearMfaManageInputs = () => {
+  if (dom.mfaManageCurrentPassword) dom.mfaManageCurrentPassword.value = '';
+  if (dom.mfaManageChallenge) dom.mfaManageChallenge.value = '';
+};
+
+const getMfaManageConfig = (mode = state.mfaManageMode) => {
+  if (mode === 'disable') {
+    return {
+      title: 'Disable MFA',
+      copy: 'Enter your current password and a current authenticator code or backup code to turn MFA off.',
+      confirmLabel: 'Disable MFA',
+      confirmClassName: 'danger-btn',
+      busyLabel: 'Disabling...',
+      endpoint: '/mfa/disable',
+      successMessage: 'MFA disabled.',
+    };
+  }
+
+  if (mode === 'backup') {
+    return {
+      title: 'Regenerate backup codes',
+      copy: 'Enter your current password and a current authenticator code or backup code to create a fresh backup code set.',
+      confirmLabel: 'Regenerate Codes',
+      confirmClassName: 'primary-btn',
+      busyLabel: 'Regenerating...',
+      endpoint: '/mfa/regenerate-backup-codes',
+      successMessage: 'Backup codes regenerated.',
+    };
+  }
+
+  return null;
+};
+
+const getMfaSetupFocusTarget = () => (state.mfaSetup?.secret ? dom.mfaCode : dom.mfaCurrentPassword);
+
+const openMfaSetupPanel = () => {
+  state.mfaSetupOpen = true;
+  state.mfaManageMode = '';
+  clearMfaManageInputs();
+  renderMfaState(state.user);
+
+  window.setTimeout(() => {
+    getMfaSetupFocusTarget()?.focus();
+  }, 0);
+};
+
+const closeMfaSetupPanel = () => {
+  state.mfaSetupOpen = false;
+  if (!state.mfaSetup?.secret) {
+    if (dom.mfaCurrentPassword) dom.mfaCurrentPassword.value = '';
+    if (dom.mfaCode) dom.mfaCode.value = '';
+  }
+  renderMfaState(state.user);
+};
+
+const openMfaManagePanel = (mode) => {
+  if (!mode) return;
+
+  state.mfaManageMode = mode;
+  clearMfaManageInputs();
+  renderMfaState(state.user);
+
+  window.setTimeout(() => {
+    dom.mfaManageCurrentPassword?.focus();
+  }, 0);
+};
+
+const closeMfaManagePanel = () => {
+  state.mfaManageMode = '';
+  clearMfaManageInputs();
+  renderMfaState(state.user);
+};
+
+const openMfaSecuritySection = () => {
+  openMfaSetupPanel();
+  openSecuritySection('security-mfa-card', getMfaSetupFocusTarget());
 };
 
 const trackedForms = [
@@ -1945,8 +2036,11 @@ const clearDashboardUi = () => {
   if (dom.openPublicProfileBtn) dom.openPublicProfileBtn.disabled = true;
   if (dom.profileAvatarUrl) dom.profileAvatarUrl.value = '';
   if (dom.profileAvatarUpload) dom.profileAvatarUpload.value = '';
+  state.mfaSetupOpen = false;
+  state.mfaManageMode = '';
   if (dom.mfaCurrentPassword) dom.mfaCurrentPassword.value = '';
   if (dom.mfaCode) dom.mfaCode.value = '';
+  clearMfaManageInputs();
   if (dom.passkeyCurrentPassword) dom.passkeyCurrentPassword.value = '';
 
   if (dom.activityFilter) dom.activityFilter.value = '';
@@ -3221,7 +3315,7 @@ const getSecurityGuidance = (user = state.user) => {
         ? 'Your authenticator secret is ready. Confirm the current 6-digit code to finish setup.'
         : 'Add an authenticator app so password-only sign-in is no longer the weakest point on this account.',
       actionLabel: state.mfaSetup?.secret ? 'Finish MFA' : 'Set up MFA',
-      onAction: () => openSecuritySection('security-mfa-card', state.mfaSetup?.secret ? dom.mfaCode : dom.mfaSetupBtn),
+      onAction: () => openMfaSecuritySection(),
     };
   }
 
@@ -3943,6 +4037,7 @@ const renderBackupCodes = (codes = []) => {
   if (!dom.mfaBackupCodes) return;
 
   dom.mfaBackupCodes.innerHTML = '';
+  if (dom.mfaBackupCodesPanel) dom.mfaBackupCodesPanel.hidden = true;
   if (!Array.isArray(codes) || !codes.length) return;
 
   for (const code of codes) {
@@ -3951,26 +4046,43 @@ const renderBackupCodes = (codes = []) => {
     item.textContent = safeText(code);
     dom.mfaBackupCodes.appendChild(item);
   }
+
+  if (dom.mfaBackupCodesPanel) dom.mfaBackupCodesPanel.hidden = false;
 };
 
 const renderMfaState = (user = state.user) => {
   const mfa = normalizeMfaState(user?.security?.mfa);
+  const showSetupPanel = !mfa.enabled && state.mfaSetupOpen;
+  const showSetupSteps = Boolean(state.mfaSetup?.secret);
+  const manageConfig = getMfaManageConfig();
 
   if (dom.mfaStatusCopy) {
     if (mfa.enabled) {
       dom.mfaStatusCopy.textContent = `MFA on. Backup codes: ${mfa.backupCodesRemaining}. Last used: ${formatDate(mfa.lastUsedAt)}.`;
     } else if (state.mfaSetup?.secret) {
       dom.mfaStatusCopy.textContent = 'Setup in progress. Scan the QR code or use the setup key below, then enter the 6-digit code from your app.';
+    } else if (showSetupPanel) {
+      dom.mfaStatusCopy.textContent = 'Start by entering your current password below. The QR code appears right after that.';
     } else {
       dom.mfaStatusCopy.textContent = 'MFA off.';
     }
   }
 
   if (dom.mfaSetupBtn) dom.mfaSetupBtn.disabled = mfa.enabled;
+  if (dom.mfaSetupBtn && !mfa.enabled) {
+    dom.mfaSetupBtn.textContent = state.mfaSetup?.secret ? 'Resume Setup' : 'Set Up MFA';
+  }
   if (dom.mfaDisableBtn) dom.mfaDisableBtn.disabled = !mfa.enabled;
   if (dom.mfaBackupBtn) dom.mfaBackupBtn.disabled = !mfa.enabled;
-  if (dom.mfaSetupPanel) dom.mfaSetupPanel.hidden = !state.mfaSetup?.secret;
-  if (dom.mfaCurrentPassword && !state.mfaSetup?.secret) dom.mfaCurrentPassword.value = '';
+  if (dom.mfaSetupPanel) dom.mfaSetupPanel.hidden = !showSetupPanel;
+  if (dom.mfaSetupSteps) dom.mfaSetupSteps.hidden = !showSetupSteps;
+  if (dom.mfaStartSetupBtn) {
+    const setupLabel = showSetupSteps ? 'Refresh setup' : 'Continue';
+    dom.mfaStartSetupBtn.textContent = setupLabel;
+    dom.mfaStartSetupBtn.dataset.defaultLabel = setupLabel;
+  }
+  if (dom.mfaCurrentPassword && !showSetupPanel) dom.mfaCurrentPassword.value = '';
+  if (dom.mfaCode && !showSetupSteps) dom.mfaCode.value = '';
   if (dom.mfaQrShell) dom.mfaQrShell.hidden = !state.mfaSetup?.qrCodeDataUrl;
   if (dom.mfaQrImage) {
     if (state.mfaSetup?.qrCodeDataUrl) {
@@ -3981,6 +4093,14 @@ const renderMfaState = (user = state.user) => {
   }
   if (dom.mfaSecret) dom.mfaSecret.value = safeText(state.mfaSetup?.secret);
   if (dom.mfaOtpAuthUrl) dom.mfaOtpAuthUrl.value = safeText(state.mfaSetup?.otpAuthUrl);
+  if (dom.mfaManagePanel) dom.mfaManagePanel.hidden = !mfa.enabled || !manageConfig;
+  if (dom.mfaManageTitle && manageConfig) dom.mfaManageTitle.textContent = manageConfig.title;
+  if (dom.mfaManageCopy && manageConfig) dom.mfaManageCopy.textContent = manageConfig.copy;
+  if (dom.mfaManageConfirmBtn && manageConfig) {
+    dom.mfaManageConfirmBtn.textContent = manageConfig.confirmLabel;
+    dom.mfaManageConfirmBtn.className = manageConfig.confirmClassName;
+    dom.mfaManageConfirmBtn.dataset.defaultLabel = manageConfig.confirmLabel;
+  }
   requestCollapsibleSectionsSync();
 };
 
@@ -5124,10 +5244,11 @@ const handleMfaSetup = async () => {
   const currentPassword = dom.mfaCurrentPassword?.value || '';
   if (!currentPassword) {
     showToast('Enter your current password to start MFA setup.', 'error');
+    dom.mfaCurrentPassword?.focus();
     return;
   }
 
-  setButtonBusy(dom.mfaSetupBtn, true, 'Preparing...');
+  setButtonBusy(dom.mfaStartSetupBtn, true, 'Preparing...');
 
   try {
     const data = await apiRequest('/mfa/setup', {
@@ -5136,13 +5257,15 @@ const handleMfaSetup = async () => {
     });
 
     state.mfaSetup = data.setup || null;
+    state.mfaSetupOpen = true;
     renderBackupCodes(data.setup?.backupCodes || []);
     renderMfaState(state.user);
     showToast('Authenticator setup ready. Scan the QR code to continue.', 'success');
+    dom.mfaCode?.focus();
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    setButtonBusy(dom.mfaSetupBtn, false);
+    setButtonBusy(dom.mfaStartSetupBtn, false);
   }
 };
 
@@ -5151,10 +5274,12 @@ const handleMfaEnable = async () => {
   const code = safeText(dom.mfaCode?.value);
   if (!currentPassword) {
     showToast('Enter your current password to enable MFA.', 'error');
+    dom.mfaCurrentPassword?.focus();
     return;
   }
   if (!code) {
     showToast('Enter the MFA code from your authenticator app.', 'error');
+    dom.mfaCode?.focus();
     return;
   }
 
@@ -5168,6 +5293,7 @@ const handleMfaEnable = async () => {
 
     state.user = normalizeUserPayload(data);
     state.mfaSetup = null;
+    state.mfaSetupOpen = false;
     if (dom.mfaCurrentPassword) dom.mfaCurrentPassword.value = '';
     if (dom.mfaCode) dom.mfaCode.value = '';
     renderBackupCodes([]);
@@ -5198,56 +5324,53 @@ const handleCopyMfaOtpAuthUrl = async () => {
   }
 };
 
-const handleMfaDisable = async () => {
-  const currentPassword = window.prompt('Enter your current password to disable MFA.');
-  if (!currentPassword) return;
-  const sensitiveMfa = collectSensitiveActionMfa('disable MFA');
-  if (!sensitiveMfa) return;
+const handleMfaManageConfirm = async () => {
+  const actionMode = state.mfaManageMode;
+  const config = getMfaManageConfig(actionMode);
+  if (!config) return;
 
-  setButtonBusy(dom.mfaDisableBtn, true, 'Disabling...');
-
-  try {
-    const data = await apiRequest('/mfa/disable', {
-      method: 'POST',
-      body: { currentPassword, ...sensitiveMfa },
-    });
-
-    state.user = normalizeUserPayload(data);
-    state.mfaSetup = null;
-    renderBackupCodes([]);
-    syncUiWithUser(state.user);
-    showToast('MFA disabled.', 'success');
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    setButtonBusy(dom.mfaDisableBtn, false);
+  const currentPassword = dom.mfaManageCurrentPassword?.value || '';
+  if (!currentPassword) {
+    showToast('Enter your current password to continue.', 'error');
+    dom.mfaManageCurrentPassword?.focus();
+    return;
   }
-};
 
-const handleMfaBackupCodes = async () => {
-  const currentPassword = window.prompt('Enter your current password to regenerate backup codes.');
-  if (!currentPassword) return;
-  const sensitiveMfa = collectSensitiveActionMfa('regenerate backup codes');
-  if (!sensitiveMfa) return;
+  const sensitiveMfa = parseSensitiveMfaInput(dom.mfaManageChallenge?.value || '');
+  if (!sensitiveMfa.mfaCode && !sensitiveMfa.backupCode) {
+    showToast('Enter a current authenticator code or backup code.', 'error');
+    dom.mfaManageChallenge?.focus();
+    return;
+  }
 
-  setButtonBusy(dom.mfaBackupBtn, true, 'Regenerating...');
+  setButtonBusy(dom.mfaManageConfirmBtn, true, config.busyLabel);
 
   try {
-    const data = await apiRequest('/mfa/regenerate-backup-codes', {
+    const data = await apiRequest(config.endpoint, {
       method: 'POST',
       body: { currentPassword, ...sensitiveMfa },
     });
 
-    if (!state.user) state.user = {};
-    if (!state.user.security) state.user.security = {};
-    state.user.security.mfa = normalizeMfaState(data.mfa || state.user.security.mfa);
-    renderBackupCodes(data.backupCodes || []);
-    renderMfaState(state.user);
-    showToast('Backup codes regenerated.', 'success', 4200);
+    if (actionMode === 'disable') {
+      state.user = normalizeUserPayload(data);
+      state.mfaSetup = null;
+      state.mfaSetupOpen = false;
+      renderBackupCodes([]);
+      syncUiWithUser(state.user);
+    } else {
+      if (!state.user) state.user = {};
+      if (!state.user.security) state.user.security = {};
+      state.user.security.mfa = normalizeMfaState(data.mfa || state.user.security.mfa);
+      renderBackupCodes(data.backupCodes || []);
+      renderMfaState(state.user);
+    }
+
+    closeMfaManagePanel();
+    showToast(config.successMessage, 'success', actionMode === 'backup' ? 4200 : 3200);
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    setButtonBusy(dom.mfaBackupBtn, false);
+    setButtonBusy(dom.mfaManageConfirmBtn, false);
   }
 };
 
@@ -6033,12 +6156,52 @@ const setupEventHandlers = () => {
   }
   if (dom.passwordForm) dom.passwordForm.addEventListener('submit', handlePasswordSave);
   if (dom.securityForm) dom.securityForm.addEventListener('submit', handleSecuritySave);
-  if (dom.mfaSetupBtn) dom.mfaSetupBtn.addEventListener('click', handleMfaSetup);
+  if (dom.mfaCurrentPassword) {
+    dom.mfaCurrentPassword.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      if (state.mfaSetup?.secret) {
+        dom.mfaCode?.focus();
+        return;
+      }
+      handleMfaSetup();
+    });
+  }
+  if (dom.mfaSetupBtn) dom.mfaSetupBtn.addEventListener('click', openMfaSetupPanel);
+  if (dom.mfaStartSetupBtn) dom.mfaStartSetupBtn.addEventListener('click', handleMfaSetup);
+  if (dom.mfaCancelSetupBtn) dom.mfaCancelSetupBtn.addEventListener('click', closeMfaSetupPanel);
   if (dom.mfaCopySecretBtn) dom.mfaCopySecretBtn.addEventListener('click', handleCopyMfaSecret);
   if (dom.mfaCopyOtpAuthBtn) dom.mfaCopyOtpAuthBtn.addEventListener('click', handleCopyMfaOtpAuthUrl);
+  if (dom.mfaCode) {
+    dom.mfaCode.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      handleMfaEnable();
+    });
+  }
   if (dom.mfaEnableBtn) dom.mfaEnableBtn.addEventListener('click', handleMfaEnable);
-  if (dom.mfaDisableBtn) dom.mfaDisableBtn.addEventListener('click', handleMfaDisable);
-  if (dom.mfaBackupBtn) dom.mfaBackupBtn.addEventListener('click', handleMfaBackupCodes);
+  if (dom.mfaDisableBtn) dom.mfaDisableBtn.addEventListener('click', () => openMfaManagePanel('disable'));
+  if (dom.mfaBackupBtn) dom.mfaBackupBtn.addEventListener('click', () => openMfaManagePanel('backup'));
+  if (dom.mfaManageCurrentPassword) {
+    dom.mfaManageCurrentPassword.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      if (!safeText(dom.mfaManageChallenge?.value)) {
+        dom.mfaManageChallenge?.focus();
+        return;
+      }
+      handleMfaManageConfirm();
+    });
+  }
+  if (dom.mfaManageChallenge) {
+    dom.mfaManageChallenge.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      handleMfaManageConfirm();
+    });
+  }
+  if (dom.mfaManageConfirmBtn) dom.mfaManageConfirmBtn.addEventListener('click', handleMfaManageConfirm);
+  if (dom.mfaManageCancelBtn) dom.mfaManageCancelBtn.addEventListener('click', closeMfaManagePanel);
   if (dom.passkeyRegisterBtn) dom.passkeyRegisterBtn.addEventListener('click', handlePasskeyRegister);
   if (dom.publicProfilePreviewBtn) {
     dom.publicProfilePreviewBtn.addEventListener('click', () => {
