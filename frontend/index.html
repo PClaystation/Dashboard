@@ -6,11 +6,11 @@
   <title>Continental ID Dashboard</title>
   <style>
     :root {
-      --boot-bg-1: #f7f2ea;
-      --boot-bg-2: #eee7dc;
-      --boot-bg-3: #dfe8e4;
-      --boot-muted: #69707d;
-      color-scheme: light;
+      --boot-bg-1: #07111e;
+      --boot-bg-2: #0b1727;
+      --boot-bg-3: #112338;
+      --boot-muted: #95a5bd;
+      color-scheme: dark;
     }
 
     html,
@@ -22,9 +22,8 @@
     body {
       background-color: var(--boot-bg-2);
       background:
-        radial-gradient(circle at 12% 10%, rgba(20, 111, 99, 0.12), transparent 32%),
-        radial-gradient(circle at 84% 16%, rgba(195, 138, 74, 0.12), transparent 28%),
-        linear-gradient(155deg, var(--boot-bg-1), var(--boot-bg-2) 52%, var(--boot-bg-3));
+        radial-gradient(circle at top right, rgba(77, 111, 153, 0.18), transparent 34%),
+        linear-gradient(180deg, var(--boot-bg-1), var(--boot-bg-2) 52%, var(--boot-bg-3));
     }
 
     #loading-screen {
@@ -36,9 +35,8 @@
       text-align: center;
       background-color: var(--boot-bg-2);
       background:
-        radial-gradient(circle at 18% 18%, rgba(20, 111, 99, 0.18), transparent 34%),
-        radial-gradient(circle at 82% 24%, rgba(195, 138, 74, 0.18), transparent 32%),
-        linear-gradient(155deg, var(--boot-bg-1), var(--boot-bg-2), var(--boot-bg-3));
+        radial-gradient(circle at 20% 18%, rgba(77, 111, 153, 0.18), transparent 34%),
+        linear-gradient(180deg, var(--boot-bg-1), var(--boot-bg-2), var(--boot-bg-3));
     }
 
     #loading-screen p {
@@ -894,10 +892,11 @@
                 <label>
                   Theme
                   <select id="appearance-theme" name="theme">
-                    <option value="system">System</option>
-                    <option value="dawn">Dawn</option>
-                    <option value="night">Night</option>
-                    <option value="ocean">Ocean</option>
+                    <option value="midnight">Midnight Navy</option>
+                    <option value="heritage">Heritage</option>
+                    <option value="dawn">Legacy Dawn</option>
+                    <option value="night">Legacy Night</option>
+                    <option value="ocean">Legacy Ocean</option>
                   </select>
                 </label>
                 <label>

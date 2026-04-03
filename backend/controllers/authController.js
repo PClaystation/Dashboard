@@ -97,7 +97,7 @@ const LINKED_PROVIDERS = [
   'microsoft',
 ];
 
-const ALLOWED_THEMES = new Set(['system', 'dawn', 'night', 'ocean']);
+const ALLOWED_THEMES = new Set(['system', 'midnight', 'heritage', 'dawn', 'night', 'ocean']);
 const ALLOWED_DENSITIES = new Set(['comfortable', 'compact', 'spacious']);
 
 const DEFAULT_NOTIFICATIONS = {
@@ -109,7 +109,7 @@ const DEFAULT_NOTIFICATIONS = {
 };
 
 const DEFAULT_APPEARANCE = {
-  theme: 'system',
+  theme: 'midnight',
   compactMode: false,
   reducedMotion: false,
   highContrast: false,
@@ -2239,7 +2239,7 @@ const normalizeLinkedAccounts = (input = {}, current = {}) => {
   return next;
 };
 
-const normalizeTheme = (value, fallback = 'system') => {
+const normalizeTheme = (value, fallback = 'midnight') => {
   const candidate = sanitizeText(value, 20).toLowerCase();
   if (ALLOWED_THEMES.has(candidate)) return candidate;
   return fallback;

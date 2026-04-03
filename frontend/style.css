@@ -1,4 +1,33 @@
-:root {
+:root,
+html[data-theme='midnight'] {
+  color-scheme: dark;
+  --bg-1: #07111e;
+  --bg-2: #0b1727;
+  --bg-3: #112338;
+  --surface: rgba(9, 18, 31, 0.82);
+  --surface-strong: rgba(13, 24, 39, 0.94);
+  --surface-muted: rgba(15, 28, 46, 0.94);
+  --text: #edf3fb;
+  --muted: #95a5bd;
+  --line: rgba(176, 194, 220, 0.14);
+  --line-strong: rgba(176, 194, 220, 0.24);
+  --primary: #4d6f99;
+  --primary-strong: #385476;
+  --primary-soft: rgba(77, 111, 153, 0.2);
+  --secondary: #7d8ea5;
+  --secondary-soft: rgba(125, 142, 165, 0.14);
+  --danger: #db7b78;
+  --warning: #c9a46f;
+  --success: #73a589;
+  --shadow: 0 24px 60px rgba(1, 8, 18, 0.34);
+  --shadow-soft: 0 10px 28px rgba(1, 8, 18, 0.22);
+  --ring: rgba(120, 150, 190, 0.34);
+  --density-pad: 1.2rem;
+  --density-gap: 1rem;
+  --sidebar-width: 308px;
+}
+
+html[data-theme='heritage'] {
   color-scheme: light;
   --bg-1: #f7f2ea;
   --bg-2: #eee7dc;
@@ -21,9 +50,6 @@
   --shadow: 0 30px 80px rgba(19, 29, 40, 0.08);
   --shadow-soft: 0 14px 36px rgba(19, 29, 40, 0.06);
   --ring: rgba(20, 111, 99, 0.22);
-  --density-pad: 1.2rem;
-  --density-gap: 1rem;
-  --sidebar-width: 320px;
 }
 
 html[data-theme='dawn'] {
@@ -132,9 +158,8 @@ body {
   color: var(--text);
   background-color: var(--bg-2);
   background:
-    radial-gradient(circle at 12% 10%, rgba(20, 111, 99, 0.12), transparent 32%),
-    radial-gradient(circle at 84% 16%, rgba(195, 138, 74, 0.12), transparent 28%),
-    linear-gradient(155deg, var(--bg-1), var(--bg-2) 52%, var(--bg-3));
+    radial-gradient(circle at top right, rgba(77, 111, 153, 0.16), transparent 34%),
+    linear-gradient(180deg, var(--bg-1), var(--bg-2) 48%, var(--bg-3));
   background-attachment: fixed;
 }
 
@@ -155,13 +180,13 @@ body::after {
 body::before {
   top: -6vw;
   right: -4vw;
-  background: rgba(20, 111, 99, 0.12);
+  background: rgba(77, 111, 153, 0.12);
 }
 
 body::after {
   bottom: -10vw;
   left: -5vw;
-  background: rgba(195, 138, 74, 0.12);
+  background: rgba(43, 63, 92, 0.16);
 }
 
 h1,
@@ -194,7 +219,7 @@ textarea {
 
 button {
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 0.72rem 1rem;
   cursor: pointer;
   transition:
@@ -206,7 +231,7 @@ button {
 }
 
 button:hover {
-  transform: translateY(-1px);
+  transform: translateY(-0.5px);
 }
 
 button:disabled {
@@ -229,12 +254,12 @@ textarea,
 select {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--surface-strong);
   color: var(--text);
   padding: 0.86rem 0.95rem;
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 input::placeholder,
@@ -258,14 +283,14 @@ input[type='checkbox'] {
 }
 
 .primary-btn {
-  background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 92%, #728fba), var(--primary-strong));
   color: #f8fffd;
-  box-shadow: 0 16px 28px rgba(20, 111, 99, 0.18);
+  box-shadow: 0 10px 24px rgba(8, 16, 30, 0.28);
 }
 
 .secondary-btn,
 .ghost-btn {
-  background: var(--surface-strong);
+  background: color-mix(in srgb, var(--surface-strong) 92%, var(--bg-2));
   border-color: var(--line);
   color: var(--text);
 }
@@ -277,7 +302,7 @@ input[type='checkbox'] {
 }
 
 .ghost-btn.active {
-  background: var(--primary-soft);
+  background: color-mix(in srgb, var(--primary-soft) 72%, var(--surface-strong));
   border-color: color-mix(in srgb, var(--primary) 30%, var(--line));
   color: var(--primary-strong);
 }
@@ -330,9 +355,8 @@ input[type='checkbox'] {
   text-align: center;
   background-color: var(--bg-2);
   background:
-    radial-gradient(circle at 18% 18%, rgba(20, 111, 99, 0.18), transparent 34%),
-    radial-gradient(circle at 82% 24%, rgba(195, 138, 74, 0.18), transparent 32%),
-    linear-gradient(155deg, var(--bg-1), var(--bg-2), var(--bg-3));
+    radial-gradient(circle at 20% 18%, rgba(77, 111, 153, 0.18), transparent 34%),
+    linear-gradient(180deg, var(--bg-1), var(--bg-2), var(--bg-3));
   z-index: 9999;
   transition: opacity 0.75s ease;
 }
@@ -394,7 +418,7 @@ input[type='checkbox'] {
   min-width: 260px;
   max-width: 420px;
   padding: 0.9rem 1rem;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--surface-strong);
   color: var(--text);
@@ -448,7 +472,7 @@ body.launcher-open {
   align-items: center;
   gap: 1rem;
   padding: 0.95rem 1rem;
-  border-radius: 22px;
+  border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--warning) 34%, var(--line));
   background: color-mix(in srgb, var(--surface-strong) 94%, var(--surface));
   box-shadow: var(--shadow);
@@ -474,8 +498,8 @@ body.launcher-open {
 .launcher-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(8, 16, 24, 0.48);
-  backdrop-filter: blur(10px);
+  background: rgba(4, 10, 18, 0.66);
+  backdrop-filter: blur(8px);
 }
 
 .launcher-panel {
@@ -484,11 +508,10 @@ body.launcher-open {
   max-height: min(82vh, 760px);
   overflow: auto;
   padding: 1rem;
-  border-radius: 28px;
+  border-radius: 22px;
   border: 1px solid var(--line);
   background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 86%, transparent), transparent 34%),
-    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 94%, transparent), var(--surface));
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 96%, transparent), var(--surface));
   box-shadow: var(--shadow);
 }
 
@@ -549,8 +572,8 @@ body.launcher-open {
 .tab-content,
 footer {
   border: 1px solid var(--line);
-  background: var(--surface);
-  backdrop-filter: blur(22px);
+  background: color-mix(in srgb, var(--surface) 94%, var(--bg-2));
+  backdrop-filter: blur(14px);
   box-shadow: var(--shadow);
 }
 
@@ -560,12 +583,12 @@ footer {
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 1rem;
-  border-radius: 28px;
+  border-radius: 24px;
   padding: 1rem 1.15rem;
   overflow: hidden;
   isolation: isolate;
   background:
-    linear-gradient(120deg, color-mix(in srgb, var(--surface) 92%, #ffffff), var(--surface)),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 94%, transparent), var(--surface)),
     var(--surface);
 }
 
@@ -574,9 +597,7 @@ footer {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 16% 10%, color-mix(in srgb, var(--primary-soft) 100%, transparent), transparent 34%),
-    radial-gradient(circle at 88% 24%, color-mix(in srgb, var(--secondary-soft) 100%, transparent), transparent 26%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%);
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04), transparent 36%);
   pointer-events: none;
   z-index: -1;
 }
@@ -620,9 +641,9 @@ footer {
   padding: 0.34rem 0.72rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--line));
-  background: color-mix(in srgb, var(--primary-soft) 50%, var(--surface-strong));
+  background: color-mix(in srgb, var(--primary-soft) 42%, var(--surface-strong));
   color: var(--primary-strong);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -633,20 +654,20 @@ footer {
   width: 0.4rem;
   height: 0.4rem;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--secondary), var(--primary));
+  background: var(--primary);
 }
 
 .brand-mark {
   position: relative;
   width: 58px;
   height: 58px;
-  border-radius: 18px;
+  border-radius: 16px;
   display: grid;
   place-items: center;
   background:
-    linear-gradient(145deg, color-mix(in srgb, var(--primary) 72%, #ffffff), color-mix(in srgb, var(--secondary) 54%, #ffffff));
+    linear-gradient(145deg, color-mix(in srgb, var(--primary) 86%, #8fa8cd), color-mix(in srgb, var(--primary-strong) 90%, #08111d));
   border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--line));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
   overflow: hidden;
 }
 
@@ -699,7 +720,7 @@ footer {
   padding: 0.38rem 0.76rem;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: var(--surface-strong);
+  background: color-mix(in srgb, var(--surface-strong) 94%, var(--bg-2));
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
@@ -786,7 +807,7 @@ footer {
 .sidebar-card,
 .tab-content,
 footer {
-  border-radius: 28px;
+  border-radius: 22px;
 }
 
 .profile-rail,
@@ -798,8 +819,7 @@ footer {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--secondary-soft) 100%, transparent), transparent 32%),
-    linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 24%, transparent), transparent 24%),
+    linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 24%, transparent), transparent 20%),
     var(--surface);
 }
 
@@ -807,7 +827,7 @@ footer {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 24%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 24%);
   pointer-events: none;
 }
 
@@ -829,7 +849,7 @@ footer {
 .identity-badge {
   width: 60px;
   height: 60px;
-  border-radius: 18px;
+  border-radius: 16px;
   position: relative;
   overflow: hidden;
   display: grid;
@@ -838,7 +858,7 @@ footer {
   font-size: 1.2rem;
   color: #f8fffd;
   background:
-    linear-gradient(145deg, color-mix(in srgb, var(--primary) 76%, #ffffff), color-mix(in srgb, var(--secondary) 62%, #ffffff));
+    linear-gradient(145deg, color-mix(in srgb, var(--primary) 92%, #8fa8cd), color-mix(in srgb, var(--primary-strong) 90%, #08111d));
 }
 
 .identity-badge-fallback {
@@ -888,7 +908,7 @@ footer {
 
 .identity-handle {
   margin: 0.16rem 0 0;
-  color: var(--primary-strong);
+  color: color-mix(in srgb, var(--primary) 72%, #b6c7df);
   font-size: 0.88rem;
   font-weight: 700;
 }
@@ -903,9 +923,9 @@ footer {
 .profile-progress-card {
   margin-top: 1rem;
   padding: 1rem;
-  border-radius: 22px;
+  border-radius: 18px;
   border: 1px solid var(--line);
-  background: var(--surface-muted);
+  background: color-mix(in srgb, var(--surface-muted) 92%, var(--bg-2));
   display: grid;
   gap: 0.8rem;
 }
@@ -958,7 +978,7 @@ footer {
 }
 
 .progress-fill {
-  background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 55%, #cfe8df));
+  background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 58%, #8ea5c7));
 }
 
 .strength-fill {
@@ -985,9 +1005,9 @@ footer {
 }
 
 .tab-btn.active {
-  background: color-mix(in srgb, var(--primary-soft) 100%, var(--surface-strong));
+  background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface-strong));
   border-color: color-mix(in srgb, var(--primary) 28%, var(--line));
-  color: var(--primary-strong);
+  color: color-mix(in srgb, var(--text) 88%, var(--primary));
 }
 
 .danger-tab {
@@ -1047,13 +1067,11 @@ footer {
   grid-template-columns: minmax(0, 1.25fr) minmax(280px, 340px);
   gap: 1rem;
   align-items: stretch;
-  padding: clamp(1rem, 2vw, 1.45rem);
-  border-radius: 24px;
-  border: 1px solid var(--line);
+  padding: clamp(1.1rem, 2vw, 1.5rem);
+  border-radius: 20px;
+  border: 1px solid var(--line-strong);
   background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 85%, transparent), transparent 45%),
-    radial-gradient(circle at bottom right, color-mix(in srgb, var(--secondary-soft) 90%, transparent), transparent 40%),
-    var(--surface-muted);
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 94%, transparent), var(--surface-muted));
   overflow: hidden;
 }
 
@@ -1062,8 +1080,7 @@ footer {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.14), transparent 40%),
-    linear-gradient(90deg, transparent 55%, color-mix(in srgb, var(--primary-soft) 30%, transparent));
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03), transparent 22%);
   pointer-events: none;
 }
 
@@ -1080,7 +1097,7 @@ footer {
 
 .hero-copy {
   margin: 0.8rem 0 0;
-  max-width: 62ch;
+  max-width: 52ch;
   color: var(--muted);
 }
 
@@ -1097,35 +1114,23 @@ footer {
   width: min(100%, 340px);
   justify-self: end;
   padding: 1rem;
-  border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--line));
   background:
-    linear-gradient(145deg, color-mix(in srgb, var(--primary) 80%, #ffffff), color-mix(in srgb, var(--primary-strong) 80%, #071613));
-  color: #f8fffd;
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 98%, transparent), color-mix(in srgb, var(--surface-muted) 98%, transparent));
+  color: var(--text);
   display: grid;
   gap: 0.9rem;
   overflow: hidden;
-  box-shadow: 0 20px 36px rgba(12, 33, 31, 0.18);
+  box-shadow: var(--shadow-soft);
 }
 
 .hero-brand-card::before {
-  content: '';
-  position: absolute;
-  top: -48px;
-  right: -20px;
-  width: 170px;
-  height: 170px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  display: none;
 }
 
 .hero-brand-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(135deg, transparent 0 14px, rgba(255, 255, 255, 0.06) 14px 15px);
-  opacity: 0.24;
-  pointer-events: none;
+  display: none;
 }
 
 .hero-brand-card > * {
@@ -1142,13 +1147,12 @@ footer {
 .hero-brand-mark {
   width: 52px;
   height: 52px;
-  border-radius: 16px;
+  border-radius: 14px;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface-strong));
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--line));
 }
 
 .hero-brand-mark img {
@@ -1159,7 +1163,7 @@ footer {
 
 .hero-brand-card .eyebrow {
   margin-bottom: 0.25rem;
-  color: rgba(248, 255, 253, 0.72);
+  color: var(--muted);
 }
 
 .hero-brand-card h3 {
@@ -1170,31 +1174,31 @@ footer {
 .hero-brand-copy {
   margin: 0;
   max-width: 28ch;
-  color: rgba(248, 255, 253, 0.86);
+  color: var(--muted);
 }
 
 .hero-brand-card .brand-signal {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.12);
-  color: #f8fffd;
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--line));
+  background: color-mix(in srgb, var(--primary-soft) 48%, var(--surface-strong));
+  color: color-mix(in srgb, var(--text) 84%, var(--primary));
 }
 
 .hero-brand-card .brand-signal::before {
-  background: linear-gradient(135deg, #ffffff, color-mix(in srgb, var(--secondary) 78%, #ffffff));
+  background: var(--primary);
 }
 
 .hero-focus-btn {
   width: 100%;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.18);
-  color: #f8fffd;
+  background: color-mix(in srgb, var(--primary-soft) 60%, var(--surface-strong));
+  border-color: color-mix(in srgb, var(--primary) 26%, var(--line));
+  color: var(--text);
   box-shadow: none;
 }
 
 .hero-focus-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.24);
+  background: color-mix(in srgb, var(--primary-soft) 82%, var(--surface-strong));
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--line));
 }
 
 .metrics-grid {
@@ -1205,9 +1209,9 @@ footer {
 
 .metric-card,
 .section-card {
-  border-radius: 24px;
+  border-radius: 20px;
   border: 1px solid var(--line);
-  background: var(--surface-muted);
+  background: color-mix(in srgb, var(--surface-muted) 96%, var(--bg-2));
   box-shadow: var(--shadow-soft);
 }
 
@@ -1303,9 +1307,9 @@ footer {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.9rem;
   padding: 1rem;
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1px solid var(--line);
-  background: var(--surface-strong);
+  background: color-mix(in srgb, var(--surface-strong) 96%, var(--bg-2));
 }
 
 .action-item strong {
@@ -1355,7 +1359,7 @@ footer {
   padding: 0.5rem 0.82rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--line));
-  background: color-mix(in srgb, var(--primary-soft) 72%, var(--surface-strong));
+  background: color-mix(in srgb, var(--primary-soft) 50%, var(--surface-strong));
   color: var(--primary-strong);
   font-size: 0.88rem;
   font-weight: 700;
@@ -1378,7 +1382,7 @@ footer {
   position: relative;
   min-height: 220px;
   overflow: hidden;
-  border-radius: 24px;
+  border-radius: 20px;
   border: 1px solid var(--line);
   box-shadow: var(--shadow-soft);
 }
@@ -1406,8 +1410,8 @@ footer {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(10, 18, 24, 0.08), rgba(10, 18, 24, 0.78)),
-    linear-gradient(145deg, rgba(20, 111, 99, 0.08), transparent 60%);
+    linear-gradient(180deg, rgba(5, 10, 16, 0.12), rgba(5, 10, 16, 0.82)),
+    linear-gradient(145deg, rgba(53, 84, 118, 0.12), transparent 60%);
 }
 
 .service-link > span {
@@ -1481,9 +1485,9 @@ footer {
 
 .feature-list li {
   padding: 0.9rem 0.95rem;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid var(--line);
-  background: var(--surface-muted);
+  background: color-mix(in srgb, var(--surface-muted) 96%, var(--bg-2));
   color: var(--text);
 }
 
@@ -1511,11 +1515,11 @@ footer {
 .public-profile-visibility {
   display: grid;
   padding: 1rem;
-  border-radius: 22px;
+  border-radius: 18px;
   border: 1px solid var(--line);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 86%, transparent), var(--surface-muted));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 92%, transparent), var(--surface-muted));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .public-profile-summary-card {
@@ -1581,7 +1585,7 @@ footer {
   display: grid;
   gap: 1rem;
   padding: 1rem;
-  border-radius: 22px;
+  border-radius: 18px;
   border: 1px solid var(--line);
   background: var(--surface-strong);
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
@@ -1643,11 +1647,10 @@ footer {
   display: grid;
   gap: 1rem;
   padding: 1rem;
-  border-radius: 22px;
+  border-radius: 18px;
   border: 1px solid var(--line);
   background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 92%, transparent), transparent 34%),
-    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 88%, transparent), var(--surface-muted));
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 92%, transparent), var(--surface-muted));
 }
 
 .public-preview-hero {
@@ -1712,7 +1715,7 @@ footer {
   display: grid;
   gap: 0.2rem;
   padding: 0.95rem 1rem;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--surface-strong);
 }
@@ -1740,7 +1743,7 @@ footer {
   display: grid;
   gap: 0.45rem;
   padding: 0.95rem 1rem;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--surface-strong);
 }
@@ -1784,7 +1787,7 @@ footer {
   justify-content: space-between;
   gap: 1rem;
   padding: 1rem;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--surface-strong);
   color: var(--text);
@@ -1855,7 +1858,7 @@ footer {
   display: grid;
   gap: 1rem;
   padding: 1rem;
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--surface-strong);
 }
@@ -1877,7 +1880,7 @@ footer {
   gap: 1rem;
   align-items: center;
   padding: 1rem;
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--surface-strong);
 }
@@ -1912,8 +1915,8 @@ footer {
   margin-bottom: 1rem;
   padding: 1rem;
   border-radius: 20px;
-  border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--line));
-  background: color-mix(in srgb, var(--secondary-soft) 100%, var(--surface-strong));
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--line));
+  background: color-mix(in srgb, var(--secondary-soft) 42%, var(--surface-strong));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1924,7 +1927,7 @@ footer {
 .mfa-status-card,
 .mfa-setup-panel {
   padding: 1rem;
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--surface-strong);
   display: grid;
@@ -1938,7 +1941,7 @@ footer {
 
 .mfa-step-card {
   padding: 1rem;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
   background: var(--surface-muted);
   display: grid;
@@ -2419,7 +2422,7 @@ footer {
   min-height: 8px;
   border-radius: 999px;
   background: linear-gradient(180deg, var(--primary), var(--primary-strong));
-  box-shadow: 0 10px 18px rgba(20, 111, 99, 0.18);
+  box-shadow: none;
 }
 
 .mini-bar-label {
@@ -2429,7 +2432,7 @@ footer {
 
 .danger-card {
   border-color: color-mix(in srgb, var(--danger) 42%, var(--line));
-  background: color-mix(in srgb, rgba(204, 93, 86, 0.08) 100%, var(--surface-muted));
+  background: color-mix(in srgb, rgba(219, 123, 120, 0.12) 100%, var(--surface-muted));
 }
 
 .danger-note {
@@ -2455,7 +2458,7 @@ footer {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.95rem 1rem;
-  border-radius: 22px;
+  border-radius: 18px;
   border: 1px solid var(--line);
   background: var(--surface-strong);
   box-shadow: var(--shadow-soft);

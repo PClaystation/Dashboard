@@ -1810,7 +1810,7 @@ const clearDashboardUi = () => {
   renderAvatarPreviews(null);
 
   applyAppearance({
-    theme: 'system',
+    theme: 'midnight',
     compactMode: false,
     reducedMotion: false,
     highContrast: false,
@@ -2168,15 +2168,13 @@ const compressAvatarFile = async (file) => {
 };
 
 const applyAppearance = (appearance = {}) => {
-  const theme = safeText(appearance.theme || 'system').toLowerCase() || 'system';
+  const theme = safeText(appearance.theme || 'midnight').toLowerCase() || 'midnight';
   const density = safeText(appearance.dashboardDensity || 'comfortable').toLowerCase() || 'comfortable';
   const compactMode = Boolean(appearance.compactMode);
   const reducedMotion = Boolean(appearance.reducedMotion);
   const highContrast = Boolean(appearance.highContrast);
 
-  const resolvedTheme = theme === 'system'
-    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'dawn')
-    : theme;
+  const resolvedTheme = theme === 'system' ? 'midnight' : theme;
 
   document.documentElement.dataset.theme = resolvedTheme;
   document.documentElement.dataset.density = compactMode ? 'compact' : density;
@@ -3153,7 +3151,10 @@ const fillPreferences = (user) => {
   if (dom.notifyWeeklyDigest) dom.notifyWeeklyDigest.checked = Boolean(notifications.weeklyDigest);
   if (dom.notifySecurity) dom.notifySecurity.checked = Boolean(notifications.security);
 
-  if (dom.appearanceTheme) dom.appearanceTheme.value = appearance.theme || 'system';
+  if (dom.appearanceTheme) {
+    const themeValue = safeText(appearance.theme || 'midnight').toLowerCase();
+    dom.appearanceTheme.value = themeValue === 'system' ? 'midnight' : themeValue;
+  }
   if (dom.appearanceDensity) dom.appearanceDensity.value = appearance.dashboardDensity || 'comfortable';
   if (dom.appearanceCompactMode) dom.appearanceCompactMode.checked = Boolean(appearance.compactMode);
   if (dom.appearanceReducedMotion) dom.appearanceReducedMotion.checked = Boolean(appearance.reducedMotion);
@@ -4990,7 +4991,7 @@ const buildPreferencesPayload = () => ({
     security: Boolean(dom.notifySecurity?.checked),
   },
   appearance: {
-    theme: safeText(dom.appearanceTheme?.value || 'system'),
+    theme: safeText(dom.appearanceTheme?.value || 'midnight'),
     compactMode: Boolean(dom.appearanceCompactMode?.checked),
     reducedMotion: Boolean(dom.appearanceReducedMotion?.checked),
     highContrast: Boolean(dom.appearanceHighContrast?.checked),
@@ -5041,7 +5042,7 @@ const setDashboardTipsEnabled = (enabled) => {
 };
 
 const handleAppearanceReset = async () => {
-  if (dom.appearanceTheme) dom.appearanceTheme.value = 'system';
+  if (dom.appearanceTheme) dom.appearanceTheme.value = 'midnight';
   if (dom.appearanceDensity) dom.appearanceDensity.value = 'comfortable';
   if (dom.appearanceCompactMode) dom.appearanceCompactMode.checked = false;
   if (dom.appearanceReducedMotion) dom.appearanceReducedMotion.checked = false;
@@ -5961,10 +5962,10 @@ const setupEventHandlers = () => {
   const systemThemeMedia = window.matchMedia('(prefers-color-scheme: dark)');
   if (systemThemeMedia && typeof systemThemeMedia.addEventListener === 'function') {
     systemThemeMedia.addEventListener('change', () => {
-      const selectedTheme = safeText(dom.appearanceTheme?.value || 'system').toLowerCase();
+      const selectedTheme = safeText(dom.appearanceTheme?.value || 'midnight').toLowerCase();
       if (selectedTheme === 'system') {
         applyAppearance({
-          theme: 'system',
+          theme: 'midnight',
           compactMode: Boolean(dom.appearanceCompactMode?.checked),
           reducedMotion: Boolean(dom.appearanceReducedMotion?.checked),
           highContrast: Boolean(dom.appearanceHighContrast?.checked),
