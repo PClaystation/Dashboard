@@ -116,6 +116,10 @@ html[data-high-contrast='true'] {
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -126,6 +130,7 @@ body {
   position: relative;
   font-family: 'Manrope', sans-serif;
   color: var(--text);
+  background-color: var(--bg-2);
   background:
     radial-gradient(circle at 12% 10%, rgba(20, 111, 99, 0.12), transparent 32%),
     radial-gradient(circle at 84% 16%, rgba(195, 138, 74, 0.12), transparent 28%),
@@ -323,6 +328,7 @@ input[type='checkbox'] {
   place-content: center;
   gap: 1rem;
   text-align: center;
+  background-color: var(--bg-2);
   background:
     radial-gradient(circle at 18% 18%, rgba(20, 111, 99, 0.18), transparent 34%),
     radial-gradient(circle at 82% 24%, rgba(195, 138, 74, 0.18), transparent 32%),

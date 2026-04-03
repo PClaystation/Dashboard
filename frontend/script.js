@@ -4325,12 +4325,14 @@ const showApp = () => {
     dom.loadingActions.hidden = true;
   }
 
+  dom.appContent.style.display = 'grid';
+  dom.appContent.offsetWidth;
+  dom.appContent.classList.add('fade-in');
+
+  dom.loadingScreen.style.pointerEvents = 'none';
   dom.loadingScreen.style.opacity = '0';
   setTimeout(() => {
     dom.loadingScreen.style.display = 'none';
-    dom.appContent.style.display = 'grid';
-    dom.appContent.offsetWidth;
-    dom.appContent.classList.add('fade-in');
 
     if (dom.cookiePopup && dom.cookieAcceptBtn) {
       if (!localStorage.getItem('cookiesAccepted')) {
