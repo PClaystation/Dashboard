@@ -397,13 +397,14 @@
               </div>
 
               <form id="profile-form" class="form-grid">
-                <div class="profile-avatar-card wide-field">
+                <div id="profile-avatar-card" class="profile-avatar-card wide-field">
                   <div class="profile-avatar-row">
                     <div id="profile-avatar-preview" class="identity-badge profile-avatar-preview" aria-hidden="true">CI</div>
                     <div class="profile-avatar-copy">
                       <p class="eyebrow">Profile picture</p>
                       <h3>Avatar</h3>
-                      <p id="profile-avatar-helper" class="helper-line">Upload or paste an image URL.</p>
+                      <p id="profile-avatar-helper" class="helper-line">Upload, drag, paste an image, or paste a direct image URL.</p>
+                      <p id="profile-avatar-meta" class="helper-line avatar-meta-line">Square crop, live validation, and fallback rendering are built in.</p>
                     </div>
                   </div>
                   <div class="profile-avatar-actions">
@@ -727,24 +728,20 @@
                   </div>
                 </article>
 
-                <article id="oauth-microsoft-card" class="oauth-provider-card">
+                <article id="oauth-discord-card" class="oauth-provider-card">
                   <div class="oauth-provider-copy">
                     <p class="eyebrow">Verified identity</p>
-                    <h4>Microsoft sign-in</h4>
-                    <p id="oauth-microsoft-status" class="helper-line">
-                      Microsoft sign-in is loading.
+                    <h4>Discord sign-in</h4>
+                    <p id="oauth-discord-status" class="helper-line">
+                      Discord sign-in is loading.
                     </p>
                   </div>
                   <div class="oauth-provider-actions">
-                    <button
-                      id="oauth-microsoft-connect-btn"
-                      class="secondary-btn"
-                      type="button"
-                    >
-                      Connect Microsoft
+                    <button id="oauth-discord-connect-btn" class="secondary-btn" type="button">
+                      Connect Discord
                     </button>
                     <button
-                      id="oauth-microsoft-unlink-btn"
+                      id="oauth-discord-unlink-btn"
                       class="danger-btn"
                       type="button"
                       hidden
@@ -753,11 +750,17 @@
                     </button>
                   </div>
                 </article>
+
               </div>
 
               <p class="helper-line">
                 Verified identity providers are used for sign-in and secure account linking. The
                 profile fields below still control what appears on your public profile.
+              </p>
+
+              <p class="helper-line">
+                Microsoft OAuth is intentionally hidden in the dashboard for now while the provider
+                setup is finished. That is expected behavior, not a broken sign-in option.
               </p>
 
               <form id="linked-form" class="form-grid">

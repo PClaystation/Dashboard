@@ -26,8 +26,11 @@ const OVERVIEW_ACTIVITY_LIMIT = 4;
 const AVATAR_UPLOAD_MAX_FILE_BYTES = 5 * 1024 * 1024;
 const AVATAR_UPLOAD_MAX_DIMENSION = 256;
 const AVATAR_DATA_URL_MAX_LENGTH = 350000;
+const AVATAR_URL_VALIDATION_TIMEOUT_MS = 7000;
+const AVATAR_RENDER_TIMEOUT_MS = 10000;
+const AVATAR_REMOTE_MAX_DIMENSION = 4096;
 const AVATAR_ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
-const OAUTH_PROVIDERS = ['github', 'google', 'microsoft'];
+const OAUTH_PROVIDERS = ['github', 'google', 'discord'];
 const BLOCKED_NAME_FRAGMENTS = [
   'anal',
   'anus',
@@ -186,8 +189,10 @@ const dom = {
   profileHeadline: document.getElementById('profile-headline'),
   profileEmail: document.getElementById('profile-email'),
   profileEmailCurrentPassword: document.getElementById('profile-email-current-password'),
+  profileAvatarCard: document.getElementById('profile-avatar-card'),
   profileAvatarPreview: document.getElementById('profile-avatar-preview'),
   profileAvatarHelper: document.getElementById('profile-avatar-helper'),
+  profileAvatarMeta: document.getElementById('profile-avatar-meta'),
   profileAvatarUrl: document.getElementById('profile-avatar-url'),
   profileAvatarUpload: document.getElementById('profile-avatar-upload'),
   profileAvatarUploadBtn: document.getElementById('profile-avatar-upload-btn'),
@@ -238,9 +243,9 @@ const dom = {
   oauthGoogleStatus: document.getElementById('oauth-google-status'),
   oauthGoogleConnectBtn: document.getElementById('oauth-google-connect-btn'),
   oauthGoogleUnlinkBtn: document.getElementById('oauth-google-unlink-btn'),
-  oauthMicrosoftStatus: document.getElementById('oauth-microsoft-status'),
-  oauthMicrosoftConnectBtn: document.getElementById('oauth-microsoft-connect-btn'),
-  oauthMicrosoftUnlinkBtn: document.getElementById('oauth-microsoft-unlink-btn'),
+  oauthDiscordStatus: document.getElementById('oauth-discord-status'),
+  oauthDiscordConnectBtn: document.getElementById('oauth-discord-connect-btn'),
+  oauthDiscordUnlinkBtn: document.getElementById('oauth-discord-unlink-btn'),
 
   passwordForm: document.getElementById('password-form'),
   passwordSaveBtn: document.getElementById('password-save-btn'),
@@ -430,6 +435,40 @@ const normalizePublicProfileSettings = (settings = {}) => ({
   linkedAccounts: Boolean(settings?.linkedAccounts),
   memberSince: Boolean(settings?.memberSince),
 });
+
+const createEmptyAvatarMeta = () => ({
+  kind: '',
+  mimeType: '',
+  width: 0,
+  height: 0,
+  updatedAt: '',
+});
+
+const normalizeAvatarKind = (value, avatarValue = '') => {
+  const normalized = safeText(value).toLowerCase();
+  if (['upload', 'url', 'oauth'].includes(normalized)) {
+    return normalized;
+  }
+  if (!safeText(avatarValue)) {
+    return '';
+  }
+  return String(avatarValue).startsWith('data:image/') ? 'upload' : 'url';
+};
+
+const normalizeAvatarMeta = (meta = {}, avatarValue = '') => {
+  const source = meta && typeof meta === 'object' ? meta : {};
+  const width = Math.max(0, Math.min(AVATAR_REMOTE_MAX_DIMENSION, Math.round(Number(source.width) || 0)));
+  const height = Math.max(0, Math.min(AVATAR_REMOTE_MAX_DIMENSION, Math.round(Number(source.height) || 0)));
+  const normalizedUpdatedAt = safeText(source.updatedAt);
+
+  return {
+    kind: normalizeAvatarKind(source.kind, avatarValue),
+    mimeType: /^image\/[-+.\w]+$/i.test(safeText(source.mimeType)) ? safeText(source.mimeType).toLowerCase() : '',
+    width,
+    height,
+    updatedAt: normalizedUpdatedAt || '',
+  };
+};
 
 const normalizeFocusAreas = (value) => {
   const rawValues = Array.isArray(value) ? value : String(value || '').split(/[,\n]/);
@@ -639,6 +678,14 @@ const state = {
   recentServices: readStoredArray(SERVICE_RECENT_STORAGE_KEY).map((value) => safeText(value).toLowerCase()).filter(Boolean),
   activeTab: 'overview',
   profileAvatarDraft: '',
+  profileAvatarMetaDraft: createEmptyAvatarMeta(),
+  profileAvatarStatus: {
+    state: 'empty',
+    message: '',
+    detail: '',
+  },
+  profileAvatarValidationId: 0,
+  profileAvatarValidationTimer: null,
   mfaSetup: null,
   launcherOpen: false,
   launcherActiveIndex: 0,
@@ -708,7 +755,7 @@ const getOauthProviderLabel = (provider) => {
   const normalized = safeText(provider).toLowerCase();
   if (normalized === 'github') return 'GitHub';
   if (normalized === 'google') return 'Google';
-  if (normalized === 'microsoft') return 'Microsoft';
+  if (normalized === 'discord') return 'Discord';
   return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : 'Identity provider';
 };
 
@@ -739,11 +786,11 @@ const getOauthProviderElements = (provider) => {
       unlinkBtn: dom.oauthGoogleUnlinkBtn,
     };
   }
-  if (normalized === 'microsoft') {
+  if (normalized === 'discord') {
     return {
-      status: dom.oauthMicrosoftStatus,
-      connectBtn: dom.oauthMicrosoftConnectBtn,
-      unlinkBtn: dom.oauthMicrosoftUnlinkBtn,
+      status: dom.oauthDiscordStatus,
+      connectBtn: dom.oauthDiscordConnectBtn,
+      unlinkBtn: dom.oauthDiscordUnlinkBtn,
     };
   }
 
@@ -930,6 +977,7 @@ const getUserHandle = (user = state.user) => {
   return username ? `@${username}` : '';
 };
 const getAvatarValue = (user = state.user) => safeText(user?.profile?.avatar);
+const getAvatarMeta = (user = state.user) => normalizeAvatarMeta(user?.profile?.avatarMeta, getAvatarValue(user));
 
 const getIdentityName = (user = state.user) =>
   safeText(user?.displayName || getUsername(user) || user?.email || user?.continentalId || user?.userId || 'Continental User');
@@ -966,52 +1014,173 @@ const normalizeAvatarInput = (value) => {
   }
 };
 
-const setAvatarElement = (element, avatarValue, fallbackText) => {
+const formatAvatarDimensions = (width, height) => {
+  const normalizedWidth = Math.max(0, Number(width) || 0);
+  const normalizedHeight = Math.max(0, Number(height) || 0);
+  if (!normalizedWidth || !normalizedHeight) {
+    return '';
+  }
+  return `${normalizedWidth} x ${normalizedHeight}`;
+};
+
+const guessAvatarMimeTypeFromUrl = (url) => {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    if (pathname.endsWith('.png')) return 'image/png';
+    if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) return 'image/jpeg';
+    if (pathname.endsWith('.gif')) return 'image/gif';
+    if (pathname.endsWith('.webp')) return 'image/webp';
+    if (pathname.endsWith('.avif')) return 'image/avif';
+  } catch {
+    return '';
+  }
+  return '';
+};
+
+const getAvatarStatusCopy = () => {
+  const current = state.profileAvatarStatus || {};
+  if (current.state === 'validating') {
+    return {
+      message: current.message || 'Checking the image URL before saving.',
+      detail: current.detail || 'If the image cannot load here, it will not be saved.',
+    };
+  }
+  if (current.state === 'error') {
+    return {
+      message: current.message || 'Avatar needs attention before it can be saved.',
+      detail: current.detail || 'Use an uploaded image or a direct URL the browser can actually load.',
+    };
+  }
+  if (current.state === 'ready') {
+    return {
+      message: current.message || 'Avatar is ready to save.',
+      detail: current.detail || 'Rendering includes live fallback handling if the image breaks later.',
+    };
+  }
+  return {
+    message: 'Upload, drag, paste an image, or paste a direct image URL.',
+    detail: 'Square crop, live validation, and fallback rendering are built in.',
+  };
+};
+
+const setAvatarDraftStatus = (nextState = 'empty', message = '', detail = '') => {
+  state.profileAvatarStatus = {
+    state: nextState,
+    message,
+    detail,
+  };
+  if (dom.profileAvatarCard) {
+    dom.profileAvatarCard.dataset.avatarStatus = nextState;
+  }
+  updateProfileAvatarHelper();
+};
+
+const clearAvatarValidationTimer = () => {
+  if (!state.profileAvatarValidationTimer) return;
+  window.clearTimeout(state.profileAvatarValidationTimer);
+  state.profileAvatarValidationTimer = null;
+};
+
+const loadImageSource = (src, options = {}) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    const timeoutMs = Math.max(1000, Number(options.timeoutMs) || AVATAR_RENDER_TIMEOUT_MS);
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      image.onload = null;
+      image.onerror = null;
+    };
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Image request timed out.'));
+    }, timeoutMs);
+
+    image.decoding = 'async';
+    image.referrerPolicy = 'no-referrer';
+    image.onload = () => {
+      cleanup();
+      resolve({
+        image,
+        width: Number(image.naturalWidth || image.width || 0),
+        height: Number(image.naturalHeight || image.height || 0),
+      });
+    };
+    image.onerror = () => {
+      cleanup();
+      reject(new Error('Image could not be loaded.'));
+    };
+    image.src = src;
+  });
+
+const setAvatarElement = (element, avatarValue, fallbackText, options = {}) => {
   if (!element) return;
 
   const normalized = normalizeAvatarInput(avatarValue);
-  const hasAvatar = Boolean(normalized);
+  const altText = safeText(options.altText);
 
-  element.textContent = fallbackText;
-  element.classList.toggle('has-image', hasAvatar);
-  element.style.backgroundImage = hasAvatar ? `url(${JSON.stringify(normalized)})` : '';
+  element.innerHTML = '';
+  element.classList.remove('has-image', 'is-loading', 'is-broken');
+
+  const fallback = document.createElement('span');
+  fallback.className = 'identity-badge-fallback';
+  fallback.textContent = fallbackText;
+  element.appendChild(fallback);
+
+  if (!normalized) {
+    return;
+  }
+
+  const image = document.createElement('img');
+  image.className = 'identity-badge-image';
+  image.alt = altText;
+  image.decoding = 'async';
+  image.loading = 'lazy';
+  image.referrerPolicy = 'no-referrer';
+  image.addEventListener('load', () => {
+    element.classList.remove('is-loading', 'is-broken');
+    element.classList.add('has-image');
+  });
+  image.addEventListener('error', () => {
+    element.classList.remove('is-loading', 'has-image');
+    element.classList.add('is-broken');
+  });
+
+  element.classList.add('is-loading');
+  element.appendChild(image);
+  image.src = normalized;
 };
 
-const updateProfileAvatarHelper = (avatarValue = state.profileAvatarDraft) => {
-  if (!dom.profileAvatarHelper) return;
-
-  if (!avatarValue) {
-    dom.profileAvatarHelper.textContent = 'Upload or paste an image URL.';
-    return;
+const updateProfileAvatarHelper = () => {
+  const copy = getAvatarStatusCopy();
+  if (dom.profileAvatarHelper) {
+    dom.profileAvatarHelper.textContent = copy.message;
   }
-
-  const normalized = normalizeAvatarInput(avatarValue);
-  if (!normalized) {
-    dom.profileAvatarHelper.textContent = 'Use a direct image URL or upload a file.';
-    return;
+  if (dom.profileAvatarMeta) {
+    dom.profileAvatarMeta.textContent = copy.detail;
   }
-
-  if (String(normalized).startsWith('data:image/')) {
-    dom.profileAvatarHelper.textContent = 'Uploaded image ready. Save to apply it.';
-    return;
-  }
-
-  dom.profileAvatarHelper.textContent = 'Avatar URL ready. Save to apply it.';
 };
 
 const renderAvatarPreviews = (user = state.user) => {
   const fallbackText = getIdentityInitials(user);
   const heroAvatar = getAvatarValue(user);
   const profileAvatar = state.profileAvatarDraft;
+  const identityName = getIdentityName(user);
 
-  setAvatarElement(dom.heroInitials, heroAvatar, fallbackText);
-  setAvatarElement(dom.profileAvatarPreview, profileAvatar, fallbackText);
-  updateProfileAvatarHelper(profileAvatar);
+  setAvatarElement(dom.heroInitials, heroAvatar, fallbackText, {
+    altText: `${identityName} avatar`,
+  });
+  setAvatarElement(dom.profileAvatarPreview, profileAvatar, fallbackText, {
+    altText: '',
+  });
+  updateProfileAvatarHelper();
 };
 
 const resetProfileAvatarDraft = (user = state.user) => {
   const avatar = getAvatarValue(user);
+  clearAvatarValidationTimer();
   state.profileAvatarDraft = avatar;
+  state.profileAvatarMetaDraft = getAvatarMeta(user);
+  state.profileAvatarValidationId += 1;
 
   if (dom.profileAvatarUrl) {
     dom.profileAvatarUrl.value = avatar && !String(avatar).startsWith('data:image/') ? avatar : '';
@@ -1019,6 +1188,26 @@ const resetProfileAvatarDraft = (user = state.user) => {
 
   if (dom.profileAvatarUpload) {
     dom.profileAvatarUpload.value = '';
+  }
+
+  if (!avatar) {
+    state.profileAvatarMetaDraft = createEmptyAvatarMeta();
+    setAvatarDraftStatus('empty');
+  } else {
+    const meta = normalizeAvatarMeta(state.profileAvatarMetaDraft, avatar);
+    state.profileAvatarMetaDraft = meta;
+    const sourceLabel = meta.kind === 'url' ? 'Remote avatar' : 'Uploaded avatar';
+    const details = [
+      formatAvatarDimensions(meta.width, meta.height),
+      meta.mimeType ? meta.mimeType.replace('image/', '').toUpperCase() : '',
+    ].filter(Boolean);
+    setAvatarDraftStatus(
+      'ready',
+      `${sourceLabel} loaded.`,
+      details.length
+        ? `${details.join(' | ')}. Save after changes to keep the latest avatar state.`
+        : 'Save after changes to keep the latest avatar state.'
+    );
   }
 
   renderAvatarPreviews(user);
@@ -1543,8 +1732,12 @@ const clearDashboardUi = () => {
   state.sessions = [];
   state.devices = [];
   state.sessionLimit = null;
+  clearAvatarValidationTimer();
   state.profileAvatarDraft = '';
+  state.profileAvatarMetaDraft = createEmptyAvatarMeta();
+  state.profileAvatarValidationId += 1;
   state.mfaSetup = null;
+  setAvatarDraftStatus('empty');
 
   if (dom.summaryId) dom.summaryId.textContent = '-';
   if (dom.summaryUsername) dom.summaryUsername.textContent = '-';
@@ -1871,14 +2064,6 @@ const updatePasswordStrengthUi = () => {
   dom.passwordStrengthText.textContent = `Password strength: ${strength.label}`;
 };
 
-const loadImageFromDataUrl = (dataUrl) =>
-  new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('Selected image could not be loaded.'));
-    image.src = dataUrl;
-  });
-
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1886,6 +2071,72 @@ const readFileAsDataUrl = (file) =>
     reader.onerror = () => reject(new Error('Selected file could not be read.'));
     reader.readAsDataURL(file);
   });
+
+const buildAvatarCanvas = (image) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = AVATAR_UPLOAD_MAX_DIMENSION;
+  canvas.height = AVATAR_UPLOAD_MAX_DIMENSION;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Avatar processing is not available in this browser.');
+  }
+
+  const sourceWidth = Math.max(1, Number(image.naturalWidth || image.width || 0));
+  const sourceHeight = Math.max(1, Number(image.naturalHeight || image.height || 0));
+  const sourceSize = Math.max(1, Math.min(sourceWidth, sourceHeight));
+  const offsetX = Math.max(0, Math.round((sourceWidth - sourceSize) / 2));
+  const offsetY = Math.max(0, Math.round((sourceHeight - sourceSize) / 2));
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(
+    image,
+    offsetX,
+    offsetY,
+    sourceSize,
+    sourceSize,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  return canvas;
+};
+
+const encodeAvatarCanvas = (canvas, originalMimeType = '') => {
+  const attempts = [
+    ['image/webp', 0.92],
+    ['image/webp', 0.84],
+    ['image/webp', 0.76],
+    ['image/png'],
+    ['image/jpeg', 0.88],
+    ['image/jpeg', 0.8],
+  ];
+
+  for (const [mimeType, quality] of attempts) {
+    const encoded = typeof quality === 'number'
+      ? canvas.toDataURL(mimeType, quality)
+      : canvas.toDataURL(mimeType);
+    if (encoded.length <= AVATAR_DATA_URL_MAX_LENGTH) {
+      return {
+        dataUrl: encoded,
+        meta: normalizeAvatarMeta(
+          {
+            kind: 'upload',
+            mimeType: encoded.slice(5, encoded.indexOf(';')) || originalMimeType,
+            width: canvas.width,
+            height: canvas.height,
+            updatedAt: new Date().toISOString(),
+          },
+          encoded
+        ),
+      };
+    }
+  }
+
+  throw new Error('Avatar image is still too large after resizing. Try a smaller source image.');
+};
 
 const compressAvatarFile = async (file) => {
   if (!file) {
@@ -1901,32 +2152,9 @@ const compressAvatarFile = async (file) => {
   }
 
   const rawDataUrl = await readFileAsDataUrl(file);
-  const image = await loadImageFromDataUrl(rawDataUrl);
-  const scale = Math.min(1, AVATAR_UPLOAD_MAX_DIMENSION / Math.max(image.width, image.height, 1));
-  const width = Math.max(1, Math.round(image.width * scale));
-  const height = Math.max(1, Math.round(image.height * scale));
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-
-  const context = canvas.getContext('2d');
-  if (!context) {
-    throw new Error('Avatar processing is not available in this browser.');
-  }
-
-  context.drawImage(image, 0, 0, width, height);
-
-  let compressed = canvas.toDataURL('image/webp', 0.82);
-  if (compressed.length > AVATAR_DATA_URL_MAX_LENGTH) {
-    compressed = canvas.toDataURL('image/jpeg', 0.8);
-  }
-
-  if (compressed.length > AVATAR_DATA_URL_MAX_LENGTH) {
-    throw new Error('Avatar image is still too large after resizing. Try a smaller source image.');
-  }
-
-  return compressed;
+  const { image } = await loadImageSource(rawDataUrl, { timeoutMs: AVATAR_RENDER_TIMEOUT_MS });
+  const canvas = buildAvatarCanvas(image);
+  return encodeAvatarCanvas(canvas, file.type || '');
 };
 
 const applyAppearance = (appearance = {}) => {
@@ -2521,7 +2749,9 @@ const renderPublicProfilePreview = (user = state.user) => {
   const draft = getDraftPublicProfilePreview(user);
   const previewIdentity = draft.displayName || draft.username || user?.email || 'Continental User';
 
-  setAvatarElement(dom.profilePreviewAvatar, draft.avatar, getInitialsFromSource(previewIdentity));
+  setAvatarElement(dom.profilePreviewAvatar, draft.avatar, getInitialsFromSource(previewIdentity), {
+    altText: '',
+  });
 
   if (dom.profilePreviewVisibility) {
     dom.profilePreviewVisibility.textContent = draft.isPublic
@@ -4216,6 +4446,7 @@ const handleProfileSave = async (event) => {
   const headline = safeText(dom.profileHeadline?.value);
   const email = safeText(dom.profileEmail?.value).toLowerCase();
   const avatar = normalizeAvatarInput(state.profileAvatarDraft || dom.profileAvatarUrl?.value);
+  const avatarMeta = avatar ? normalizeAvatarMeta(state.profileAvatarMetaDraft, avatar) : createEmptyAvatarMeta();
   const website = normalizeWebsiteInput(dom.profileWebsite?.value);
   const currentEmail = safeText(state.user?.email).toLowerCase();
   const emailChanged = email !== currentEmail;
@@ -4243,6 +4474,16 @@ const handleProfileSave = async (event) => {
 
   if ((state.profileAvatarDraft || dom.profileAvatarUrl?.value) && avatar === null) {
     showToast('Avatar must be a direct image URL or an uploaded image.', 'error');
+    return;
+  }
+
+  if (state.profileAvatarStatus?.state === 'validating') {
+    showToast('Wait for avatar validation to finish before saving.', 'warn');
+    return;
+  }
+
+  if (state.profileAvatarStatus?.state === 'error') {
+    showToast(state.profileAvatarStatus.message || 'Avatar needs attention before saving.', 'error');
     return;
   }
 
@@ -4277,6 +4518,7 @@ const handleProfileSave = async (event) => {
       mfaCode: emailChangeMfa.mfaCode,
       backupCode: emailChangeMfa.backupCode,
       avatar: avatar || '',
+      avatarMeta,
       location: safeText(dom.profileLocation?.value),
       website,
       timezone: '',
@@ -4837,14 +5079,163 @@ const handleDeleteAccount = async (event) => {
   }
 };
 
-const syncProfileAvatarDraft = (value) => {
-  state.profileAvatarDraft = safeText(value);
+const renderAvatarDraft = () => {
   renderAvatarPreviews(state.user);
   renderPublicProfilePreview(state.user);
 };
 
+const syncProfileAvatarDraft = (value, options = {}) => {
+  const normalizedValue = safeText(value);
+  clearAvatarValidationTimer();
+  const nextMeta = normalizedValue
+    ? normalizeAvatarMeta(options.meta, normalizedValue)
+    : createEmptyAvatarMeta();
+
+  state.profileAvatarDraft = normalizedValue;
+  state.profileAvatarMetaDraft = nextMeta;
+  state.profileAvatarValidationId += 1;
+
+  if (!normalizedValue) {
+    setAvatarDraftStatus('empty');
+    renderAvatarDraft();
+    return;
+  }
+
+  const normalizedAvatar = normalizeAvatarInput(normalizedValue);
+  if (!normalizedAvatar) {
+    setAvatarDraftStatus(
+      'error',
+      'Avatar format is invalid.',
+      'Use an uploaded image or a direct HTTP/HTTPS image URL.'
+    );
+    renderAvatarDraft();
+    return;
+  }
+
+  if (String(normalizedAvatar).startsWith('data:image/')) {
+    const meta = normalizeAvatarMeta(
+      {
+        ...nextMeta,
+        kind: 'upload',
+        mimeType: nextMeta.mimeType || normalizedAvatar.slice(5, normalizedAvatar.indexOf(';')),
+        updatedAt: nextMeta.updatedAt || new Date().toISOString(),
+      },
+      normalizedAvatar
+    );
+    state.profileAvatarDraft = normalizedAvatar;
+    state.profileAvatarMetaDraft = meta;
+    const dimensions = formatAvatarDimensions(meta.width, meta.height) || '256 x 256';
+    setAvatarDraftStatus(
+      'ready',
+      'Uploaded avatar is ready to save.',
+      `${dimensions}. Center-cropped and optimized for stable rendering.`
+    );
+    renderAvatarDraft();
+    return;
+  }
+
+  state.profileAvatarDraft = normalizedAvatar;
+  state.profileAvatarMetaDraft = normalizeAvatarMeta(
+    {
+      ...nextMeta,
+      kind: 'url',
+      mimeType: nextMeta.mimeType || guessAvatarMimeTypeFromUrl(normalizedAvatar),
+    },
+    normalizedAvatar
+  );
+
+  const validationId = state.profileAvatarValidationId;
+  setAvatarDraftStatus(
+    'validating',
+    'Checking the remote avatar URL.',
+    'The browser is loading the image now so broken URLs get caught before save.'
+  );
+  renderAvatarDraft();
+
+  state.profileAvatarValidationTimer = window.setTimeout(() => {
+    state.profileAvatarValidationTimer = null;
+
+    loadImageSource(normalizedAvatar, { timeoutMs: AVATAR_URL_VALIDATION_TIMEOUT_MS })
+      .then(({ width, height }) => {
+        if (validationId !== state.profileAvatarValidationId) {
+          return;
+        }
+        if (Math.max(width, height) > AVATAR_REMOTE_MAX_DIMENSION) {
+          setAvatarDraftStatus(
+            'error',
+            'The remote avatar is too large to trust as a profile picture.',
+            `Use an image under ${AVATAR_REMOTE_MAX_DIMENSION}px on its longest side, or upload the file so it can be optimized locally.`
+          );
+          renderAvatarDraft();
+          return;
+        }
+
+        const meta = normalizeAvatarMeta(
+          {
+            ...state.profileAvatarMetaDraft,
+            kind: 'url',
+            mimeType: state.profileAvatarMetaDraft.mimeType || guessAvatarMimeTypeFromUrl(normalizedAvatar),
+            width,
+            height,
+            updatedAt: new Date().toISOString(),
+          },
+          normalizedAvatar
+        );
+        state.profileAvatarMetaDraft = meta;
+        const details = [
+          formatAvatarDimensions(width, height),
+          meta.mimeType ? meta.mimeType.replace('image/', '').toUpperCase() : '',
+        ].filter(Boolean);
+        setAvatarDraftStatus(
+          'ready',
+          'Remote avatar is reachable and ready to save.',
+          details.length
+            ? `${details.join(' | ')}. Fallback initials stay in place if the source fails later.`
+            : 'Fallback initials stay in place if the source fails later.'
+        );
+        renderAvatarDraft();
+      })
+      .catch((error) => {
+        if (validationId !== state.profileAvatarValidationId) {
+          return;
+        }
+        setAvatarDraftStatus(
+          'error',
+          'The remote avatar could not be loaded.',
+          error.message || 'Use a different image URL or upload the file directly.'
+        );
+        renderAvatarDraft();
+      });
+  }, 260);
+};
+
 const handleProfileAvatarUrlInput = () => {
-  syncProfileAvatarDraft(dom.profileAvatarUrl?.value || '');
+  syncProfileAvatarDraft(dom.profileAvatarUrl?.value || '', {
+    meta: {
+      kind: 'url',
+    },
+  });
+};
+
+const applyAvatarFileToDraft = async (file, successMessage = 'Avatar image ready to save.') => {
+  const { dataUrl, meta } = await compressAvatarFile(file);
+  state.profileAvatarDraft = dataUrl;
+  state.profileAvatarMetaDraft = meta;
+  state.profileAvatarValidationId += 1;
+  if (dom.profileAvatarUpload) {
+    dom.profileAvatarUpload.value = '';
+  }
+  if (dom.profileAvatarUrl) {
+    dom.profileAvatarUrl.value = '';
+  }
+  setAvatarDraftStatus(
+    'ready',
+    'Uploaded avatar is ready to save.',
+    `${formatAvatarDimensions(meta.width, meta.height) || '256 x 256'}. Center-cropped and optimized for consistent profile rendering.`
+  );
+  renderAvatarDraft();
+  markFormDirty(dom.profileForm);
+  showToast(successMessage, 'success');
 };
 
 const handleProfileAvatarUpload = async (event) => {
@@ -4852,33 +5243,95 @@ const handleProfileAvatarUpload = async (event) => {
   if (!file) return;
 
   try {
-    const avatarDataUrl = await compressAvatarFile(file);
-    state.profileAvatarDraft = avatarDataUrl;
-    if (dom.profileAvatarUrl) {
-      dom.profileAvatarUrl.value = '';
-    }
-    renderAvatarPreviews(state.user);
-    renderPublicProfilePreview(state.user);
-    markFormDirty(dom.profileForm);
-    showToast('Avatar image ready to save.', 'success');
+    await applyAvatarFileToDraft(file);
   } catch (err) {
     if (dom.profileAvatarUpload) {
       dom.profileAvatarUpload.value = '';
     }
+    setAvatarDraftStatus('error', 'Avatar upload failed.', err.message || 'Choose a different image.');
     showToast(err.message, 'error');
   }
 };
 
+const handleProfileAvatarPaste = async (event) => {
+  const files = Array.from(event.clipboardData?.files || []).filter((file) => AVATAR_ALLOWED_MIME_TYPES.has(file.type));
+  if (files[0]) {
+    event.preventDefault();
+    try {
+      await applyAvatarFileToDraft(files[0], 'Avatar pasted and ready to save.');
+    } catch (err) {
+      setAvatarDraftStatus('error', 'Avatar paste failed.', err.message || 'Choose a different image.');
+      showToast(err.message, 'error');
+    }
+    return;
+  }
+
+  const pastedText = safeText(event.clipboardData?.getData('text/plain') || '');
+  if (pastedText && !dom.profileAvatarUrl?.matches(':focus')) {
+    if (dom.profileAvatarUrl) {
+      dom.profileAvatarUrl.value = pastedText;
+    }
+    handleProfileAvatarUrlInput();
+    markFormDirty(dom.profileForm);
+  }
+};
+
+const handleProfileAvatarDragState = (active) => {
+  if (!dom.profileAvatarCard) return;
+  dom.profileAvatarCard.classList.toggle('drag-active', active);
+};
+
+const handleProfileAvatarDragOver = (event) => {
+  event.preventDefault();
+  handleProfileAvatarDragState(true);
+};
+
+const handleProfileAvatarDragLeave = (event) => {
+  if (!dom.profileAvatarCard?.contains(event.relatedTarget)) {
+    handleProfileAvatarDragState(false);
+  }
+};
+
+const handleProfileAvatarDrop = async (event) => {
+  event.preventDefault();
+  handleProfileAvatarDragState(false);
+
+  const files = Array.from(event.dataTransfer?.files || []).filter((file) => AVATAR_ALLOWED_MIME_TYPES.has(file.type));
+  if (files[0]) {
+    try {
+      await applyAvatarFileToDraft(files[0], 'Avatar dropped and ready to save.');
+    } catch (err) {
+      setAvatarDraftStatus('error', 'Avatar drop failed.', err.message || 'Choose a different image.');
+      showToast(err.message, 'error');
+    }
+    return;
+  }
+
+  const droppedUrl = safeText(
+    event.dataTransfer?.getData('text/uri-list') || event.dataTransfer?.getData('text/plain') || ''
+  );
+  if (droppedUrl) {
+    if (dom.profileAvatarUrl) {
+      dom.profileAvatarUrl.value = droppedUrl;
+    }
+    handleProfileAvatarUrlInput();
+    markFormDirty(dom.profileForm);
+  }
+};
+
 const handleProfileAvatarRemove = () => {
+  clearAvatarValidationTimer();
   state.profileAvatarDraft = '';
+  state.profileAvatarMetaDraft = createEmptyAvatarMeta();
+  state.profileAvatarValidationId += 1;
   if (dom.profileAvatarUrl) {
     dom.profileAvatarUrl.value = '';
   }
   if (dom.profileAvatarUpload) {
     dom.profileAvatarUpload.value = '';
   }
-  renderAvatarPreviews(state.user);
-  renderPublicProfilePreview(state.user);
+  setAvatarDraftStatus('empty');
+  renderAvatarDraft();
   markFormDirty(dom.profileForm);
 };
 
@@ -5215,6 +5668,14 @@ const setupEventHandlers = () => {
   if (dom.profileAvatarUrl) {
     dom.profileAvatarUrl.addEventListener('input', handleProfileAvatarUrlInput);
     dom.profileAvatarUrl.addEventListener('change', handleProfileAvatarUrlInput);
+  }
+
+  if (dom.profileAvatarCard) {
+    dom.profileAvatarCard.addEventListener('paste', handleProfileAvatarPaste);
+    dom.profileAvatarCard.addEventListener('dragenter', handleProfileAvatarDragOver);
+    dom.profileAvatarCard.addEventListener('dragover', handleProfileAvatarDragOver);
+    dom.profileAvatarCard.addEventListener('dragleave', handleProfileAvatarDragLeave);
+    dom.profileAvatarCard.addEventListener('drop', handleProfileAvatarDrop);
   }
 
   if (dom.profileAvatarRemoveBtn) {

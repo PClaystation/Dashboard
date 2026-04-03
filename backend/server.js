@@ -180,6 +180,7 @@ const browserProtectedAuthRoutes = new Set([
   '/passkeys/register/verify',
   '/oauth/github/link-start',
   '/oauth/google/link-start',
+  '/oauth/discord/link-start',
   '/oauth/microsoft/link-start',
 ]);
 

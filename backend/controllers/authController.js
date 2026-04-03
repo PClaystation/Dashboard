@@ -77,10 +77,12 @@ const WEBAUTHN_CONTINENTAL_HOST_SUFFIX = '.continental-hub.com';
 const OAUTH_STATE_TTL_SEC = 10 * 60;
 const OAUTH_PROVIDER_GITHUB = 'github';
 const OAUTH_PROVIDER_GOOGLE = 'google';
+const OAUTH_PROVIDER_DISCORD = 'discord';
 const OAUTH_PROVIDER_MICROSOFT = 'microsoft';
 const OAUTH_PROVIDERS = [
   OAUTH_PROVIDER_GITHUB,
   OAUTH_PROVIDER_GOOGLE,
+  OAUTH_PROVIDER_DISCORD,
   OAUTH_PROVIDER_MICROSOFT,
 ];
 
@@ -495,6 +497,7 @@ const getOauthProviderLabel = (provider) => {
   const normalized = sanitizeText(provider, 40).toLowerCase();
   if (normalized === OAUTH_PROVIDER_GITHUB) return 'GitHub';
   if (normalized === OAUTH_PROVIDER_GOOGLE) return 'Google';
+  if (normalized === OAUTH_PROVIDER_DISCORD) return 'Discord';
   if (normalized === OAUTH_PROVIDER_MICROSOFT) return 'Microsoft';
   return 'OAuth provider';
 };
@@ -504,6 +507,7 @@ const resolveOauthCallbackUrl = (provider, req) => {
   const envKeyMap = {
     [OAUTH_PROVIDER_GITHUB]: 'GITHUB_OAUTH_CALLBACK_URL',
     [OAUTH_PROVIDER_GOOGLE]: 'GOOGLE_OAUTH_CALLBACK_URL',
+    [OAUTH_PROVIDER_DISCORD]: 'DISCORD_OAUTH_CALLBACK_URL',
     [OAUTH_PROVIDER_MICROSOFT]: 'MICROSOFT_OAUTH_CALLBACK_URL',
   };
   const explicit = resolveAbsoluteUrl(process.env[envKeyMap[normalized]]);
@@ -571,6 +575,29 @@ const getGoogleOauthConfig = (req) => {
   };
 };
 
+const getDiscordOauthConfig = (req) => {
+  const clientId = sanitizeText(process.env.DISCORD_CLIENT_ID, 200);
+  const clientSecret = sanitizeText(process.env.DISCORD_CLIENT_SECRET, 400);
+  if (!clientId || !clientSecret) {
+    throw createHttpError(503, 'Discord sign-in is not configured on this server.');
+  }
+
+  return {
+    provider: OAUTH_PROVIDER_DISCORD,
+    label: getOauthProviderLabel(OAUTH_PROVIDER_DISCORD),
+    clientId,
+    clientSecret,
+    callbackUrl: resolveOauthCallbackUrl(OAUTH_PROVIDER_DISCORD, req),
+    authorizeUrl: 'https://discord.com/oauth2/authorize',
+    tokenUrl: 'https://discord.com/api/oauth2/token',
+    userInfoUrl: 'https://discord.com/api/users/@me',
+    scopes: ['identify', 'email'],
+    tokenRequestFormat: 'form',
+    requireAuthorizationCodeGrant: true,
+    profileStrategy: 'discord',
+  };
+};
+
 const getMicrosoftOauthConfig = (req) => {
   const clientId = sanitizeText(process.env.MICROSOFT_CLIENT_ID || process.env.AZURE_CLIENT_ID, 200);
   const clientSecret = sanitizeText(
@@ -612,6 +639,9 @@ const getOauthProviderConfig = (provider, req) => {
   if (normalized === OAUTH_PROVIDER_GOOGLE) {
     return getGoogleOauthConfig(req);
   }
+  if (normalized === OAUTH_PROVIDER_DISCORD) {
+    return getDiscordOauthConfig(req);
+  }
   if (normalized === OAUTH_PROVIDER_MICROSOFT) {
     return getMicrosoftOauthConfig(req);
   }
@@ -631,6 +661,12 @@ const isOauthProviderAvailable = (provider) => {
     return Boolean(
       sanitizeText(process.env.GOOGLE_CLIENT_ID, 200) &&
         sanitizeText(process.env.GOOGLE_CLIENT_SECRET, 400)
+    );
+  }
+  if (normalized === OAUTH_PROVIDER_DISCORD) {
+    return Boolean(
+      sanitizeText(process.env.DISCORD_CLIENT_ID, 200) &&
+        sanitizeText(process.env.DISCORD_CLIENT_SECRET, 400)
     );
   }
   if (normalized === OAUTH_PROVIDER_MICROSOFT) {
@@ -815,6 +851,43 @@ const requestGithubProfile = async (accessToken) => {
   };
 };
 
+const requestDiscordProfile = async (config, accessToken) => {
+  const response = await fetch(config.userInfoUrl, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      'User-Agent': 'continental-id-auth',
+    },
+  });
+  const profile = await response.json().catch(() => ({}));
+  if (!response.ok || !profile?.id) {
+    throw createHttpError(502, 'Discord profile request failed.');
+  }
+
+  const avatarHash = sanitizeText(profile.avatar, 160);
+  const avatarUrl = avatarHash
+    ? `https://cdn.discordapp.com/avatars/${sanitizeText(profile.id, 160)}/${avatarHash}.png?size=256`
+    : '';
+  const username = sanitizeText(profile.username, 120);
+  const displayName =
+    sanitizeText(profile.global_name, 60) ||
+    username ||
+    sanitizeDisplayName('', normalizeEmail(profile.email || '')) ||
+    'User';
+  const email = normalizeEmail(profile.email || '');
+
+  return {
+    provider: OAUTH_PROVIDER_DISCORD,
+    providerUserId: sanitizeText(profile.id, 160),
+    username,
+    displayName,
+    email: isValidEmail(email) ? email : '',
+    emailVerified: Boolean(profile.verified),
+    profileUrl: `https://discord.com/users/${sanitizeText(profile.id, 160)}`,
+    avatarUrl,
+  };
+};
+
 const decodeOauthIdTokenClaims = (idToken) => {
   const token = String(idToken || '').trim();
   if (!token) return {};
@@ -878,6 +951,10 @@ const requestOidcProfile = async (config, tokenPayload) => {
 const requestOauthIdentityProfile = async (config, tokenPayload) => {
   if (config.profileStrategy === 'github') {
     return requestGithubProfile(String(tokenPayload?.access_token || '').trim());
+  }
+
+  if (config.profileStrategy === 'discord') {
+    return requestDiscordProfile(config, String(tokenPayload?.access_token || '').trim());
   }
 
   if (config.profileStrategy === 'oidc') {
@@ -2017,6 +2094,46 @@ const sanitizeAvatar = (value, fallback = '') => {
   }
 };
 
+const deriveAvatarKind = (avatar = '') => {
+  const value = String(avatar || '').trim();
+  if (!value) return '';
+  return AVATAR_DATA_URL_PATTERN.test(value) ? 'upload' : 'url';
+};
+
+const sanitizeAvatarKind = (value, avatar = '') => {
+  const normalized = sanitizeText(value, 24).toLowerCase();
+  if (['upload', 'url', 'oauth'].includes(normalized)) {
+    return normalized;
+  }
+  return deriveAvatarKind(avatar);
+};
+
+const sanitizeAvatarMimeType = (value) => {
+  const normalized = sanitizeText(value, 40).toLowerCase();
+  return /^image\/[-+.\w]+$/.test(normalized) ? normalized : '';
+};
+
+const sanitizeAvatarDimension = (value) =>
+  Math.max(0, Math.min(4096, Math.round(Number(value) || 0)));
+
+const sanitizeAvatarUpdatedAt = (value) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const normalizeAvatarMeta = (value = {}, avatar = '') => {
+  const source = value && typeof value === 'object' ? value : {};
+  const kind = sanitizeAvatarKind(source.kind, avatar);
+  return {
+    kind: avatar ? kind : '',
+    mimeType: avatar ? sanitizeAvatarMimeType(source.mimeType) : '',
+    width: avatar ? sanitizeAvatarDimension(source.width) : 0,
+    height: avatar ? sanitizeAvatarDimension(source.height) : 0,
+    updatedAt: avatar ? sanitizeAvatarUpdatedAt(source.updatedAt) : null,
+  };
+};
+
 const sanitizeHeadline = (value, fallback = '') => sanitizeText(value, 100) || fallback;
 const sanitizeRole = (value, fallback = '') => sanitizeText(value, 100) || fallback;
 const sanitizeOrganization = (value, fallback = '') => sanitizeText(value, 100) || fallback;
@@ -2065,11 +2182,15 @@ const sanitizeTimezone = (value, fallback = 'UTC') => {
 
 const normalizeProfile = (incoming = {}, current = {}) => {
   const currentProfile = current || {};
+  const avatar = hasOwn(incoming, 'avatar')
+    ? sanitizeAvatar(incoming.avatar, sanitizeAvatar(currentProfile.avatar, ''))
+    : sanitizeAvatar(currentProfile.avatar, '');
 
   return {
-    avatar: hasOwn(incoming, 'avatar')
-      ? sanitizeAvatar(incoming.avatar, sanitizeAvatar(currentProfile.avatar, ''))
-      : sanitizeAvatar(currentProfile.avatar, ''),
+    avatar,
+    avatarMeta: hasOwn(incoming, 'avatarMeta')
+      ? normalizeAvatarMeta(incoming.avatarMeta, avatar)
+      : normalizeAvatarMeta(currentProfile.avatarMeta, avatar),
     headline: hasOwn(incoming, 'headline')
       ? sanitizeHeadline(incoming.headline, '')
       : sanitizeHeadline(currentProfile.headline, ''),
@@ -2695,7 +2816,10 @@ const getOauthIdentityUsernameCandidates = (provider, identityProfile = {}) => {
 
 const getOauthLinkedAccountAutofillValue = (provider, identityProfile = {}) => {
   const normalizedProvider = sanitizeText(provider, 40).toLowerCase();
-  if (normalizedProvider === OAUTH_PROVIDER_GITHUB) {
+  if (
+    normalizedProvider === OAUTH_PROVIDER_GITHUB ||
+    normalizedProvider === OAUTH_PROVIDER_DISCORD
+  ) {
     return sanitizeText(identityProfile.username, 120);
   }
 
@@ -2824,6 +2948,7 @@ const buildUserPayload = (user) => {
     activitySummary,
     profile: {
       avatar: sanitizeAvatar(user.profile?.avatar, ''),
+      avatarMeta: normalizeAvatarMeta(user.profile?.avatarMeta, user.profile?.avatar),
       headline: sanitizeHeadline(user.profile?.headline, ''),
       role: sanitizeRole(user.profile?.role, ''),
       organization: sanitizeOrganization(user.profile?.organization, ''),
@@ -2936,6 +3061,7 @@ const buildPublicProfilePayload = (user) => {
     updatedAt: user?.updatedAt || null,
     profile: {
       avatar: sanitizeAvatar(user?.profile?.avatar, ''),
+      avatarMeta: normalizeAvatarMeta(user?.profile?.avatarMeta, user?.profile?.avatar),
       headline: visibility.headline ? sanitizeHeadline(user?.profile?.headline, '') : '',
       role: visibility.role ? sanitizeRole(user?.profile?.role, '') : '',
       organization: visibility.organization ? sanitizeOrganization(user?.profile?.organization, '') : '',

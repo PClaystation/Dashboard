@@ -163,9 +163,42 @@ const buildFallbackDisplayName = (email) => {
   return 'User';
 };
 
+const normalizeIdentityAvatarMeta = (meta = {}, avatar = '') => {
+  const source = meta && typeof meta === 'object' ? meta : {};
+  const width = Math.max(0, Math.min(4096, Math.round(Number(source.width) || 0)));
+  const height = Math.max(0, Math.min(4096, Math.round(Number(source.height) || 0)));
+  const updatedAt = source.updatedAt ? new Date(source.updatedAt) : null;
+  const kind = sanitizeText(source.kind, 24).toLowerCase();
+
+  return {
+    kind: avatar ? kind || (String(avatar).startsWith('data:image/') ? 'upload' : 'url') : '',
+    mimeType: /^image\/[-+.\w]+$/i.test(sanitizeText(source.mimeType, 40))
+      ? sanitizeText(source.mimeType, 40).toLowerCase()
+      : '',
+    width,
+    height,
+    updatedAt: updatedAt && !Number.isNaN(updatedAt.getTime()) ? updatedAt : null,
+  };
+};
+
+const serializeIdentityAvatarMeta = (meta = {}) => {
+  const parsedUpdatedAt = meta.updatedAt ? new Date(meta.updatedAt) : null;
+  return JSON.stringify({
+    kind: sanitizeText(meta.kind, 24).toLowerCase(),
+    mimeType: sanitizeText(meta.mimeType, 40).toLowerCase(),
+    width: Math.max(0, Math.min(4096, Math.round(Number(meta.width) || 0))),
+    height: Math.max(0, Math.min(4096, Math.round(Number(meta.height) || 0))),
+    updatedAt:
+      parsedUpdatedAt && !Number.isNaN(parsedUpdatedAt.getTime())
+        ? parsedUpdatedAt.toISOString()
+        : null,
+  });
+};
+
 const normalizeIdentityProfile = (profile = {}) => ({
   ...(profile?.toObject ? profile.toObject() : profile || {}),
   avatar: sanitizeText(profile?.avatar, 350000),
+  avatarMeta: normalizeIdentityAvatarMeta(profile?.avatarMeta, profile?.avatar),
   headline: sanitizeText(profile?.headline, 100),
   pronouns: sanitizeText(profile?.pronouns, 40),
 });
@@ -242,11 +275,13 @@ const ensureUserIdentityFields = async (user) => {
   const currentProfile = user.profile?.toObject ? user.profile.toObject() : user.profile || {};
   const needsProfileDefaults =
     !hasOwn(currentProfile, 'avatar') ||
+    !hasOwn(currentProfile, 'avatarMeta') ||
     !hasOwn(currentProfile, 'headline') ||
     !hasOwn(currentProfile, 'pronouns');
   if (
     needsProfileDefaults ||
     sanitizeText(currentProfile.avatar, 350000) !== normalizedProfile.avatar ||
+    serializeIdentityAvatarMeta(currentProfile.avatarMeta) !== serializeIdentityAvatarMeta(normalizedProfile.avatarMeta) ||
     sanitizeText(currentProfile.headline, 100) !== normalizedProfile.headline ||
     sanitizeText(currentProfile.pronouns, 40) !== normalizedProfile.pronouns
   ) {

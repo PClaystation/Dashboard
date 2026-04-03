@@ -906,14 +906,26 @@
       const avatar = safeText(profile?.profile?.avatar);
       const displayName = safeText(profile?.displayName || profile?.username || 'Continental ID');
       const wrapper = createElement('div', `avatar${small ? ' small' : ''}`);
+      const fallbackText = getProfileInitials(profile);
+
+      wrapper.textContent = fallbackText;
 
       if (avatar) {
         const image = document.createElement('img');
-        image.src = avatar;
         image.alt = `${displayName} avatar`;
-        wrapper.appendChild(image);
+        image.loading = 'lazy';
+        image.decoding = 'async';
+        image.referrerPolicy = 'no-referrer';
+        image.addEventListener('load', () => {
+          wrapper.textContent = '';
+          wrapper.appendChild(image);
+        });
+        image.addEventListener('error', () => {
+          wrapper.textContent = fallbackText;
+        });
+        image.src = avatar;
       } else {
-        wrapper.textContent = getProfileInitials(profile);
+        wrapper.textContent = fallbackText;
       }
 
       return wrapper;

@@ -162,6 +162,13 @@ const userSchema = new mongoose.Schema(
     },
     profile: {
       avatar: { type: String, default: '', maxlength: 350000 },
+      avatarMeta: {
+        kind: { type: String, default: '', trim: true, lowercase: true, maxlength: 24 },
+        mimeType: { type: String, default: '', trim: true, lowercase: true, maxlength: 40 },
+        width: { type: Number, default: 0, min: 0, max: 4096 },
+        height: { type: Number, default: 0, min: 0, max: 4096 },
+        updatedAt: { type: Date, default: null },
+      },
       headline: { type: String, default: '', maxlength: 100 },
       role: { type: String, default: '', maxlength: 100 },
       organization: { type: String, default: '', maxlength: 100 },
