@@ -59,15 +59,23 @@
   <link rel="icon" href="images/Continental-ID-nbg-w.png" type="image/x-icon" />
 </head>
 <body>
-  <a class="skip-link" href="#dashboard-main">Skip to dashboard content</a>
-  <div id="loading-screen" aria-live="polite">
-    <img src="images/globe-nbg-w.png" alt="Loading" class="pulsing-image" />
-    <p id="loading-message">Loading...</p>
-    <div id="loading-actions" class="loading-actions" hidden>
-      <button id="loading-sign-in-btn" class="primary-btn" type="button">Sign in</button>
-      <a id="loading-full-login-link" class="secondary-btn loading-link" href="">Open full-page login</a>
+  <a id="skip-link" class="skip-link" href="#loading-screen">Skip to main content</a>
+  <main id="loading-screen" class="landing-shell" aria-live="polite" tabindex="-1" data-state="loading">
+    <div class="loading-card">
+      <span id="loading-status-chip" class="inline-chip loading-status-chip">Checking connection</span>
+      <img src="images/globe-nbg-w.png" alt="" class="pulsing-image" />
+      <div class="loading-copy">
+        <p class="eyebrow">Continental ID</p>
+        <h1 id="loading-title">Checking your workspace</h1>
+        <p id="loading-message">Loading...</p>
+        <p id="loading-detail" class="helper-line">Verifying the account service and refreshing your session.</p>
+      </div>
+      <div id="loading-actions" class="loading-actions" hidden>
+        <button id="loading-sign-in-btn" class="primary-btn" type="button">Sign in</button>
+        <a id="loading-full-login-link" class="secondary-btn loading-link" href="">Open full-page login</a>
+      </div>
     </div>
-  </div>
+  </main>
 
   <div id="toast-region" aria-live="polite" aria-atomic="true"></div>
 
@@ -99,71 +107,15 @@
       </div>
     </header>
 
+    <nav class="tabs dashboard-tabs" aria-label="Dashboard sections" role="tablist">
+      <button id="tab-overview" class="tab-btn active" data-tab="overview" type="button" role="tab" aria-controls="overview" aria-selected="true">Overview</button>
+      <button id="tab-profile" class="tab-btn" data-tab="profile" type="button" role="tab" aria-controls="profile" aria-selected="false">Profile</button>
+      <button id="tab-security" class="tab-btn" data-tab="security" type="button" role="tab" aria-controls="security" aria-selected="false">Security</button>
+      <button id="tab-activity" class="tab-btn" data-tab="activity" type="button" role="tab" aria-controls="activity" aria-selected="false">Activity</button>
+      <button id="tab-settings" class="tab-btn" data-tab="settings" type="button" role="tab" aria-controls="settings" aria-selected="false">Settings</button>
+    </nav>
+
     <div class="dashboard-layout">
-      <aside class="dashboard-sidebar">
-        <section class="profile-rail">
-          <div class="profile-identity">
-            <div id="hero-initials" class="identity-badge" aria-hidden="true">CI</div>
-            <div class="identity-meta">
-              <p id="hero-display-name" class="identity-name">Continental User</p>
-              <p id="hero-username" class="identity-handle">@continental</p>
-              <p id="hero-email" class="identity-email">Signed-out session</p>
-            </div>
-          </div>
-
-          <div class="profile-progress-card">
-            <div class="profile-progress-head">
-              <div>
-                <p class="mini-label">Profile completion</p>
-                <strong id="summary-completion" class="progress-value">0%</strong>
-              </div>
-              <span id="summary-verified" class="inline-chip">Pending</span>
-            </div>
-
-            <div class="progress-track" aria-hidden="true">
-              <div id="profile-progress-bar" class="progress-fill profile-progress-fill"></div>
-            </div>
-
-            <p id="hero-status-note" class="helper-line">Complete your profile.</p>
-          </div>
-        </section>
-
-        <nav class="tabs" aria-label="Dashboard sections" role="tablist">
-          <button id="tab-overview" class="tab-btn active" data-tab="overview" type="button" role="tab" aria-controls="overview" aria-selected="true">Overview</button>
-          <button id="tab-profile" class="tab-btn" data-tab="profile" type="button" role="tab" aria-controls="profile" aria-selected="false">Profile</button>
-          <button id="tab-security" class="tab-btn" data-tab="security" type="button" role="tab" aria-controls="security" aria-selected="false">Security</button>
-          <button id="tab-activity" class="tab-btn" data-tab="activity" type="button" role="tab" aria-controls="activity" aria-selected="false">Activity</button>
-          <button id="tab-settings" class="tab-btn" data-tab="settings" type="button" role="tab" aria-controls="settings" aria-selected="false">Settings</button>
-        </nav>
-
-        <section class="sidebar-card">
-          <div class="section-heading compact-heading">
-            <div>
-              <p class="eyebrow">Workspace</p>
-              <h2>Quick tools</h2>
-            </div>
-          </div>
-          <p class="helper-line">Open the service launcher, jump to pending edits, or use keyboard shortcuts without leaving the current tab.</p>
-          <div class="sidebar-action-stack">
-            <button id="open-launcher-btn" class="secondary-btn" type="button">Open launcher</button>
-            <button id="jump-unsaved-btn" class="ghost-btn" type="button">Review unsaved</button>
-          </div>
-          <p class="helper-line keyboard-hint">Shortcuts: Cmd/Ctrl+K launcher, / activity filter, Alt+1..5 switch tabs.</p>
-        </section>
-
-        <section class="sidebar-card">
-          <div class="section-heading compact-heading">
-            <div>
-              <p class="eyebrow">Recommended</p>
-              <h2>Profile checklist</h2>
-            </div>
-          </div>
-          <ul id="profile-checklist" class="feature-list">
-            <li>Loading checklist...</li>
-          </ul>
-        </section>
-      </aside>
-
       <main id="dashboard-main" class="dashboard-main tab-panels">
         <section id="overview" class="tab-content active" role="tabpanel" aria-labelledby="tab-overview">
           <div class="hero-panel">
@@ -224,7 +176,7 @@
           </section>
 
           <div class="overview-grid overview-primary-grid">
-            <article class="section-card">
+            <article class="section-card overview-actions-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Next steps</p>
@@ -234,7 +186,7 @@
               <div id="action-center" class="action-list"></div>
             </article>
 
-            <article class="section-card overview-glance">
+            <article class="section-card overview-glance-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Snapshot</p>
@@ -312,9 +264,11 @@
                     rel="noopener noreferrer"
                     style="--bg-image: url('images/Echo.png')"
                   >
-                    <span class="service-kicker">Archive</span>
-                    <span class="card-title">The Echo Archives</span>
-                    <span class="service-description">Searchable archive of audio dramas with tags, ratings, and show pages.</span>
+                    <span class="service-copy">
+                      <span class="service-kicker">Archive</span>
+                      <span class="card-title">The Echo Archives</span>
+                      <span class="service-description">Searchable archive of audio dramas with tags, ratings, and show pages.</span>
+                    </span>
                   </a>
                 </li>
 
@@ -333,9 +287,11 @@
                     rel="noopener noreferrer"
                     style="--bg-image: url('images/Continental.png')"
                   >
-                    <span class="service-kicker">Studio</span>
-                    <span class="card-title">Continental Hub</span>
-                    <span class="service-description">Portfolio hub for Continental Studios projects, updates, and website links.</span>
+                    <span class="service-copy">
+                      <span class="service-kicker">Studio</span>
+                      <span class="card-title">Continental Hub</span>
+                      <span class="service-description">Portfolio hub for Continental Studios projects, updates, and website links.</span>
+                    </span>
                   </a>
                 </li>
 
@@ -354,9 +310,11 @@
                     rel="noopener noreferrer"
                     style="--bg-image: url('images/StepCast2.png')"
                   >
-                    <span class="service-kicker">Fitness</span>
-                    <span class="card-title">StepCast</span>
-                    <span class="service-description">Podcast-focused walk tracker with GPS routes, saved walks, and history.</span>
+                    <span class="service-copy">
+                      <span class="service-kicker">Fitness</span>
+                      <span class="card-title">StepCast</span>
+                      <span class="service-description">Podcast-focused walk tracker with GPS routes, saved walks, and history.</span>
+                    </span>
                   </a>
                 </li>
 
@@ -375,9 +333,11 @@
                     rel="noopener noreferrer"
                     style="--bg-image: url('images/Minesweeper.png')"
                   >
-                    <span class="service-kicker">Game</span>
-                    <span class="card-title">Minesweeper</span>
-                    <span class="service-description">Classic Minesweeper rebuilt for the browser with presets, custom boards, and timers.</span>
+                    <span class="service-copy">
+                      <span class="service-kicker">Game</span>
+                      <span class="card-title">Minesweeper</span>
+                      <span class="service-description">Classic Minesweeper rebuilt for the browser with presets, custom boards, and timers.</span>
+                    </span>
                   </a>
                 </li>
               </ul>
@@ -385,7 +345,7 @@
               <p id="service-empty-state" class="empty-state" hidden>No matching services.</p>
             </article>
 
-            <article class="section-card">
+            <article class="section-card overview-activity-card">
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Recent logins</p>
@@ -1083,7 +1043,13 @@
                   </div>
                 </div>
 
-                <div id="mfa-setup-panel" class="mfa-setup-panel" hidden>
+                <div
+                  id="mfa-setup-panel"
+                  class="mfa-setup-panel"
+                  data-collapsible-max-height="520"
+                  data-collapsible-label="MFA setup"
+                  hidden
+                >
                   <p class="helper-line">Use Authy or any other authenticator app to scan the QR code, then confirm with the 6-digit code it generates.</p>
                   <label>
                     Current password
@@ -1184,7 +1150,12 @@
                   <p class="helper-line">
                     Use your device biometrics, screen lock, or security key when the browser prompts you.
                   </p>
-                  <ul id="passkey-list" class="activity-list">
+                  <ul
+                    id="passkey-list"
+                    class="activity-list"
+                    data-collapsible-max-height="360"
+                    data-collapsible-label="passkeys"
+                  >
                     <li>No passkeys saved.</li>
                   </ul>
                 </div>
@@ -1234,7 +1205,12 @@
                     </div>
                   </div>
 
-                  <ul id="sessions-list" class="activity-list">
+                  <ul
+                    id="sessions-list"
+                    class="activity-list"
+                    data-collapsible-max-height="420"
+                    data-collapsible-label="sessions"
+                  >
                     <li>Loading sessions...</li>
                   </ul>
                 </section>
@@ -1250,7 +1226,12 @@
                     </div>
                   </div>
 
-                  <ul id="devices-list" class="activity-list">
+                  <ul
+                    id="devices-list"
+                    class="activity-list"
+                    data-collapsible-max-height="420"
+                    data-collapsible-label="devices"
+                  >
                     <li>Loading devices...</li>
                   </ul>
                 </section>
@@ -1314,13 +1295,74 @@
               <button id="activity-refresh-btn" class="secondary-btn" type="button">Refresh Activity</button>
               <button id="activity-export-btn" class="secondary-btn" type="button">Export CSV</button>
             </div>
-            <ul id="activity-list" class="activity-list">
+            <ul
+              id="activity-list"
+              class="activity-list"
+              data-collapsible-max-height="540"
+              data-collapsible-label="activity"
+            >
               <li>Loading recent activity...</li>
             </ul>
           </article>
         </section>
 
       </main>
+
+      <aside class="dashboard-sidebar">
+        <section class="profile-rail">
+          <div class="profile-identity">
+            <div id="hero-initials" class="identity-badge" aria-hidden="true">CI</div>
+            <div class="identity-meta">
+              <p id="hero-display-name" class="identity-name">Continental User</p>
+              <p id="hero-username" class="identity-handle">@continental</p>
+              <p id="hero-email" class="identity-email">Signed-out session</p>
+            </div>
+          </div>
+
+          <div class="profile-progress-card">
+            <div class="profile-progress-head">
+              <div>
+                <p class="mini-label">Profile completion</p>
+                <strong id="summary-completion" class="progress-value">0%</strong>
+              </div>
+              <span id="summary-verified" class="inline-chip">Pending</span>
+            </div>
+
+            <div class="progress-track" aria-hidden="true">
+              <div id="profile-progress-bar" class="progress-fill profile-progress-fill"></div>
+            </div>
+
+            <p id="hero-status-note" class="helper-line">Complete your profile.</p>
+          </div>
+        </section>
+
+        <section class="sidebar-card">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">Workspace</p>
+              <h2>Quick tools</h2>
+            </div>
+          </div>
+          <p class="helper-line">Open the service launcher, jump to pending edits, or use keyboard shortcuts without leaving the current tab.</p>
+          <div class="sidebar-action-stack">
+            <button id="open-launcher-btn" class="secondary-btn" type="button">Open launcher</button>
+            <button id="jump-unsaved-btn" class="ghost-btn" type="button">Review unsaved</button>
+          </div>
+          <p class="helper-line keyboard-hint">Shortcuts: Cmd/Ctrl+K launcher, / activity filter, Alt+1..5 switch tabs.</p>
+        </section>
+
+        <section class="sidebar-card">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">Recommended</p>
+              <h2>Profile checklist</h2>
+            </div>
+          </div>
+          <ul id="profile-checklist" class="feature-list">
+            <li>Loading checklist...</li>
+          </ul>
+        </section>
+      </aside>
     </div>
 
     <div id="save-reminder" class="save-reminder" hidden>

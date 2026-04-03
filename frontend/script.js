@@ -128,8 +128,12 @@ const containsBlockedNameTerm = (value) => {
 };
 
 const dom = {
+  skipLink: document.getElementById('skip-link'),
   loadingScreen: document.getElementById('loading-screen'),
+  loadingTitle: document.getElementById('loading-title'),
   loadingMessage: document.getElementById('loading-message'),
+  loadingDetail: document.getElementById('loading-detail'),
+  loadingStatusChip: document.getElementById('loading-status-chip'),
   loadingActions: document.getElementById('loading-actions'),
   loadingSignInBtn: document.getElementById('loading-sign-in-btn'),
   loadingFullLoginLink: document.getElementById('loading-full-login-link'),
@@ -686,6 +690,7 @@ const state = {
   favoriteServicesOnly: localStorage.getItem(FAVORITE_SERVICES_ONLY_STORAGE_KEY) === 'true',
   recentServices: readStoredArray(SERVICE_RECENT_STORAGE_KEY).map((value) => safeText(value).toLowerCase()).filter(Boolean),
   activeTab: 'overview',
+  landingPrimaryAction: 'signin',
   profileAvatarDraft: '',
   profileAvatarMetaDraft: createEmptyAvatarMeta(),
   profileAvatarStatus: {
@@ -699,6 +704,87 @@ const state = {
   launcherOpen: false,
   launcherActiveIndex: 0,
   launcherLastFocusedElement: null,
+};
+
+const collapsibleSections = new Map();
+let collapsibleSectionsFrame = 0;
+let collapsibleSectionsObserver = null;
+
+const getCollapsibleSectionMaxHeight = (element) =>
+  Math.max(0, Number.parseInt(element?.dataset?.collapsibleMaxHeight || '0', 10) || 0);
+
+const syncCollapsibleSection = (element) => {
+  if (!(element instanceof HTMLElement)) return;
+
+  const entry = collapsibleSections.get(element);
+  if (!entry?.button) return;
+
+  const maxHeight = getCollapsibleSectionMaxHeight(element);
+  const label = safeText(element.dataset.collapsibleLabel).toLowerCase() || 'details';
+  const needsClamp = !element.hidden && maxHeight > 0 && element.scrollHeight > maxHeight + 16;
+
+  element.style.setProperty('--collapsed-height', `${maxHeight}px`);
+  element.classList.toggle('is-collapsible', needsClamp);
+  element.classList.toggle('is-expanded', needsClamp && entry.expanded);
+
+  entry.button.hidden = !needsClamp;
+  entry.button.disabled = !needsClamp;
+  entry.button.setAttribute('aria-expanded', needsClamp && entry.expanded ? 'true' : 'false');
+  entry.button.textContent = needsClamp && entry.expanded ? `Show less ${label}` : `See more ${label}`;
+
+  if (!needsClamp) {
+    entry.expanded = false;
+    element.classList.remove('is-expanded');
+  }
+};
+
+const requestCollapsibleSectionsSync = () => {
+  if (collapsibleSectionsFrame) return;
+
+  collapsibleSectionsFrame = window.requestAnimationFrame(() => {
+    collapsibleSectionsFrame = 0;
+    for (const element of collapsibleSections.keys()) {
+      syncCollapsibleSection(element);
+    }
+  });
+};
+
+const setupCollapsibleSections = () => {
+  const elements = document.querySelectorAll('[data-collapsible-max-height]');
+  if (!elements.length) return;
+
+  if (!collapsibleSectionsObserver && 'ResizeObserver' in window) {
+    collapsibleSectionsObserver = new ResizeObserver(() => {
+      requestCollapsibleSectionsSync();
+    });
+  }
+
+  for (const element of elements) {
+    if (collapsibleSections.has(element)) continue;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'ghost-btn collapsible-toggle';
+    button.hidden = true;
+    button.addEventListener('click', () => {
+      const entry = collapsibleSections.get(element);
+      if (!entry) return;
+
+      entry.expanded = !entry.expanded;
+      syncCollapsibleSection(element);
+    });
+
+    element.insertAdjacentElement('afterend', button);
+    collapsibleSections.set(element, {
+      button,
+      expanded: false,
+    });
+
+    collapsibleSectionsObserver?.observe(element);
+  }
+
+  window.addEventListener('resize', requestCollapsibleSectionsSync);
+  requestCollapsibleSectionsSync();
 };
 
 const requiresSensitiveActionMfa = () => Boolean(state.user?.security?.mfa?.enabled);
@@ -1562,10 +1648,76 @@ const setSyncStatus = (date = null) => {
   dom.syncStatus.textContent = `Synced ${formatDate(date)}`;
 };
 
+const updateSkipLinkTarget = (targetId = 'loading-screen') => {
+  if (!dom.skipLink) return;
+  dom.skipLink.href = `#${targetId}`;
+};
+
+const setLandingState = ({
+  stateName = 'loading',
+  statusText = 'Checking connection',
+  title = 'Checking your workspace',
+  message = 'Loading...',
+  detail = 'Verifying the account service and refreshing your session.',
+  primaryLabel = 'Sign in',
+  primaryAction = 'signin',
+  showActions = false,
+  showFullLogin = true,
+} = {}) => {
+  state.landingPrimaryAction = primaryAction;
+
+  if (dom.loadingScreen) {
+    dom.loadingScreen.dataset.state = stateName;
+  }
+  if (dom.loadingStatusChip) {
+    dom.loadingStatusChip.textContent = statusText;
+  }
+  if (dom.loadingTitle) {
+    dom.loadingTitle.textContent = title;
+  }
+  if (dom.loadingMessage) {
+    dom.loadingMessage.textContent = message;
+  }
+  if (dom.loadingDetail) {
+    dom.loadingDetail.textContent = detail;
+  }
+  if (dom.loadingActions) {
+    dom.loadingActions.hidden = !showActions;
+  }
+  if (dom.loadingSignInBtn) {
+    dom.loadingSignInBtn.textContent = primaryLabel;
+    dom.loadingSignInBtn.dataset.defaultLabel = primaryLabel;
+    dom.loadingSignInBtn.disabled = false;
+    dom.loadingSignInBtn.hidden = !showActions;
+  }
+  if (dom.loadingFullLoginLink) {
+    dom.loadingFullLoginLink.hidden = !showActions || !showFullLogin;
+    dom.loadingFullLoginLink.href = buildLoginPopupUrl().toString();
+  }
+
+  updateSkipLinkTarget('loading-screen');
+};
+
+const getSectionScrollOffset = (section) => {
+  const tabPanel = section?.closest('.tab-content');
+  const sectionNav = tabPanel?.querySelector('.section-nav');
+  const defaultGap = 24;
+
+  if (!sectionNav) return defaultGap;
+
+  const navTop = Number.parseFloat(window.getComputedStyle(sectionNav).top) || 0;
+  return Math.ceil(sectionNav.getBoundingClientRect().height + navTop + 16);
+};
+
 const scrollToSection = (sectionId, focusEl = null) => {
   const section = document.getElementById(sectionId);
   if (section) {
-    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const offset = getSectionScrollOffset(section);
+    const targetTop = window.scrollY + section.getBoundingClientRect().top - offset;
+    window.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: 'smooth',
+    });
   }
 
   const target = focusEl || section?.querySelector('input, select, textarea, button, [href]');
@@ -1707,8 +1859,17 @@ const openLoginPage = ({ replace = false } = {}) => {
 const promptSignIn = () => {
   const popup = openLoginPopup();
   if (popup) {
-    if (dom.loadingMessage && !state.appVisible) {
-      dom.loadingMessage.textContent = 'Sign-in window opened. Finish login there, then return here.';
+    if (!state.appVisible) {
+      setLandingState({
+        stateName: 'signed-out',
+        statusText: 'Waiting for sign-in',
+        title: 'Finish signing in',
+        message: 'The sign-in window is open in a separate popup.',
+        detail: 'Complete login there, then return here. This page will update automatically.',
+        primaryLabel: 'Sign in',
+        primaryAction: 'signin',
+        showActions: true,
+      });
     }
     return true;
   }
@@ -1840,22 +2001,84 @@ const setLoggedOutUI = () => {
     dom.logoutBtn.style.display = 'none';
   }
 
-  if (!state.appVisible && dom.loadingMessage) {
-    dom.loadingMessage.textContent = 'Please sign in to continue.';
-  }
-
   if (dom.loadingScreen) {
     dom.loadingScreen.style.cursor = 'default';
     dom.loadingScreen.onclick = null;
   }
 
-  if (!state.appVisible && dom.loadingActions) {
-    dom.loadingActions.hidden = false;
+  if (!state.appVisible) {
+    setLandingState({
+      stateName: 'signed-out',
+      statusText: 'Sign-in required',
+      title: 'Sign in to your dashboard',
+      message: 'Continue with Continental ID to manage profile visibility, security, and connected services.',
+      detail: 'Use the popup sign-in flow or open the full-page login if your browser blocks popups.',
+      primaryLabel: 'Sign in',
+      primaryAction: 'signin',
+      showActions: true,
+    });
+  }
+};
+
+const setServiceUnavailableUI = (result = {}) => {
+  const offline = !navigator.onLine || result.reason === 'network';
+  const detail = safeText(result.message)
+    || (offline
+      ? 'Reconnect to the internet, then retry the dashboard.'
+      : 'The dashboard could not reach a live Continental ID account service.');
+
+  setStatus(
+    offline ? 'You appear to be offline. Click here to retry.' : 'Account service unavailable. Click here to retry.',
+    {
+      clickable: true,
+      onClick: () => {
+        retryLandingConnection();
+      },
+    }
+  );
+
+  if (dom.logoutBtn) {
+    dom.logoutBtn.style.display = 'none';
   }
 
-  if (!state.appVisible && dom.loadingFullLoginLink) {
-    dom.loadingFullLoginLink.href = buildLoginPopupUrl().toString();
+  if (!state.appVisible) {
+    setLandingState({
+      stateName: 'error',
+      statusText: offline ? 'Offline' : 'Service unavailable',
+      title: offline ? 'You are offline.' : 'We could not reach Continental ID.',
+      message: offline
+        ? 'Reconnect and retry to continue loading your dashboard.'
+        : 'The account service did not respond, so we could not verify your session.',
+      detail,
+      primaryLabel: 'Retry connection',
+      primaryAction: 'retry',
+      showActions: true,
+    });
   }
+};
+
+const classifyStartupFailure = (error) => {
+  if (error?.name === 'AbortError') {
+    return {
+      ok: false,
+      reason: 'timeout',
+      message: 'The account service took too long to respond.',
+    };
+  }
+
+  if (error instanceof TypeError) {
+    return {
+      ok: false,
+      reason: 'network',
+      message: 'The dashboard could not reach the account service.',
+    };
+  }
+
+  return {
+    ok: false,
+    reason: 'error',
+    message: safeText(error?.message) || 'Could not load account data.',
+  };
 };
 
 const stripLegacyAuthParamsFromUrl = () => {
@@ -3583,6 +3806,7 @@ const renderActivity = () => {
       : 'No recent activity found.';
     dom.activityList.appendChild(li);
     renderActivityAnalytics();
+    requestCollapsibleSectionsSync();
     return;
   }
 
@@ -3607,6 +3831,7 @@ const renderActivity = () => {
   }
 
   renderActivityAnalytics();
+  requestCollapsibleSectionsSync();
 };
 
 const renderSessions = () => {
@@ -3618,6 +3843,7 @@ const renderSessions = () => {
     const li = document.createElement('li');
     li.textContent = 'No active sessions found.';
     dom.sessionsList.appendChild(li);
+    requestCollapsibleSectionsSync();
     return;
   }
 
@@ -3709,6 +3935,8 @@ const renderSessions = () => {
     li.appendChild(details);
     dom.sessionsList.appendChild(li);
   }
+
+  requestCollapsibleSectionsSync();
 };
 
 const renderBackupCodes = (codes = []) => {
@@ -3753,6 +3981,7 @@ const renderMfaState = (user = state.user) => {
   }
   if (dom.mfaSecret) dom.mfaSecret.value = safeText(state.mfaSetup?.secret);
   if (dom.mfaOtpAuthUrl) dom.mfaOtpAuthUrl.value = safeText(state.mfaSetup?.otpAuthUrl);
+  requestCollapsibleSectionsSync();
 };
 
 const renderPasskeys = (user = state.user) => {
@@ -3779,6 +4008,7 @@ const renderPasskeys = (user = state.user) => {
     const li = document.createElement('li');
     li.textContent = supported ? 'No passkeys saved.' : 'Passkeys are unavailable in this browser.';
     dom.passkeyList.appendChild(li);
+    requestCollapsibleSectionsSync();
     return;
   }
 
@@ -3869,6 +4099,8 @@ const renderPasskeys = (user = state.user) => {
     li.appendChild(detail);
     dom.passkeyList.appendChild(li);
   }
+
+  requestCollapsibleSectionsSync();
 };
 
 const renderDevices = () => {
@@ -3879,6 +4111,7 @@ const renderDevices = () => {
     const li = document.createElement('li');
     li.textContent = 'No known devices found.';
     dom.devicesList.appendChild(li);
+    requestCollapsibleSectionsSync();
     return;
   }
 
@@ -4005,6 +4238,8 @@ const renderDevices = () => {
     li.appendChild(detail);
     dom.devicesList.appendChild(li);
   }
+
+  requestCollapsibleSectionsSync();
 };
 
 const launchService = (entry) => {
@@ -4342,6 +4577,8 @@ const showApp = () => {
     dom.loadingActions.hidden = true;
   }
 
+  updateSkipLinkTarget('dashboard-main');
+
   dom.appContent.style.display = 'grid';
   dom.appContent.offsetWidth;
   dom.appContent.classList.add('fade-in');
@@ -4368,24 +4605,72 @@ const initializeSession = async () => {
   const strippedLegacyParams = stripLegacyAuthParamsFromUrl();
 
   const refreshed = await refreshSession();
-  if (!refreshed.ok) return false;
+  if (!refreshed.ok) return refreshed;
 
   try {
     await loadDashboardData();
     if (strippedLegacyParams) {
       showToast('Old sign-in parameters were removed from the URL. The current session flow is now in use.', 'info', 5000);
     }
-    return true;
-  } catch {
+    return { ok: true };
+  } catch (error) {
     const retry = await refreshSession();
-    if (!retry.ok) return false;
+    if (!retry.ok) return retry;
 
-    await loadDashboardData();
-    if (strippedLegacyParams) {
-      showToast('Old sign-in parameters were removed from the URL. The current session flow is now in use.', 'info', 5000);
+    try {
+      await loadDashboardData();
+      if (strippedLegacyParams) {
+        showToast('Old sign-in parameters were removed from the URL. The current session flow is now in use.', 'info', 5000);
+      }
+      return { ok: true };
+    } catch (retryError) {
+      return classifyStartupFailure(retryError || error);
     }
-    return true;
   }
+};
+
+const bootstrapSession = async ({ busyButton = null, busyLabel = 'Checking...' } = {}) => {
+  if (busyButton) {
+    setButtonBusy(busyButton, true, busyLabel);
+  }
+
+  setLandingState({
+    stateName: 'loading',
+    statusText: 'Checking connection',
+    title: 'Checking your workspace',
+    message: 'Loading your dashboard...',
+    detail: 'Verifying the account service and refreshing your session.',
+    showActions: false,
+  });
+
+  try {
+    const result = await initializeSession();
+
+    if (result.ok) {
+      showApp();
+      startSessionAutoRefresh();
+      return result;
+    }
+
+    if (result.reason === 'unauthenticated') {
+      setLoggedOutUI();
+    } else {
+      setServiceUnavailableUI(result);
+    }
+
+    return result;
+  } finally {
+    if (busyButton) {
+      setButtonBusy(busyButton, false);
+    }
+  }
+};
+
+const retryLandingConnection = async () => {
+  await bootstrapSession({
+    busyButton: dom.loadingSignInBtn,
+    busyLabel: 'Retrying...',
+  });
 };
 
 const doLogout = async () => {
@@ -5414,6 +5699,8 @@ const switchTab = (tabId, options = {}) => {
     }
   }
 
+  requestCollapsibleSectionsSync();
+
   localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, nextTabId);
 
   if (historyMode !== 'none') {
@@ -5591,12 +5878,18 @@ const setupKeyboardShortcuts = () => {
 const setupEventHandlers = () => {
   setupTabs();
   setupSectionNavButtons();
+  setupCollapsibleSections();
   setupServiceFiltering();
   setupUnsavedChangeTracking();
   setupKeyboardShortcuts();
 
   if (dom.loadingSignInBtn) {
     dom.loadingSignInBtn.addEventListener('click', () => {
+      if (state.landingPrimaryAction === 'retry') {
+        retryLandingConnection();
+        return;
+      }
+
       promptSignIn();
     });
   }
@@ -6012,18 +6305,7 @@ const startSessionAutoRefresh = () => {
 window.addEventListener('load', async () => {
   setConnectionStatus();
   setSyncStatus(null);
-
-  await ensureApiBaseUrl().catch(() => {});
   setupEventHandlers();
   updatePasswordStrengthUi();
-
-  const isAuthenticated = await initializeSession();
-
-  if (isAuthenticated) {
-    showApp();
-    startSessionAutoRefresh();
-    return;
-  }
-
-  setLoggedOutUI();
+  await bootstrapSession();
 });
