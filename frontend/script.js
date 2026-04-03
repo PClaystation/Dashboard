@@ -302,7 +302,10 @@ const dom = {
   mfaManageConfirmBtn: document.getElementById('mfa-manage-confirm-btn'),
   mfaManageCancelBtn: document.getElementById('mfa-manage-cancel-btn'),
   passkeyStatusCopy: document.getElementById('passkey-status-copy'),
+  passkeyManageBtn: document.getElementById('passkey-manage-btn'),
   passkeyCurrentPassword: document.getElementById('passkey-current-password'),
+  passkeyChallengeRow: document.getElementById('passkey-challenge-row'),
+  passkeyChallenge: document.getElementById('passkey-challenge'),
   passkeyRegisterBtn: document.getElementById('passkey-register-btn'),
   passkeyList: document.getElementById('passkey-list'),
 
@@ -364,9 +367,12 @@ const dom = {
   activityHighlightGrid: document.getElementById('activity-highlight-grid'),
 
   deleteForm: document.getElementById('delete-form'),
+  deleteOpenBtn: document.getElementById('delete-open-btn'),
   deleteAccountBtn: document.getElementById('delete-account-btn'),
   deletePassword: document.getElementById('delete-password'),
   deleteConfirmText: document.getElementById('delete-confirm-text'),
+  deleteChallengeRow: document.getElementById('delete-challenge-row'),
+  deleteChallenge: document.getElementById('delete-challenge'),
 
   serviceFilter: document.getElementById('service-filter'),
   serviceList: document.getElementById('service-list'),
@@ -389,6 +395,29 @@ const dom = {
   launcherList: document.getElementById('launcher-list'),
   launcherResultsCount: document.getElementById('launcher-results-count'),
   launcherEmptyState: document.getElementById('launcher-empty-state'),
+  mfaModal: document.getElementById('mfa-modal'),
+  mfaOverlay: document.getElementById('mfa-overlay'),
+  mfaCloseBtn: document.getElementById('mfa-close-btn'),
+  mfaModalTitle: document.getElementById('mfa-modal-title'),
+  mfaModalCopy: document.getElementById('mfa-modal-copy'),
+  passkeyModal: document.getElementById('passkey-modal'),
+  passkeyOverlay: document.getElementById('passkey-overlay'),
+  passkeyCloseBtn: document.getElementById('passkey-close-btn'),
+  passkeyModalCopy: document.getElementById('passkey-modal-copy'),
+  decisionModal: document.getElementById('decision-modal'),
+  decisionOverlay: document.getElementById('decision-overlay'),
+  decisionTitle: document.getElementById('decision-title'),
+  decisionCopy: document.getElementById('decision-copy'),
+  decisionForm: document.getElementById('decision-form'),
+  decisionFields: document.getElementById('decision-fields'),
+  decisionError: document.getElementById('decision-error'),
+  decisionConfirmBtn: document.getElementById('decision-confirm-btn'),
+  decisionCancelBtn: document.getElementById('decision-cancel-btn'),
+  decisionDismissBtn: document.getElementById('decision-dismiss-btn'),
+  deleteModal: document.getElementById('delete-modal'),
+  deleteOverlay: document.getElementById('delete-overlay'),
+  deleteCloseBtn: document.getElementById('delete-close-btn'),
+  deleteCancelBtn: document.getElementById('delete-cancel-btn'),
 
   cookiePopup: document.getElementById('cookie-popup'),
   cookieAcceptBtn: document.getElementById('cookie-accept'),
@@ -714,6 +743,14 @@ const state = {
   mfaSetup: null,
   mfaSetupOpen: false,
   mfaManageMode: '',
+  mfaLastFocusedElement: null,
+  passkeyModalOpen: false,
+  passkeyLastFocusedElement: null,
+  deleteModalOpen: false,
+  deleteLastFocusedElement: null,
+  decisionModalConfig: null,
+  decisionModalResolver: null,
+  decisionLastFocusedElement: null,
   launcherOpen: false,
   launcherActiveIndex: 0,
   launcherLastFocusedElement: null,
@@ -815,23 +852,165 @@ const parseSensitiveMfaInput = (value) => {
   return { mfaCode: '', backupCode: normalized };
 };
 
-const collectSensitiveActionMfa = (actionLabel) => {
+const isMfaModalOpen = () => Boolean(state.mfaSetupOpen || state.mfaManageMode);
+const isPasskeyModalOpen = () => Boolean(state.passkeyModalOpen);
+const isDeleteModalOpen = () => Boolean(state.deleteModalOpen);
+const isDecisionModalOpen = () => Boolean(state.decisionModalResolver);
+const isAnyOverlayOpen = () =>
+  Boolean(state.launcherOpen || isMfaModalOpen() || isPasskeyModalOpen() || isDeleteModalOpen() || isDecisionModalOpen());
+
+const syncOverlayLock = () => {
+  document.body.classList.toggle('launcher-open', isAnyOverlayOpen());
+};
+
+const clearDecisionError = () => {
+  if (!dom.decisionError) return;
+  dom.decisionError.hidden = true;
+  dom.decisionError.textContent = '';
+};
+
+const showDecisionError = (message) => {
+  if (!dom.decisionError) {
+    showToast(message, 'error');
+    return;
+  }
+  dom.decisionError.hidden = false;
+  dom.decisionError.textContent = message;
+};
+
+const closeDecisionModal = (result = null, options = {}) => {
+  const { skipFocusRestore = false } = options;
+  const resolver = state.decisionModalResolver;
+
+  state.decisionModalConfig = null;
+  state.decisionModalResolver = null;
+  if (dom.decisionModal) dom.decisionModal.hidden = true;
+  if (dom.decisionFields) dom.decisionFields.innerHTML = '';
+  clearDecisionError();
+  syncOverlayLock();
+
+  if (!skipFocusRestore) {
+    state.decisionLastFocusedElement?.focus?.();
+  }
+  state.decisionLastFocusedElement = null;
+
+  resolver?.(result);
+};
+
+const submitDecisionModal = () => {
+  const config = state.decisionModalConfig;
+  if (!config) return;
+
+  const values = {};
+  for (const field of config.fields || []) {
+    const input = document.getElementById(field.id);
+    values[field.name || field.id] = input?.value || '';
+  }
+
+  if (typeof config.validate === 'function') {
+    const error = config.validate(values);
+    if (error) {
+      showDecisionError(error);
+      return;
+    }
+  }
+
+  closeDecisionModal(values, { skipFocusRestore: Boolean(config.skipFocusRestoreOnConfirm) });
+};
+
+const renderDecisionModal = () => {
+  if (!dom.decisionModal || !dom.decisionTitle || !dom.decisionCopy || !dom.decisionFields || !dom.decisionConfirmBtn) return;
+
+  const config = state.decisionModalConfig;
+  dom.decisionModal.hidden = !config;
+  syncOverlayLock();
+  clearDecisionError();
+
+  if (!config) return;
+
+  dom.decisionTitle.textContent = config.title || 'Review this action';
+  dom.decisionCopy.textContent = config.copy || 'Continue only if this is what you intended.';
+  dom.decisionConfirmBtn.textContent = config.confirmLabel || 'Continue';
+  dom.decisionConfirmBtn.className = config.confirmClassName || 'primary-btn';
+  dom.decisionConfirmBtn.dataset.defaultLabel = config.confirmLabel || 'Continue';
+  if (dom.decisionDismissBtn) dom.decisionDismissBtn.textContent = config.cancelLabel || 'Cancel';
+  if (dom.decisionCancelBtn) dom.decisionCancelBtn.textContent = config.closeLabel || 'Close';
+
+  dom.decisionFields.innerHTML = '';
+  for (const field of config.fields || []) {
+    const label = document.createElement('label');
+    if (field.wide) label.className = 'wide-field';
+    label.textContent = field.label;
+
+    const input = document.createElement('input');
+    input.id = field.id;
+    input.type = field.type || 'text';
+    input.value = field.value || '';
+    if (field.placeholder) input.placeholder = field.placeholder;
+    if (field.autocomplete) input.autocomplete = field.autocomplete;
+    if (field.inputmode) input.inputMode = field.inputmode;
+    if (field.pattern) input.pattern = field.pattern;
+    if (field.required) input.required = true;
+    if (field.maxlength) input.maxLength = field.maxlength;
+    label.appendChild(input);
+    dom.decisionFields.appendChild(label);
+  }
+
+  window.setTimeout(() => {
+    const firstField = config.fields?.length ? document.getElementById(config.fields[0].id) : dom.decisionConfirmBtn;
+    firstField?.focus?.();
+    if (config.fields?.length && typeof firstField?.select === 'function' && config.fields[0].selectOnFocus) {
+      firstField.select();
+    }
+  }, 0);
+};
+
+const openDecisionModal = (config) =>
+  new Promise((resolve) => {
+    state.decisionModalConfig = {
+      confirmLabel: 'Continue',
+      cancelLabel: 'Cancel',
+      closeLabel: 'Close',
+      confirmClassName: 'primary-btn',
+      fields: [],
+      ...config,
+    };
+    state.decisionModalResolver = resolve;
+    state.decisionLastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    renderDecisionModal();
+  });
+
+const requestSensitiveActionMfa = async (actionLabel) => {
   if (!requiresSensitiveActionMfa()) {
     return { mfaCode: '', backupCode: '' };
   }
 
-  const value = window.prompt(`Enter your MFA code or backup code to ${actionLabel}.`);
-  if (value === null) {
+  const result = await openDecisionModal({
+    title: 'Confirm with MFA',
+    copy: `Enter a current authenticator code or backup code to ${actionLabel}.`,
+    confirmLabel: 'Continue',
+    fields: [
+      {
+        id: 'decision-mfa-challenge',
+        name: 'challenge',
+        label: 'Authenticator code or backup code',
+        placeholder: '123456 or backup code',
+        autocomplete: 'one-time-code',
+        inputmode: 'text',
+        required: true,
+      },
+    ],
+    validate: (values) => {
+      const parsed = parseSensitiveMfaInput(values.challenge);
+      return parsed.mfaCode || parsed.backupCode ? '' : 'Enter a current MFA code or backup code.';
+    },
+  });
+
+  if (!result) {
     return null;
   }
 
-  const parsed = parseSensitiveMfaInput(value);
-  if (!parsed.mfaCode && !parsed.backupCode) {
-    showToast('Enter a current MFA code or backup code.', 'error');
-    return null;
-  }
-
-  return parsed;
+  return parseSensitiveMfaInput(result.challenge);
 };
 
 const clearMfaManageInputs = () => {
@@ -869,10 +1048,39 @@ const getMfaManageConfig = (mode = state.mfaManageMode) => {
 
 const getMfaSetupFocusTarget = () => (state.mfaSetup?.secret ? dom.mfaCode : dom.mfaCurrentPassword);
 
+const renderMfaModal = () => {
+  if (!dom.mfaModal) return;
+
+  const isOpen = isMfaModalOpen();
+  dom.mfaModal.hidden = !isOpen;
+  syncOverlayLock();
+
+  if (!dom.mfaModalTitle || !dom.mfaModalCopy) return;
+
+  if (state.mfaManageMode === 'disable') {
+    dom.mfaModalTitle.textContent = 'Disable multi-factor authentication';
+    dom.mfaModalCopy.textContent = 'Confirm this sensitive change with your password and a current MFA code or backup code.';
+    return;
+  }
+
+  if (state.mfaManageMode === 'backup') {
+    dom.mfaModalTitle.textContent = 'Regenerate backup codes';
+    dom.mfaModalCopy.textContent = 'Create a fresh backup code set without losing your place on the page.';
+    return;
+  }
+
+  dom.mfaModalTitle.textContent = state.mfaSetup?.secret ? 'Finish MFA setup' : 'Set up multi-factor authentication';
+  dom.mfaModalCopy.textContent = state.mfaSetup?.secret
+    ? 'Your authenticator is almost connected. Finish the remaining step here.'
+    : 'Work through setup in one focused overlay instead of inside the page.';
+};
+
 const openMfaSetupPanel = () => {
   state.mfaSetupOpen = true;
   state.mfaManageMode = '';
+  state.mfaLastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   clearMfaManageInputs();
+  renderMfaModal();
   renderMfaState(state.user);
 
   window.setTimeout(() => {
@@ -886,14 +1094,93 @@ const closeMfaSetupPanel = () => {
     if (dom.mfaCurrentPassword) dom.mfaCurrentPassword.value = '';
     if (dom.mfaCode) dom.mfaCode.value = '';
   }
+  renderMfaModal();
   renderMfaState(state.user);
+  state.mfaLastFocusedElement?.focus?.();
+  state.mfaLastFocusedElement = null;
+};
+
+const clearPasskeyInputs = () => {
+  if (dom.passkeyCurrentPassword) dom.passkeyCurrentPassword.value = '';
+  if (dom.passkeyChallenge) dom.passkeyChallenge.value = '';
+};
+
+const renderPasskeyModal = () => {
+  if (!dom.passkeyModal) return;
+  dom.passkeyModal.hidden = !state.passkeyModalOpen;
+  syncOverlayLock();
+  if (dom.passkeyChallengeRow) dom.passkeyChallengeRow.hidden = !requiresSensitiveActionMfa();
+  if (dom.passkeyModalCopy) {
+    dom.passkeyModalCopy.textContent = requiresSensitiveActionMfa()
+      ? 'Add or remove passkeys here. MFA-protected accounts also need a current authenticator code or backup code.'
+      : 'Add or remove passkeys here without stretching the security tab.';
+  }
+};
+
+const openPasskeyModal = () => {
+  state.passkeyModalOpen = true;
+  state.passkeyLastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  renderPasskeyModal();
+  renderPasskeys(state.user);
+  window.setTimeout(() => {
+    dom.passkeyCurrentPassword?.focus();
+  }, 0);
+};
+
+const closePasskeyModal = () => {
+  state.passkeyModalOpen = false;
+  clearPasskeyInputs();
+  renderPasskeyModal();
+  state.passkeyLastFocusedElement?.focus?.();
+  state.passkeyLastFocusedElement = null;
+};
+
+const getPasskeyModalMfa = () => {
+  if (!requiresSensitiveActionMfa()) {
+    return { mfaCode: '', backupCode: '' };
+  }
+
+  const parsed = parseSensitiveMfaInput(dom.passkeyChallenge?.value || '');
+  if (!parsed.mfaCode && !parsed.backupCode) {
+    showToast('Enter a current authenticator code or backup code.', 'error');
+    dom.passkeyChallenge?.focus();
+    return null;
+  }
+
+  return parsed;
+};
+
+const renderDeleteModal = () => {
+  if (!dom.deleteModal) return;
+  dom.deleteModal.hidden = !state.deleteModalOpen;
+  syncOverlayLock();
+  if (dom.deleteChallengeRow) dom.deleteChallengeRow.hidden = !requiresSensitiveActionMfa();
+};
+
+const openDeleteModal = () => {
+  state.deleteModalOpen = true;
+  state.deleteLastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  renderDeleteModal();
+  window.setTimeout(() => {
+    dom.deletePassword?.focus();
+  }, 0);
+};
+
+const closeDeleteModal = () => {
+  state.deleteModalOpen = false;
+  if (dom.deleteForm) dom.deleteForm.reset();
+  renderDeleteModal();
+  state.deleteLastFocusedElement?.focus?.();
+  state.deleteLastFocusedElement = null;
 };
 
 const openMfaManagePanel = (mode) => {
   if (!mode) return;
 
   state.mfaManageMode = mode;
+  state.mfaLastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   clearMfaManageInputs();
+  renderMfaModal();
   renderMfaState(state.user);
 
   window.setTimeout(() => {
@@ -904,12 +1191,15 @@ const openMfaManagePanel = (mode) => {
 const closeMfaManagePanel = () => {
   state.mfaManageMode = '';
   clearMfaManageInputs();
+  renderMfaModal();
   renderMfaState(state.user);
+  state.mfaLastFocusedElement?.focus?.();
+  state.mfaLastFocusedElement = null;
 };
 
 const openMfaSecuritySection = () => {
+  switchTab('security');
   openMfaSetupPanel();
-  openSecuritySection('security-mfa-card', getMfaSetupFocusTarget());
 };
 
 const trackedForms = [
@@ -2038,10 +2328,20 @@ const clearDashboardUi = () => {
   if (dom.profileAvatarUpload) dom.profileAvatarUpload.value = '';
   state.mfaSetupOpen = false;
   state.mfaManageMode = '';
+  state.mfaLastFocusedElement = null;
+  state.passkeyModalOpen = false;
+  state.passkeyLastFocusedElement = null;
+  state.deleteModalOpen = false;
+  state.deleteLastFocusedElement = null;
+  state.decisionModalConfig = null;
+  state.decisionModalResolver = null;
+  state.decisionLastFocusedElement = null;
   if (dom.mfaCurrentPassword) dom.mfaCurrentPassword.value = '';
   if (dom.mfaCode) dom.mfaCode.value = '';
   clearMfaManageInputs();
   if (dom.passkeyCurrentPassword) dom.passkeyCurrentPassword.value = '';
+  if (dom.passkeyChallenge) dom.passkeyChallenge.value = '';
+  if (dom.deleteChallenge) dom.deleteChallenge.value = '';
 
   if (dom.activityFilter) dom.activityFilter.value = '';
   if (dom.activityKind) dom.activityKind.value = 'all';
@@ -2068,6 +2368,10 @@ const clearDashboardUi = () => {
   renderSecurityPosture(null);
   renderServices();
   renderLauncher();
+  renderMfaModal();
+  renderPasskeyModal();
+  renderDeleteModal();
+  renderDecisionModal();
   renderAvatarPreviews(null);
 
   applyAppearance({
@@ -3324,7 +3628,10 @@ const getSecurityGuidance = (user = state.user) => {
       title: 'Add a passkey',
       detail: 'A passkey gives you faster sign-in and better phishing resistance than passwords alone.',
       actionLabel: 'Open passkeys',
-      onAction: () => openSecuritySection('security-passkey-card', dom.passkeyCurrentPassword),
+      onAction: () => {
+        switchTab('security');
+        openPasskeyModal();
+      },
     };
   }
 
@@ -3976,10 +4283,15 @@ const renderSessions = () => {
     revokeBtn.className = 'secondary-btn';
     revokeBtn.textContent = session.current ? 'Revoke Current Session' : 'Revoke';
     revokeBtn.addEventListener('click', async () => {
-      const shouldContinue = session.current
-        ? window.confirm('Revoking current session may require re-login. Continue?')
-        : window.confirm('Revoke this session?');
-      if (!shouldContinue) return;
+      const decision = await openDecisionModal({
+        title: session.current ? 'Revoke current session' : 'Revoke session',
+        copy: session.current
+          ? 'Revoking the session you are using now may require you to sign in again immediately.'
+          : 'This ends the selected session on that device.',
+        confirmLabel: session.current ? 'Revoke current session' : 'Revoke session',
+        confirmClassName: session.current ? 'danger-btn' : 'primary-btn',
+      });
+      if (!decision) return;
 
       setButtonBusy(revokeBtn, true, 'Revoking...');
       try {
@@ -4055,6 +4367,8 @@ const renderMfaState = (user = state.user) => {
   const showSetupPanel = !mfa.enabled && state.mfaSetupOpen;
   const showSetupSteps = Boolean(state.mfaSetup?.secret);
   const manageConfig = getMfaManageConfig();
+  renderMfaModal();
+  renderDeleteModal();
 
   if (dom.mfaStatusCopy) {
     if (mfa.enabled) {
@@ -4107,6 +4421,7 @@ const renderMfaState = (user = state.user) => {
 const renderPasskeys = (user = state.user) => {
   const passkeys = normalizePasskeyState(user?.security?.passkeys);
   const supported = Boolean(window.WebAuthnJson?.isSupported?.());
+  renderPasskeyModal();
 
   if (dom.passkeyStatusCopy) {
     if (!supported) {
@@ -4121,6 +4436,11 @@ const renderPasskeys = (user = state.user) => {
   }
 
   if (dom.passkeyRegisterBtn) dom.passkeyRegisterBtn.disabled = !supported;
+  if (dom.passkeyManageBtn) dom.passkeyManageBtn.disabled = !supported;
+  if (dom.passkeyManageBtn) {
+    dom.passkeyManageBtn.textContent = passkeys.count > 0 ? 'Manage Passkeys' : 'Set Up Passkey';
+  }
+  if (dom.passkeyChallengeRow) dom.passkeyChallengeRow.hidden = !requiresSensitiveActionMfa();
   if (!dom.passkeyList) return;
 
   dom.passkeyList.innerHTML = '';
@@ -4175,8 +4495,14 @@ const renderPasskeys = (user = state.user) => {
         dom.passkeyCurrentPassword?.focus();
         return;
       }
-      if (!window.confirm(`Remove ${passkey.name || 'this passkey'}?`)) return;
-      const passkeyRemovalMfa = collectSensitiveActionMfa('remove a passkey');
+      const decision = await openDecisionModal({
+        title: 'Remove passkey',
+        copy: `Remove ${passkey.name || 'this passkey'} from your account?`,
+        confirmLabel: 'Remove passkey',
+        confirmClassName: 'danger-btn',
+      });
+      if (!decision) return;
+      const passkeyRemovalMfa = getPasskeyModalMfa();
       if (!passkeyRemovalMfa) return;
 
       setButtonBusy(removeBtn, true, 'Removing...');
@@ -4188,7 +4514,7 @@ const renderPasskeys = (user = state.user) => {
         });
         if (!state.user) state.user = {};
         state.user.security = data.security || data.user?.security || state.user.security || {};
-        if (dom.passkeyCurrentPassword) dom.passkeyCurrentPassword.value = '';
+        clearPasskeyInputs();
         fillSecurity(state.user);
         showToast(data.message || 'Passkey removed.', 'success');
       } catch (error) {
@@ -4283,14 +4609,30 @@ const renderDevices = () => {
     renameBtn.className = 'secondary-btn';
     renameBtn.textContent = 'Rename';
     renameBtn.addEventListener('click', async () => {
-      const nextLabel = window.prompt('Device label', safeText(device.label) || 'Browser device');
-      if (!nextLabel) return;
+      const decision = await openDecisionModal({
+        title: 'Rename device',
+        copy: 'Use a short label that makes this device easy to recognize later.',
+        confirmLabel: 'Save label',
+        fields: [
+          {
+            id: 'decision-device-label',
+            name: 'label',
+            label: 'Device label',
+            value: safeText(device.label) || 'Browser device',
+            required: true,
+            maxlength: 80,
+            selectOnFocus: true,
+          },
+        ],
+        validate: (values) => (safeText(values.label) ? '' : 'Enter a device label before saving.'),
+      });
+      if (!decision) return;
 
       setButtonBusy(renameBtn, true, 'Saving...');
       try {
         await apiRequest(`/devices/${encodeURIComponent(device.fingerprint)}`, {
           method: 'PATCH',
-          body: { label: nextLabel },
+          body: { label: decision.label },
         });
         await Promise.all([loadDevices(), loadSessions()]);
         showToast('Device label updated.', 'success');
@@ -4307,7 +4649,13 @@ const renderDevices = () => {
     forgetBtn.className = 'danger-btn';
     forgetBtn.textContent = device.current ? 'Remove Device' : 'Forget Device';
     forgetBtn.addEventListener('click', async () => {
-      if (!window.confirm('Remove this device and revoke any sessions tied to it?')) return;
+      const decision = await openDecisionModal({
+        title: device.current ? 'Remove current device' : 'Forget device',
+        copy: 'This removes the saved device record and revokes any sessions tied to it.',
+        confirmLabel: device.current ? 'Remove device' : 'Forget device',
+        confirmClassName: 'danger-btn',
+      });
+      if (!decision) return;
 
       setButtonBusy(forgetBtn, true, 'Removing...');
       try {
@@ -4464,7 +4812,7 @@ const openLauncher = () => {
   state.launcherOpen = true;
   state.launcherLastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   dom.launcherModal.hidden = false;
-  document.body.classList.add('launcher-open');
+  syncOverlayLock();
   if (dom.launcherSearch) {
     dom.launcherSearch.value = safeText(dom.serviceFilter?.value);
   }
@@ -4477,7 +4825,7 @@ const closeLauncher = () => {
 
   state.launcherOpen = false;
   dom.launcherModal.hidden = true;
-  document.body.classList.remove('launcher-open');
+  syncOverlayLock();
   state.launcherLastFocusedElement?.focus?.();
 };
 
@@ -4921,7 +5269,7 @@ const handleProfileSave = async (event) => {
     return;
   }
 
-  const emailChangeMfa = emailChanged ? collectSensitiveActionMfa('change your email') : { mfaCode: '', backupCode: '' };
+  const emailChangeMfa = emailChanged ? await requestSensitiveActionMfa('change your email') : { mfaCode: '', backupCode: '' };
   if (emailChanged && !emailChangeMfa) {
     return;
   }
@@ -5076,7 +5424,13 @@ const handleOauthUnlink = async (provider) => {
   const normalizedProvider = safeText(provider).toLowerCase();
   const providerLabel = getOauthProviderLabel(normalizedProvider);
   const elements = getOauthProviderElements(normalizedProvider);
-  if (!window.confirm(`Unlink ${providerLabel} from this Continental ID account?`)) {
+  const decision = await openDecisionModal({
+    title: `Unlink ${providerLabel}`,
+    copy: `This disconnects ${providerLabel} from this Continental ID account.`,
+    confirmLabel: `Unlink ${providerLabel}`,
+    confirmClassName: 'danger-btn',
+  });
+  if (!decision) {
     return;
   }
 
@@ -5111,7 +5465,7 @@ const handlePasswordSave = async (event) => {
     return;
   }
 
-  const passwordChangeMfa = collectSensitiveActionMfa('update your password');
+  const passwordChangeMfa = await requestSensitiveActionMfa('update your password');
   if (!passwordChangeMfa) {
     return;
   }
@@ -5179,7 +5533,7 @@ const handlePasskeyRegister = async () => {
     return;
   }
 
-  const passkeyRegistrationMfa = collectSensitiveActionMfa('add a passkey');
+  const passkeyRegistrationMfa = getPasskeyModalMfa();
   if (!passkeyRegistrationMfa) {
     return;
   }
@@ -5226,7 +5580,7 @@ const handlePasskeyRegister = async () => {
     }
 
     syncUiWithUser(normalizeUserPayload(verifyPayload));
-    if (dom.passkeyCurrentPassword) dom.passkeyCurrentPassword.value = '';
+    clearPasskeyInputs();
     showToast(verifyPayload.message || 'Passkey added.', 'success');
     setSyncStatus(new Date());
   } catch (error) {
@@ -5298,6 +5652,8 @@ const handleMfaEnable = async () => {
     if (dom.mfaCode) dom.mfaCode.value = '';
     renderBackupCodes([]);
     syncUiWithUser(state.user);
+    state.mfaLastFocusedElement?.focus?.();
+    state.mfaLastFocusedElement = null;
     showToast('MFA enabled.', 'success');
   } catch (err) {
     showToast(err.message, 'error');
@@ -5477,13 +5833,14 @@ const handleDeleteAccount = async (event) => {
     return;
   }
 
-  if (!window.confirm('Delete your account permanently? This cannot be undone.')) {
-    return;
-  }
-
-  const deleteAccountMfa = collectSensitiveActionMfa('delete your account');
-  if (!deleteAccountMfa) {
-    return;
+  let deleteAccountMfa = { mfaCode: '', backupCode: '' };
+  if (requiresSensitiveActionMfa()) {
+    deleteAccountMfa = parseSensitiveMfaInput(dom.deleteChallenge?.value || '');
+    if (!deleteAccountMfa.mfaCode && !deleteAccountMfa.backupCode) {
+      showToast('Enter a current authenticator code or backup code.', 'error');
+      dom.deleteChallenge?.focus();
+      return;
+    }
   }
 
   setButtonBusy(dom.deleteAccountBtn, true, 'Deleting...');
@@ -5958,6 +6315,38 @@ const setupKeyboardShortcuts = () => {
     const isModifier = event.metaKey || event.ctrlKey;
     const key = safeText(event.key).toLowerCase();
 
+    if (isDecisionModalOpen() && key === 'escape') {
+      event.preventDefault();
+      closeDecisionModal(null);
+      return;
+    }
+
+    if (isDeleteModalOpen() && key === 'escape') {
+      event.preventDefault();
+      closeDeleteModal();
+      return;
+    }
+
+    if (isPasskeyModalOpen() && key === 'escape') {
+      event.preventDefault();
+      closePasskeyModal();
+      return;
+    }
+
+    if (isMfaModalOpen() && key === 'escape') {
+      event.preventDefault();
+      if (state.mfaManageMode) {
+        closeMfaManagePanel();
+      } else {
+        closeMfaSetupPanel();
+      }
+      return;
+    }
+
+    if (isDecisionModalOpen() || isDeleteModalOpen() || isPasskeyModalOpen() || isMfaModalOpen()) {
+      return;
+    }
+
     if (state.launcherOpen && key === 'escape') {
       event.preventDefault();
       closeLauncher();
@@ -6025,6 +6414,40 @@ const setupEventHandlers = () => {
   if (dom.saveReminderJumpBtn) dom.saveReminderJumpBtn.addEventListener('click', jumpToFirstDirtyForm);
   if (dom.launcherCloseBtn) dom.launcherCloseBtn.addEventListener('click', closeLauncher);
   if (dom.launcherOverlay) dom.launcherOverlay.addEventListener('click', closeLauncher);
+  if (dom.mfaCloseBtn) {
+    dom.mfaCloseBtn.addEventListener('click', () => {
+      if (state.mfaManageMode) {
+        closeMfaManagePanel();
+      } else {
+        closeMfaSetupPanel();
+      }
+    });
+  }
+  if (dom.mfaOverlay) {
+    dom.mfaOverlay.addEventListener('click', () => {
+      if (state.mfaManageMode) {
+        closeMfaManagePanel();
+      } else {
+        closeMfaSetupPanel();
+      }
+    });
+  }
+  if (dom.passkeyManageBtn) dom.passkeyManageBtn.addEventListener('click', openPasskeyModal);
+  if (dom.passkeyCloseBtn) dom.passkeyCloseBtn.addEventListener('click', closePasskeyModal);
+  if (dom.passkeyOverlay) dom.passkeyOverlay.addEventListener('click', closePasskeyModal);
+  if (dom.decisionForm) {
+    dom.decisionForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitDecisionModal();
+    });
+  }
+  if (dom.decisionCancelBtn) dom.decisionCancelBtn.addEventListener('click', () => closeDecisionModal(null));
+  if (dom.decisionDismissBtn) dom.decisionDismissBtn.addEventListener('click', () => closeDecisionModal(null));
+  if (dom.decisionOverlay) dom.decisionOverlay.addEventListener('click', () => closeDecisionModal(null));
+  if (dom.deleteOpenBtn) dom.deleteOpenBtn.addEventListener('click', openDeleteModal);
+  if (dom.deleteCloseBtn) dom.deleteCloseBtn.addEventListener('click', closeDeleteModal);
+  if (dom.deleteCancelBtn) dom.deleteCancelBtn.addEventListener('click', closeDeleteModal);
+  if (dom.deleteOverlay) dom.deleteOverlay.addEventListener('click', closeDeleteModal);
   if (dom.launcherSearch) {
     dom.launcherSearch.addEventListener('input', renderLauncher);
     dom.launcherSearch.addEventListener('keydown', (event) => {
@@ -6202,7 +6625,50 @@ const setupEventHandlers = () => {
   }
   if (dom.mfaManageConfirmBtn) dom.mfaManageConfirmBtn.addEventListener('click', handleMfaManageConfirm);
   if (dom.mfaManageCancelBtn) dom.mfaManageCancelBtn.addEventListener('click', closeMfaManagePanel);
+  if (dom.passkeyCurrentPassword) {
+    dom.passkeyCurrentPassword.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      if (requiresSensitiveActionMfa() && !safeText(dom.passkeyChallenge?.value)) {
+        dom.passkeyChallenge?.focus();
+        return;
+      }
+      handlePasskeyRegister();
+    });
+  }
+  if (dom.passkeyChallenge) {
+    dom.passkeyChallenge.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      handlePasskeyRegister();
+    });
+  }
   if (dom.passkeyRegisterBtn) dom.passkeyRegisterBtn.addEventListener('click', handlePasskeyRegister);
+  if (dom.deletePassword) {
+    dom.deletePassword.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      dom.deleteConfirmText?.focus();
+    });
+  }
+  if (dom.deleteConfirmText) {
+    dom.deleteConfirmText.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      if (requiresSensitiveActionMfa()) {
+        dom.deleteChallenge?.focus();
+        return;
+      }
+      if (dom.deleteForm) dom.deleteForm.requestSubmit();
+    });
+  }
+  if (dom.deleteChallenge) {
+    dom.deleteChallenge.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      if (dom.deleteForm) dom.deleteForm.requestSubmit();
+    });
+  }
   if (dom.publicProfilePreviewBtn) {
     dom.publicProfilePreviewBtn.addEventListener('click', () => {
       const draftState = getDraftPublicProfileState(state.user);
@@ -6320,7 +6786,13 @@ const setupEventHandlers = () => {
 
   if (dom.sessionsRevokeOthersBtn) {
     dom.sessionsRevokeOthersBtn.addEventListener('click', async () => {
-      if (!window.confirm('Revoke all other sessions and stay signed in on this device?')) return;
+      const decision = await openDecisionModal({
+        title: 'Revoke other sessions',
+        copy: 'This signs out every other active session while keeping this device signed in.',
+        confirmLabel: 'Revoke other sessions',
+        confirmClassName: 'danger-btn',
+      });
+      if (!decision) return;
 
       setButtonBusy(dom.sessionsRevokeOthersBtn, true, 'Revoking...');
       try {
@@ -6341,7 +6813,13 @@ const setupEventHandlers = () => {
 
   if (dom.sessionsRevokeAllBtn) {
     dom.sessionsRevokeAllBtn.addEventListener('click', async () => {
-      if (!window.confirm('Revoke all sessions? You will need to sign in again.')) return;
+      const decision = await openDecisionModal({
+        title: 'Revoke all sessions',
+        copy: 'This signs you out everywhere, including this device. You will need to sign in again.',
+        confirmLabel: 'Revoke all sessions',
+        confirmClassName: 'danger-btn',
+      });
+      if (!decision) return;
 
       setButtonBusy(dom.sessionsRevokeAllBtn, true, 'Revoking...');
       try {

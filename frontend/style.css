@@ -587,6 +587,18 @@ body.launcher-open {
   box-shadow: var(--shadow);
 }
 
+.mfa-modal-panel {
+  width: min(760px, calc(100vw - 2rem));
+  display: grid;
+  gap: 1rem;
+}
+
+.decision-modal-panel {
+  width: min(560px, calc(100vw - 2rem));
+  display: grid;
+  gap: 1rem;
+}
+
 .launcher-header {
   display: flex;
   align-items: flex-start;
@@ -2314,6 +2326,10 @@ footer {
   border: 1px solid var(--line);
   background: var(--surface-strong);
   display: grid;
+  gap: 0.9rem;
+}
+
+.decision-modal-panel .form-grid {
   gap: 0.9rem;
 }
 

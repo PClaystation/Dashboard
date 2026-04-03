@@ -896,18 +896,10 @@
                   <h3>Delete account</h3>
                 </div>
               </div>
-              <p class="danger-note">Cannot be undone.</p>
-              <form id="delete-form" class="form-grid">
-                <label>
-                  Confirm password
-                  <input id="delete-password" name="currentPassword" type="password" autocomplete="current-password" required />
-                </label>
-                <label>
-                  Type DELETE to confirm
-                  <input id="delete-confirm-text" name="confirmText" type="text" pattern="DELETE" required />
-                </label>
-                <button id="delete-account-btn" class="danger-btn" type="submit">Delete My Account</button>
-              </form>
+              <p class="danger-note">Cannot be undone. Open the delete flow only when you are ready to remove this account permanently.</p>
+              <div class="mfa-actions">
+                <button id="delete-open-btn" class="danger-btn" type="button">Open Delete Flow</button>
+              </div>
             </article>
           </div>
         </section>
@@ -1042,129 +1034,6 @@
                     <button id="mfa-backup-btn" class="secondary-btn" type="button">Regenerate Backup Codes</button>
                   </div>
                 </div>
-
-                <div
-                  id="mfa-setup-panel"
-                  class="mfa-setup-panel"
-                  data-collapsible-max-height="520"
-                  data-collapsible-label="MFA setup"
-                  hidden
-                >
-                  <p class="helper-line">Set up MFA in one place: verify your password, scan the QR code, then enter the 6-digit code from your authenticator app.</p>
-                  <div class="mfa-setup-flow">
-                    <section class="mfa-step-card">
-                      <div class="mfa-step-card-head">
-                        <span class="mfa-step-badge">1</span>
-                        <div>
-                          <h4>Verify it's you</h4>
-                          <p>Enter your current password to generate the QR code and setup key.</p>
-                        </div>
-                      </div>
-                      <label>
-                        Current password
-                        <input id="mfa-current-password" type="password" autocomplete="current-password" />
-                      </label>
-                      <div class="mfa-panel-actions">
-                        <button id="mfa-start-setup-btn" class="primary-btn" type="button">Continue</button>
-                        <button id="mfa-cancel-setup-btn" class="secondary-btn" type="button">Cancel</button>
-                      </div>
-                    </section>
-
-                    <div id="mfa-setup-steps" class="mfa-setup-flow" hidden>
-                      <section class="mfa-step-card">
-                        <div class="mfa-step-card-head">
-                          <span class="mfa-step-badge">2</span>
-                          <div>
-                            <h4>Scan the QR code</h4>
-                            <p>Open Authy, tap add account, and scan this code.</p>
-                          </div>
-                        </div>
-                        <div id="mfa-qr-shell" class="mfa-qr-shell" hidden>
-                          <img id="mfa-qr-image" alt="QR code for authenticator app setup" />
-                        </div>
-                      </section>
-
-                      <section class="mfa-step-card">
-                        <div class="mfa-step-card-head">
-                          <span class="mfa-step-badge">3</span>
-                          <div>
-                            <h4>Use the setup key if scanning is unavailable</h4>
-                            <p>Most apps accept the key below if you prefer to enter it manually.</p>
-                          </div>
-                        </div>
-                        <div class="mfa-inline-field">
-                          <label class="wide-field">
-                            Setup key
-                            <input id="mfa-secret" type="text" readonly />
-                          </label>
-                          <button id="mfa-copy-secret-btn" class="secondary-btn" type="button">Copy Key</button>
-                        </div>
-                        <details class="mfa-advanced-details">
-                          <summary>Advanced setup details</summary>
-                          <div class="mfa-inline-field mfa-inline-field-advanced">
-                            <label class="wide-field">
-                              OTPAuth URL
-                              <input id="mfa-otpauth-url" type="text" readonly />
-                            </label>
-                            <button id="mfa-copy-otpauth-btn" class="secondary-btn" type="button">Copy URL</button>
-                          </div>
-                        </details>
-                      </section>
-
-                      <section class="mfa-step-card">
-                        <div class="mfa-step-card-head">
-                          <span class="mfa-step-badge">4</span>
-                          <div>
-                            <h4>Confirm the connection</h4>
-                            <p>Enter the current 6-digit code from your authenticator app to finish setup.</p>
-                          </div>
-                        </div>
-                        <label>
-                          6-digit code
-                          <input id="mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
-                        </label>
-                        <button id="mfa-enable-btn" class="primary-btn" type="button">Turn On MFA</button>
-                      </section>
-                    </div>
-                  </div>
-
-                </div>
-
-                <div
-                  id="mfa-manage-panel"
-                  class="mfa-setup-panel"
-                  data-collapsible-max-height="320"
-                  data-collapsible-label="MFA action"
-                  hidden
-                >
-                  <div class="mfa-panel-header">
-                    <h4 id="mfa-manage-title">Confirm this action</h4>
-                    <p id="mfa-manage-copy" class="helper-line">Enter your password and a current MFA code or backup code to continue.</p>
-                  </div>
-                  <label>
-                    Current password
-                    <input id="mfa-manage-current-password" type="password" autocomplete="current-password" />
-                  </label>
-                  <label>
-                    Authenticator code or backup code
-                    <input
-                      id="mfa-manage-challenge"
-                      type="text"
-                      inputmode="text"
-                      autocomplete="one-time-code"
-                      placeholder="123456 or backup code"
-                    />
-                  </label>
-                  <div class="mfa-panel-actions">
-                    <button id="mfa-manage-confirm-btn" class="danger-btn" type="button">Continue</button>
-                    <button id="mfa-manage-cancel-btn" class="secondary-btn" type="button">Cancel</button>
-                  </div>
-                </div>
-
-                <div id="mfa-backup-codes-panel" class="mfa-setup-panel mfa-backup-codes-panel" hidden>
-                  <p class="helper-line">Save these backup codes somewhere safe. Each code works once.</p>
-                  <div id="mfa-backup-codes" class="backup-code-list"></div>
-                </div>
               </div>
             </article>
 
@@ -1181,31 +1050,8 @@
                 <div class="mfa-status-card">
                   <p id="passkey-status-copy" class="helper-line">No passkeys saved.</p>
                   <div class="mfa-actions">
-                    <button id="passkey-register-btn" class="secondary-btn" type="button">Add Passkey</button>
+                    <button id="passkey-manage-btn" class="secondary-btn" type="button">Manage Passkeys</button>
                   </div>
-                </div>
-
-                <div class="passkey-panel">
-                  <label>
-                    Current password
-                    <input
-                      id="passkey-current-password"
-                      type="password"
-                      autocomplete="current-password"
-                      placeholder="Required to add or remove passkeys"
-                    />
-                  </label>
-                  <p class="helper-line">
-                    Use your device biometrics, screen lock, or security key when the browser prompts you.
-                  </p>
-                  <ul
-                    id="passkey-list"
-                    class="activity-list"
-                    data-collapsible-max-height="360"
-                    data-collapsible-label="passkeys"
-                  >
-                    <li>No passkeys saved.</li>
-                  </ul>
                 </div>
               </div>
             </article>
@@ -1438,6 +1284,242 @@
         <p id="launcher-results-count" class="helper-line" aria-live="polite">4 services</p>
         <div id="launcher-list" class="launcher-list"></div>
         <p id="launcher-empty-state" class="empty-state" hidden>No services match this search.</p>
+      </div>
+    </div>
+
+    <div id="mfa-modal" class="launcher-modal" hidden>
+      <div id="mfa-overlay" class="launcher-overlay" aria-hidden="true"></div>
+      <div class="launcher-panel mfa-modal-panel" role="dialog" aria-modal="true" aria-labelledby="mfa-modal-title">
+        <div class="launcher-header">
+          <div>
+            <p class="eyebrow">Security</p>
+            <h2 id="mfa-modal-title">Multi-factor authentication</h2>
+            <p id="mfa-modal-copy" class="helper-line">Set up MFA without leaving this screen.</p>
+          </div>
+          <button id="mfa-close-btn" class="ghost-btn" type="button">Close</button>
+        </div>
+
+        <div
+          id="mfa-setup-panel"
+          class="mfa-setup-panel"
+          hidden
+        >
+          <p class="helper-line">Set up MFA in one place: verify your password, scan the QR code, then enter the 6-digit code from your authenticator app.</p>
+          <div class="mfa-setup-flow">
+            <section class="mfa-step-card">
+              <div class="mfa-step-card-head">
+                <span class="mfa-step-badge">1</span>
+                <div>
+                  <h4>Verify it's you</h4>
+                  <p>Enter your current password to generate the QR code and setup key.</p>
+                </div>
+              </div>
+              <label>
+                Current password
+                <input id="mfa-current-password" type="password" autocomplete="current-password" />
+              </label>
+              <div class="mfa-panel-actions">
+                <button id="mfa-start-setup-btn" class="primary-btn" type="button">Continue</button>
+                <button id="mfa-cancel-setup-btn" class="secondary-btn" type="button">Cancel</button>
+              </div>
+            </section>
+
+            <div id="mfa-setup-steps" class="mfa-setup-flow" hidden>
+              <section class="mfa-step-card">
+                <div class="mfa-step-card-head">
+                  <span class="mfa-step-badge">2</span>
+                  <div>
+                    <h4>Scan the QR code</h4>
+                    <p>Open Authy, tap add account, and scan this code.</p>
+                  </div>
+                </div>
+                <div id="mfa-qr-shell" class="mfa-qr-shell" hidden>
+                  <img id="mfa-qr-image" alt="QR code for authenticator app setup" />
+                </div>
+              </section>
+
+              <section class="mfa-step-card">
+                <div class="mfa-step-card-head">
+                  <span class="mfa-step-badge">3</span>
+                  <div>
+                    <h4>Use the setup key if scanning is unavailable</h4>
+                    <p>Most apps accept the key below if you prefer to enter it manually.</p>
+                  </div>
+                </div>
+                <div class="mfa-inline-field">
+                  <label class="wide-field">
+                    Setup key
+                    <input id="mfa-secret" type="text" readonly />
+                  </label>
+                  <button id="mfa-copy-secret-btn" class="secondary-btn" type="button">Copy Key</button>
+                </div>
+                <details class="mfa-advanced-details">
+                  <summary>Advanced setup details</summary>
+                  <div class="mfa-inline-field mfa-inline-field-advanced">
+                    <label class="wide-field">
+                      OTPAuth URL
+                      <input id="mfa-otpauth-url" type="text" readonly />
+                    </label>
+                    <button id="mfa-copy-otpauth-btn" class="secondary-btn" type="button">Copy URL</button>
+                  </div>
+                </details>
+              </section>
+
+              <section class="mfa-step-card">
+                <div class="mfa-step-card-head">
+                  <span class="mfa-step-badge">4</span>
+                  <div>
+                    <h4>Confirm the connection</h4>
+                    <p>Enter the current 6-digit code from your authenticator app to finish setup.</p>
+                  </div>
+                </div>
+                <label>
+                  6-digit code
+                  <input id="mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+                </label>
+                <button id="mfa-enable-btn" class="primary-btn" type="button">Turn On MFA</button>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="mfa-manage-panel"
+          class="mfa-setup-panel"
+          hidden
+        >
+          <div class="mfa-panel-header">
+            <h4 id="mfa-manage-title">Confirm this action</h4>
+            <p id="mfa-manage-copy" class="helper-line">Enter your password and a current MFA code or backup code to continue.</p>
+          </div>
+          <label>
+            Current password
+            <input id="mfa-manage-current-password" type="password" autocomplete="current-password" />
+          </label>
+          <label>
+            Authenticator code or backup code
+            <input
+              id="mfa-manage-challenge"
+              type="text"
+              inputmode="text"
+              autocomplete="one-time-code"
+              placeholder="123456 or backup code"
+            />
+          </label>
+          <div class="mfa-panel-actions">
+            <button id="mfa-manage-confirm-btn" class="danger-btn" type="button">Continue</button>
+            <button id="mfa-manage-cancel-btn" class="secondary-btn" type="button">Cancel</button>
+          </div>
+        </div>
+
+        <div id="mfa-backup-codes-panel" class="mfa-setup-panel mfa-backup-codes-panel" hidden>
+          <p class="helper-line">Save these backup codes somewhere safe. Each code works once.</p>
+          <div id="mfa-backup-codes" class="backup-code-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="passkey-modal" class="launcher-modal" hidden>
+      <div id="passkey-overlay" class="launcher-overlay" aria-hidden="true"></div>
+      <div class="launcher-panel mfa-modal-panel" role="dialog" aria-modal="true" aria-labelledby="passkey-modal-title">
+        <div class="launcher-header">
+          <div>
+            <p class="eyebrow">Security</p>
+            <h2 id="passkey-modal-title">Manage passkeys</h2>
+            <p id="passkey-modal-copy" class="helper-line">Add or remove passkeys without stretching the security tab.</p>
+          </div>
+          <button id="passkey-close-btn" class="ghost-btn" type="button">Close</button>
+        </div>
+
+        <div class="passkey-panel">
+          <label>
+            Current password
+            <input
+              id="passkey-current-password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Required to add or remove passkeys"
+            />
+          </label>
+          <label id="passkey-challenge-row" hidden>
+            Authenticator code or backup code
+            <input
+              id="passkey-challenge"
+              type="text"
+              inputmode="text"
+              autocomplete="one-time-code"
+              placeholder="123456 or backup code"
+            />
+          </label>
+          <div class="mfa-actions">
+            <button id="passkey-register-btn" class="secondary-btn" type="button">Add Passkey</button>
+          </div>
+          <p class="helper-line">
+            Use your device biometrics, screen lock, or security key when the browser prompts you.
+          </p>
+          <ul
+            id="passkey-list"
+            class="activity-list"
+            data-collapsible-max-height="360"
+            data-collapsible-label="passkeys"
+          >
+            <li>No passkeys saved.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="decision-modal" class="launcher-modal" hidden>
+      <div id="decision-overlay" class="launcher-overlay" aria-hidden="true"></div>
+      <div class="launcher-panel decision-modal-panel" role="dialog" aria-modal="true" aria-labelledby="decision-title">
+        <div class="launcher-header">
+          <div>
+            <p class="eyebrow">Confirm action</p>
+            <h2 id="decision-title">Review this action</h2>
+            <p id="decision-copy" class="helper-line">Continue only if this is what you intended.</p>
+          </div>
+          <button id="decision-cancel-btn" class="ghost-btn" type="button">Close</button>
+        </div>
+        <form id="decision-form" class="form-grid">
+          <div id="decision-fields" class="form-grid"></div>
+          <p id="decision-error" class="danger-note" hidden></p>
+          <div class="mfa-panel-actions">
+            <button id="decision-confirm-btn" class="primary-btn" type="submit">Continue</button>
+            <button id="decision-dismiss-btn" class="secondary-btn" type="button">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="delete-modal" class="launcher-modal" hidden>
+      <div id="delete-overlay" class="launcher-overlay" aria-hidden="true"></div>
+      <div class="launcher-panel decision-modal-panel" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+        <div class="launcher-header">
+          <div>
+            <p class="eyebrow">Permanent action</p>
+            <h2 id="delete-modal-title">Delete account</h2>
+            <p id="delete-modal-copy" class="helper-line">This permanently removes your Continental ID account and cannot be undone.</p>
+          </div>
+          <button id="delete-close-btn" class="ghost-btn" type="button">Close</button>
+        </div>
+        <form id="delete-form" class="form-grid">
+          <label>
+            Confirm password
+            <input id="delete-password" name="currentPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <label>
+            Type DELETE to confirm
+            <input id="delete-confirm-text" name="confirmText" type="text" pattern="DELETE" required />
+          </label>
+          <label id="delete-challenge-row" hidden>
+            Authenticator code or backup code
+            <input id="delete-challenge" type="text" inputmode="text" autocomplete="one-time-code" placeholder="123456 or backup code" />
+          </label>
+          <div class="mfa-panel-actions">
+            <button id="delete-account-btn" class="danger-btn" type="submit">Delete My Account</button>
+            <button id="delete-cancel-btn" class="secondary-btn" type="button">Cancel</button>
+          </div>
+        </form>
       </div>
     </div>
 

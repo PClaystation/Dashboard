@@ -1072,10 +1072,126 @@ const clearPasswordReset = (user) => {
 
 const formatEmailDate = (value) => new Date(value).toUTCString();
 
+const EMAIL_THEME_PALETTES = {
+  midnight: {
+    pageBg: '#07111e',
+    shellBg: '#0b1727',
+    heroBg: '#112338',
+    contentBg: '#0d1a2b',
+    panelBg: '#112338',
+    shellBorder: '#22344a',
+    text: '#edf3fb',
+    muted: '#9fb3ca',
+    footer: '#95a5bd',
+    label: '#7d8ea5',
+    accent: '#4d6f99',
+    accentStrong: '#6f8bb2',
+    accentSoft: '#15283e',
+    secondary: '#c9a46f',
+    secondarySoft: '#2e261d',
+    buttonText: '#ffffff',
+  },
+  heritage: {
+    pageBg: '#f7f2ea',
+    shellBg: '#ffffff',
+    heroBg: '#eff5f2',
+    contentBg: '#ffffff',
+    panelBg: '#f7f2ea',
+    shellBorder: '#d9d3ca',
+    text: '#1c2530',
+    muted: '#69707d',
+    footer: '#69707d',
+    label: '#7b766d',
+    accent: '#146f63',
+    accentStrong: '#0d5a52',
+    accentSoft: '#e3f0ed',
+    secondary: '#c38a4a',
+    secondarySoft: '#f4eadb',
+    buttonText: '#ffffff',
+  },
+  dawn: {
+    pageBg: '#fbf2ea',
+    shellBg: '#fff9f4',
+    heroBg: '#f7ede6',
+    contentBg: '#fff9f4',
+    panelBg: '#fbf2ea',
+    shellBorder: '#e8d8cb',
+    text: '#251f20',
+    muted: '#736667',
+    footer: '#736667',
+    label: '#876d57',
+    accent: '#99572d',
+    accentStrong: '#7a431f',
+    accentSoft: '#f3e6dd',
+    secondary: '#c68b54',
+    secondarySoft: '#faeedf',
+    buttonText: '#ffffff',
+  },
+  night: {
+    pageBg: '#0b151b',
+    shellBg: '#102229',
+    heroBg: '#163640',
+    contentBg: '#11252c',
+    panelBg: '#163039',
+    shellBorder: '#25444d',
+    text: '#edf3ef',
+    muted: '#a0aea9',
+    footer: '#a0aea9',
+    label: '#b3c1bc',
+    accent: '#a7d8c3',
+    accentStrong: '#81c7ae',
+    accentSoft: '#1d342f',
+    secondary: '#f0bd86',
+    secondarySoft: '#362d23',
+    buttonText: '#0b151b',
+  },
+  ocean: {
+    pageBg: '#071825',
+    shellBg: '#0b2635',
+    heroBg: '#12425a',
+    contentBg: '#0d2a3b',
+    panelBg: '#123345',
+    shellBorder: '#245066',
+    text: '#eefaff',
+    muted: '#9ec3d0',
+    footer: '#9ec3d0',
+    label: '#a8d0dc',
+    accent: '#66d7d0',
+    accentStrong: '#40beb7',
+    accentSoft: '#123840',
+    secondary: '#f1c177',
+    secondarySoft: '#382c1f',
+    buttonText: '#062027',
+  },
+};
+
+const normalizeEmailTheme = (value) => {
+  const normalized = sanitizeText(value, 24).toLowerCase();
+  if (normalized && ALLOWED_THEMES.has(normalized) && normalized !== 'system') {
+    return normalized;
+  }
+
+  return DEFAULT_APPEARANCE.theme === 'system' ? 'midnight' : DEFAULT_APPEARANCE.theme;
+};
+
+const getEmailThemePalette = (theme) =>
+  EMAIL_THEME_PALETTES[normalizeEmailTheme(theme)] || EMAIL_THEME_PALETTES.midnight;
+
+const resolveEmailHeroImageUrl = () => {
+  const explicitHeroImageUrl = resolveAbsoluteUrl(
+    process.env.EMAIL_HERO_IMAGE_URL || process.env.PUBLIC_EMAIL_HERO_IMAGE_URL
+  );
+  if (explicitHeroImageUrl) {
+    return explicitHeroImageUrl;
+  }
+
+  return `${DEFAULT_DASHBOARD_ORIGIN}/images/placeHolder2.jpg`;
+};
+
 const renderEmailParagraphs = (paragraphs = [], styles = {}) => {
   const mergedStyles = {
     margin: '0 0 14px 0',
-    fontFamily: "'Helvetica Neue',Arial,sans-serif",
+    fontFamily: "'Aptos','Segoe UI',Arial,sans-serif",
     fontSize: '16px',
     lineHeight: '1.75',
     color: '#1f2937',
@@ -1097,7 +1213,10 @@ const renderEmailParagraphs = (paragraphs = [], styles = {}) => {
     .join('');
 };
 
-const renderEmailBulletList = (items = [], accentColor = '#0f766e') => {
+const renderEmailBulletList = (
+  items = [],
+  { bulletColor = '#0f766e', textColor = '#334155', dotHalo = 'transparent' } = {}
+) => {
   const normalizedItems = items.filter(Boolean);
   if (!normalizedItems.length) return '';
 
@@ -1107,14 +1226,14 @@ const renderEmailBulletList = (items = [], accentColor = '#0f766e') => {
         .map(
           (item) => `
             <tr>
-              <td valign="top" style="width:28px;padding:0 0 12px 0;">
+              <td valign="top" style="width:32px;padding:0 0 12px 0;">
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:2px 0 0 0;">
                   <tr>
-                    <td style="width:12px;height:12px;border-radius:999px;background-color:${accentColor};font-size:0;line-height:0;">&nbsp;</td>
+                    <td style="width:12px;height:12px;border-radius:999px;background-color:${bulletColor};box-shadow:0 0 0 6px ${dotHalo};font-size:0;line-height:0;">&nbsp;</td>
                   </tr>
                 </table>
               </td>
-              <td style="padding:0 0 12px 0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#334155;">
+              <td style="padding:0 0 12px 0;font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.7;color:${textColor};">
                 ${item}
               </td>
             </tr>
@@ -1125,7 +1244,10 @@ const renderEmailBulletList = (items = [], accentColor = '#0f766e') => {
   `;
 };
 
-const renderEmailDetailRows = (rows = []) => {
+const renderEmailDetailRows = (
+  rows = [],
+  { borderColor = '#dbe4ea', labelColor = '#64748b', valueColor = '#0f172a' } = {}
+) => {
   const normalizedRows = rows.filter((row) => row?.label && row?.value);
   if (!normalizedRows.length) return '';
 
@@ -1133,11 +1255,11 @@ const renderEmailDetailRows = (rows = []) => {
     .map(
       (row, index) => `
         <tr>
-          <td style="padding:${index === 0 ? '0' : '14px'} 0 0 0;border-top:${index === 0 ? '0' : '1px solid #dbe4ea'};">
-            <p style="margin:0 0 4px 0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;line-height:1.4;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;font-weight:700;">
+          <td style="padding:${index === 0 ? '0' : '14px'} 0 0 0;border-top:${index === 0 ? '0' : `1px solid ${borderColor}`};">
+            <p style="margin:0 0 4px 0;font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:11px;line-height:1.4;letter-spacing:0.16em;text-transform:uppercase;color:${labelColor};font-weight:700;">
               ${row.label}
             </p>
-            <p style="margin:0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#0f172a;">
+            <p style="margin:0;font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.7;color:${valueColor};">
               ${row.value}
             </p>
           </td>
@@ -1149,11 +1271,7 @@ const renderEmailDetailRows = (rows = []) => {
 
 const buildBrandedEmailHtml = ({
   preheader = '',
-  accentColor = '#0f766e',
-  accentSoft = '#dff6f1',
-  accentStrong = '#0b5d56',
-  surfaceTint = '#f8fbfc',
-  panelBorder = '#dbe4ea',
+  theme = DEFAULT_APPEARANCE.theme,
   eyebrow = 'Continental ID',
   title = '',
   lead = '',
@@ -1167,7 +1285,9 @@ const buildBrandedEmailHtml = ({
   bulletItems = [],
   fallbackLabel = '',
   footerNote = '',
+  heroImageUrl = '',
 }) => {
+  const palette = getEmailThemePalette(theme);
   const safePreheader = escapeHtml(preheader);
   const safeEyebrow = escapeHtml(eyebrow);
   const safeTitle = escapeHtml(title);
@@ -1179,20 +1299,22 @@ const buildBrandedEmailHtml = ({
   const safeBulletTitle = escapeHtml(bulletTitle);
   const safeFallbackLabel = escapeHtml(fallbackLabel);
   const safeFooterNote = escapeHtml(footerNote);
+  const safeHeroImageUrl = escapeHtml(heroImageUrl);
+  const hasHeroImage = Boolean(safeHeroImageUrl);
 
   return `
     <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;color:transparent;">
       ${safePreheader}
     </div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0;padding:32px 12px;background-color:#efe7dc;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0;padding:28px 12px;background-color:${palette.pageBg};">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:680px;margin:0 auto;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:720px;margin:0 auto;">
             <tr>
               <td style="padding:0 0 16px 0;text-align:center;">
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
                   <tr>
-                    <td style="padding:8px 14px;border-radius:999px;background-color:${accentSoft};border:1px solid ${panelBorder};font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;line-height:1.2;letter-spacing:0.18em;text-transform:uppercase;color:${accentStrong};font-weight:700;">
+                    <td style="padding:8px 14px;border-radius:999px;background-color:${palette.accentSoft};border:1px solid ${palette.shellBorder};font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:11px;line-height:1.2;letter-spacing:0.18em;text-transform:uppercase;color:${palette.accentStrong};font-weight:700;">
                       ${safeEyebrow}
                     </td>
                   </tr>
@@ -1201,44 +1323,58 @@ const buildBrandedEmailHtml = ({
             </tr>
             <tr>
               <td style="padding:0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background-color:#15202b;border-radius:30px 30px 0 0;">
-                  <tr>
-                    <td style="padding:12px 28px 0 28px;">
-                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background-color:${palette.shellBg};border:1px solid ${palette.shellBorder};border-radius:30px;overflow:hidden;">
+                  ${
+                    hasHeroImage
+                      ? `
                         <tr>
-                          <td style="height:6px;border-radius:999px;background-color:${accentColor};font-size:0;line-height:0;">&nbsp;</td>
+                          <td style="padding:0;">
+                            <img src="${safeHeroImageUrl}" alt="Continental ID header image" width="720" style="display:block;width:100%;height:auto;border:0;outline:none;text-decoration:none;" />
+                          </td>
                         </tr>
-                      </table>
-                    </td>
+                      `
+                      : ''
+                  }
+                  <tr>
+                    <td style="height:6px;background-color:${palette.secondary};font-size:0;line-height:0;">&nbsp;</td>
                   </tr>
                   <tr>
-                    <td style="padding:28px 28px 26px 28px;">
-                      <p style="margin:0 0 14px 0;font-family:Georgia,'Times New Roman',serif;font-size:36px;line-height:1.08;color:#ffffff;font-weight:700;">
+                    <td style="padding:28px 28px 24px 28px;background-color:${palette.heroBg};border-bottom:1px solid ${palette.shellBorder};">
+                      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px 0;">
+                        <tr>
+                          <td style="padding:7px 12px;border-radius:999px;background-color:${palette.secondarySoft};font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:11px;line-height:1.2;letter-spacing:0.16em;text-transform:uppercase;color:${palette.secondary};font-weight:700;">
+                            Dashboard-aligned design
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:0 0 14px 0;font-family:'Sora','Aptos Display','Segoe UI',Arial,sans-serif;font-size:36px;line-height:1.08;color:${palette.text};font-weight:700;letter-spacing:-0.03em;">
                         ${safeTitle}
                       </p>
-                      <p style="margin:0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:17px;line-height:1.75;color:#dbe7ef;">
+                      <p style="margin:0;font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:17px;line-height:1.75;color:${palette.muted};">
                         ${safeLead}
                       </p>
                     </td>
                   </tr>
                 </table>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background-color:#ffffff;border:1px solid ${panelBorder};border-top:0;border-radius:0 0 30px 30px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background-color:${palette.contentBg};border-left:1px solid ${palette.shellBorder};border-right:1px solid ${palette.shellBorder};border-bottom:1px solid ${palette.shellBorder};border-radius:0 0 30px 30px;">
                   <tr>
                     <td style="padding:30px 28px 28px 28px;">
                       ${renderEmailParagraphs([safeGreeting], {
                         margin: '0 0 16px 0',
                         fontSize: '16px',
                         lineHeight: '1.75',
-                        color: '#0f172a',
+                        color: palette.text,
                       })}
-                      ${renderEmailParagraphs(bodyParagraphs)}
+                      ${renderEmailParagraphs(bodyParagraphs, {
+                        color: palette.text,
+                      })}
                       ${
                         safeCtaLabel && safeCtaUrl
                           ? `
                             <table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 24px 0;">
                               <tr>
-                                <td style="border-radius:999px;background-color:${accentColor};">
-                                  <a href="${safeCtaUrl}" style="display:inline-block;padding:15px 26px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.2;font-weight:700;color:#ffffff;text-decoration:none;">
+                                <td style="border-radius:16px;background-color:${palette.accent};box-shadow:inset 0 -2px 0 rgba(0,0,0,0.16);">
+                                  <a href="${safeCtaUrl}" style="display:inline-block;padding:15px 26px;font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.2;font-weight:700;color:${palette.buttonText};text-decoration:none;">
                                     ${safeCtaLabel}
                                   </a>
                                 </td>
@@ -1250,14 +1386,18 @@ const buildBrandedEmailHtml = ({
                       ${
                         safeDetailTitle && detailRows.length
                           ? `
-                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 22px 0;background-color:${surfaceTint};border:1px solid ${panelBorder};border-radius:22px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 22px 0;background-color:${palette.panelBg};border:1px solid ${palette.shellBorder};border-radius:22px;">
                               <tr>
                                 <td style="padding:20px 20px 18px 20px;">
-                                  <p style="margin:0 0 14px 0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.4;letter-spacing:0.14em;text-transform:uppercase;color:${accentStrong};font-weight:700;">
+                                  <p style="margin:0 0 14px 0;font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:12px;line-height:1.4;letter-spacing:0.14em;text-transform:uppercase;color:${palette.accentStrong};font-weight:700;">
                                     ${safeDetailTitle}
                                   </p>
                                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
-                                    ${renderEmailDetailRows(detailRows)}
+                                    ${renderEmailDetailRows(detailRows, {
+                                      borderColor: palette.shellBorder,
+                                      labelColor: palette.label,
+                                      valueColor: palette.text,
+                                    })}
                                   </table>
                                 </td>
                               </tr>
@@ -1268,13 +1408,17 @@ const buildBrandedEmailHtml = ({
                       ${
                         safeBulletTitle && bulletItems.length
                           ? `
-                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 22px 0;background-color:#ffffff;border:1px solid ${panelBorder};border-radius:22px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 22px 0;background-color:${palette.panelBg};border:1px solid ${palette.shellBorder};border-radius:22px;">
                               <tr>
                                 <td style="padding:20px;">
-                                  <p style="margin:0 0 14px 0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.4;letter-spacing:0.14em;text-transform:uppercase;color:#475569;font-weight:700;">
+                                  <p style="margin:0 0 14px 0;font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:12px;line-height:1.4;letter-spacing:0.14em;text-transform:uppercase;color:${palette.secondary};font-weight:700;">
                                     ${safeBulletTitle}
                                   </p>
-                                  ${renderEmailBulletList(bulletItems, accentColor)}
+                                  ${renderEmailBulletList(bulletItems, {
+                                    bulletColor: palette.accent,
+                                    textColor: palette.text,
+                                    dotHalo: palette.accentSoft,
+                                  })}
                                 </td>
                               </tr>
                             </table>
@@ -1284,14 +1428,20 @@ const buildBrandedEmailHtml = ({
                       ${
                         safeFallbackLabel && safeCtaUrl
                           ? `
-                            <p style="margin:0 0 10px 0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.7;color:#475569;">
-                              ${safeFallbackLabel}
-                            </p>
-                            <p style="margin:0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.8;word-break:break-all;">
-                              <a href="${safeCtaUrl}" style="color:${accentStrong};text-decoration:underline;">
-                                ${safeCtaUrl}
-                              </a>
-                            </p>
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0;background-color:${palette.panelBg};border:1px solid ${palette.shellBorder};border-radius:20px;">
+                              <tr>
+                                <td style="padding:18px 20px;">
+                                  <p style="margin:0 0 10px 0;font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.7;color:${palette.muted};">
+                                    ${safeFallbackLabel}
+                                  </p>
+                                  <p style="margin:0;font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.8;word-break:break-all;">
+                                    <a href="${safeCtaUrl}" style="color:${palette.accentStrong};text-decoration:underline;">
+                                      ${safeCtaUrl}
+                                    </a>
+                                  </p>
+                                </td>
+                              </tr>
+                            </table>
                           `
                           : ''
                       }
@@ -1301,7 +1451,7 @@ const buildBrandedEmailHtml = ({
               </td>
             </tr>
             <tr>
-              <td style="padding:18px 20px 0 20px;text-align:center;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.8;color:#6b7280;">
+              <td style="padding:18px 20px 0 20px;text-align:center;font-family:'Aptos','Segoe UI',Arial,sans-serif;font-size:12px;line-height:1.8;color:${palette.footer};">
                 ${safeFooterNote}
               </td>
             </tr>
@@ -1338,11 +1488,8 @@ const buildVerificationEmailContent = (user, verificationUrl, expiresAt) => {
     ].join('\n'),
     html: buildBrandedEmailHtml({
       preheader: 'Verify your Continental ID email to finish setting up your account.',
-      accentColor: '#0f766e',
-      accentSoft: '#dff6f1',
-      accentStrong: '#0b5d56',
-      surfaceTint: '#f3fbf8',
-      panelBorder: '#d7e5e1',
+      theme: user?.preferences?.appearance?.theme,
+      heroImageUrl: resolveEmailHeroImageUrl(),
       title: 'Verify your email',
       lead: 'Finish setting up your account and keep sign-in trusted across the dashboard.',
       greeting: `Hi ${safeDisplayName},`,
@@ -1426,11 +1573,8 @@ const buildPasswordResetEmailContent = (user, resetUrl, expiresAt) => {
     ].join('\n'),
     html: buildBrandedEmailHtml({
       preheader: 'Use this secure link to reset your Continental ID password.',
-      accentColor: '#b45309',
-      accentSoft: '#fff1dd',
-      accentStrong: '#92400e',
-      surfaceTint: '#fff8ee',
-      panelBorder: '#eadfce',
+      theme: user?.preferences?.appearance?.theme,
+      heroImageUrl: resolveEmailHeroImageUrl(),
       title: 'Reset your password',
       lead: 'A password reset was requested for your Continental ID account.',
       greeting: `Hi ${safeDisplayName},`,
@@ -1695,7 +1839,7 @@ const sendPasswordResetEmail = async (user, req, reset) => {
   });
 };
 
-const buildSecurityEmailContent = ({ title, intro, details = [] }) => {
+const buildSecurityEmailContent = ({ user = null, title, intro, details = [] }) => {
   const safeTitle = escapeHtml(title || 'Security alert');
   const safeIntro = escapeHtml(intro || 'A security-sensitive action was detected on your account.');
   const normalizedDetails = Array.isArray(details)
@@ -1712,11 +1856,9 @@ const buildSecurityEmailContent = ({ title, intro, details = [] }) => {
     ].join('\n'),
     html: buildBrandedEmailHtml({
       preheader: title || 'Security alert for your Continental ID account.',
-      accentColor: '#b91c1c',
-      accentSoft: '#fee2e2',
-      accentStrong: '#991b1b',
-      surfaceTint: '#fff5f5',
-      panelBorder: '#f1d3d3',
+      theme: user?.preferences?.appearance?.theme,
+      heroImageUrl: resolveEmailHeroImageUrl(),
+      eyebrow: 'Security notice',
       title: title || 'Security alert',
       lead: 'A security-sensitive action was detected on your Continental ID account.',
       greeting: 'Security notice,',
@@ -1755,7 +1897,7 @@ const sendSecurityAlertEmail = async (user, subject, title, intro, details = [],
     return { sent: false };
   }
 
-  const emailContent = buildSecurityEmailContent({ title, intro, details });
+  const emailContent = buildSecurityEmailContent({ user, title, intro, details });
   return deliverManagedEmail({
     to: recipient,
     subject,
