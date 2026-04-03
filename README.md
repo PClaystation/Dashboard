@@ -113,6 +113,7 @@ For the current hosted static domains (`dashboard.continental-hub.com`, `login.c
 - Signed-in users can request a new verification email with `POST /api/auth/resend-verification`.
 - Set `LOGIN_POPUP_URL` to the public login page, for example `https://login.continental-hub.com/popup.html`, so verification and reset emails can derive the correct hosted auth routes automatically.
 - Set `EMAIL_VERIFY_URL` to the public URL of the verification page, for example `https://login.continental-hub.com/verify.html`, that loads the token and calls `/api/auth/verify-email`.
+- For local email previews, open `http://127.0.0.1:5000/api/auth/email-preview` after starting the backend. You can switch between verification, password reset, and security/login alert templates and preview different dashboard themes without sending any email.
 
 ## Notes
 

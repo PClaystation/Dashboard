@@ -12,6 +12,8 @@ router.post('/refresh_token', ctrl.refreshToken);
 router.post('/request-password-reset', ctrl.requestPasswordReset);
 router.post('/resend-verification-public', ctrl.publicResendVerificationEmail);
 router.post('/reset-password', ctrl.resetPassword);
+router.get('/email-preview', ctrl.previewEmailIndex);
+router.get('/email-preview/:type', ctrl.previewEmailHtml);
 router.get('/verify-email', verifyEmailCtrl.verifyEmail);
 router.get('/public-search', ctrl.searchPublicProfiles);
 router.get('/public/:username', ctrl.getPublicProfile);

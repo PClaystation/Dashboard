@@ -97,7 +97,7 @@ const LINKED_PROVIDERS = [
   'microsoft',
 ];
 
-const ALLOWED_THEMES = new Set(['system', 'midnight', 'heritage', 'dawn', 'night', 'ocean']);
+const ALLOWED_THEMES = new Set(['system', 'graphite', 'midnight', 'heritage', 'dawn', 'night', 'ocean']);
 const ALLOWED_DENSITIES = new Set(['comfortable', 'compact', 'spacious']);
 
 const DEFAULT_NOTIFICATIONS = {
@@ -109,7 +109,7 @@ const DEFAULT_NOTIFICATIONS = {
 };
 
 const DEFAULT_APPEARANCE = {
-  theme: 'midnight',
+  theme: 'graphite',
   compactMode: false,
   reducedMotion: false,
   highContrast: false,
@@ -1073,6 +1073,24 @@ const clearPasswordReset = (user) => {
 const formatEmailDate = (value) => new Date(value).toUTCString();
 
 const EMAIL_THEME_PALETTES = {
+  graphite: {
+    pageBg: '#111317',
+    shellBg: '#171a1f',
+    heroBg: '#222733',
+    contentBg: '#1a1e25',
+    panelBg: '#232934',
+    shellBorder: '#313846',
+    text: '#eef1f6',
+    muted: '#a3aab7',
+    footer: '#a3aab7',
+    label: '#8d97a8',
+    accent: '#5e6f8f',
+    accentStrong: '#7889aa',
+    accentSoft: '#202835',
+    secondary: '#c6a26e',
+    secondarySoft: '#31291e',
+    buttonText: '#ffffff',
+  },
   midnight: {
     pageBg: '#07111e',
     shellBg: '#0b1727',
@@ -1171,11 +1189,11 @@ const normalizeEmailTheme = (value) => {
     return normalized;
   }
 
-  return DEFAULT_APPEARANCE.theme === 'system' ? 'midnight' : DEFAULT_APPEARANCE.theme;
+  return DEFAULT_APPEARANCE.theme === 'system' ? 'graphite' : DEFAULT_APPEARANCE.theme;
 };
 
 const getEmailThemePalette = (theme) =>
-  EMAIL_THEME_PALETTES[normalizeEmailTheme(theme)] || EMAIL_THEME_PALETTES.midnight;
+  EMAIL_THEME_PALETTES[normalizeEmailTheme(theme)] || EMAIL_THEME_PALETTES.graphite;
 
 const resolveEmailHeroImageUrl = () => {
   const explicitHeroImageUrl = resolveAbsoluteUrl(
@@ -1906,6 +1924,345 @@ const sendSecurityAlertEmail = async (user, subject, title, intro, details = [],
   });
 };
 
+const EMAIL_PREVIEW_TYPES = new Set([
+  'verification',
+  'password-reset',
+  'login-alert',
+  'password-changed',
+]);
+
+const buildEmailPreviewUser = (theme) => ({
+  email: 'alex.mercer@continental-hub.com',
+  displayName: 'Alex Mercer',
+  preferences: {
+    appearance: {
+      theme: normalizeEmailTheme(theme),
+    },
+  },
+});
+
+const buildPreviewBaseUrl = (req) => {
+  const requestOrigin = getRequestOrigin(req);
+  if (requestOrigin) return requestOrigin;
+  return DEFAULT_DASHBOARD_ORIGIN;
+};
+
+const buildEmailPreviewContent = (type, theme, req) => {
+  const previewType = EMAIL_PREVIEW_TYPES.has(type) ? type : 'verification';
+  const previewTheme = normalizeEmailTheme(theme);
+  const user = buildEmailPreviewUser(previewTheme);
+  const baseUrl = buildPreviewBaseUrl(req);
+
+  if (previewType === 'password-reset') {
+    return buildPasswordResetEmailContent(
+      user,
+      `${baseUrl}/reset-password.html?token=preview-reset-token`,
+      new Date(Date.now() + PASSWORD_RESET_TTL_MS)
+    );
+  }
+
+  if (previewType === 'login-alert') {
+    return buildSecurityEmailContent({
+      user,
+      title: 'New device sign-in to Continental ID',
+      intro: 'A sign-in from a device we had not seen before was detected on your account.',
+      details: [
+        `Time: ${new Date().toUTCString()}`,
+        'IP address: 203.0.113.42',
+        'Device: Safari on macOS 15',
+        'Location: Stockholm, Sweden',
+      ],
+    });
+  }
+
+  if (previewType === 'password-changed') {
+    return buildSecurityEmailContent({
+      user,
+      title: 'Your Continental ID password was changed',
+      intro: 'Your Continental ID password was updated.',
+      details: [
+        `Time: ${new Date().toUTCString()}`,
+        'IP address: 203.0.113.42',
+      ],
+    });
+  }
+
+  return buildVerificationEmailContent(
+    user,
+    `${baseUrl}/verify.html?token=preview-verification-token`,
+    new Date(Date.now() + VERIFICATION_EMAIL_COOLDOWN_MS)
+  );
+};
+
+exports.previewEmailHtml = (req, res) => {
+  const type = sanitizeText(req.params?.type || req.query?.type || 'verification', 40);
+  const theme = sanitizeText(req.query?.theme || DEFAULT_APPEARANCE.theme, 24);
+  const emailContent = buildEmailPreviewContent(type, theme, req);
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(200).send(emailContent.html);
+};
+
+exports.previewEmailIndex = (req, res) => {
+  const requestedType = sanitizeText(req.query?.type || 'verification', 40);
+  const requestedTheme = normalizeEmailTheme(req.query?.theme || DEFAULT_APPEARANCE.theme);
+  const selectedType = EMAIL_PREVIEW_TYPES.has(requestedType) ? requestedType : 'verification';
+  const typeOptions = [
+    ['verification', 'Verification'],
+    ['password-reset', 'Password Reset'],
+    ['login-alert', 'New Login Alert'],
+    ['password-changed', 'Password Changed'],
+  ];
+  const themeOptions = ['midnight', 'heritage', 'dawn', 'night', 'ocean'];
+  const previewBasePath = '/api/auth/email-preview';
+  const previewSrc = `${previewBasePath}/${selectedType}?theme=${encodeURIComponent(requestedTheme)}`;
+
+  const page = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Continental ID Email Preview</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-1: #07111e;
+      --bg-2: #0b1727;
+      --surface: rgba(9, 18, 31, 0.92);
+      --surface-soft: rgba(17, 34, 56, 0.88);
+      --line: rgba(176, 194, 220, 0.18);
+      --text: #edf3fb;
+      --muted: #95a5bd;
+      --accent: #c9a46f;
+      --accent-soft: rgba(201, 164, 111, 0.12);
+      --button: #4d6f99;
+      --button-strong: #385476;
+      --shadow: 0 24px 60px rgba(1, 8, 18, 0.32);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Manrope", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(77, 111, 153, 0.18), transparent 28%),
+        radial-gradient(circle at bottom left, rgba(201, 164, 111, 0.12), transparent 30%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-2));
+    }
+
+    .shell {
+      width: min(1280px, calc(100vw - 32px));
+      margin: 24px auto;
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 18px;
+    }
+
+    .panel,
+    .preview {
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: linear-gradient(180deg, var(--surface), var(--surface-soft));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel {
+      padding: 22px;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: "Sora", "Segoe UI", sans-serif;
+      font-size: 28px;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .copy {
+      margin: 14px 0 0;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .group {
+      margin-top: 24px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .group-label {
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .option-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .option-link {
+      display: block;
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .option-link:hover {
+      border-color: rgba(201, 164, 111, 0.4);
+      background: var(--accent-soft);
+    }
+
+    .option-link.active {
+      border-color: rgba(201, 164, 111, 0.46);
+      background: var(--accent-soft);
+    }
+
+    .option-note {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .actions {
+      margin-top: 24px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--button), var(--button-strong));
+      color: #fff;
+      text-decoration: none;
+      font-weight: 800;
+    }
+
+    .button.secondary {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .preview-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .preview-meta {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    iframe {
+      display: block;
+      width: 100%;
+      min-height: calc(100vh - 140px);
+      border: 0;
+      background: #0b1727;
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      iframe {
+        min-height: 70vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="panel">
+      <p class="eyebrow">Email preview</p>
+      <h1>Continental ID mailer</h1>
+      <p class="copy">Open the actual rendered HTML for each account email and switch themes to see how it will look before sending anything.</p>
+
+      <section class="group" aria-label="Email types">
+        <div class="group-label">Email type</div>
+        <div class="option-grid">
+          ${typeOptions
+            .map(
+              ([value, label]) => `
+                <a class="option-link ${selectedType === value ? 'active' : ''}" href="${previewBasePath}?type=${encodeURIComponent(value)}&theme=${encodeURIComponent(requestedTheme)}">
+                  ${label}
+                  <span class="option-note">Preview the ${label.toLowerCase()} template.</span>
+                </a>
+              `
+            )
+            .join('')}
+        </div>
+      </section>
+
+      <section class="group" aria-label="Themes">
+        <div class="group-label">Theme</div>
+        <div class="option-grid">
+          ${themeOptions
+            .map(
+              (value) => `
+                <a class="option-link ${requestedTheme === value ? 'active' : ''}" href="${previewBasePath}?type=${encodeURIComponent(selectedType)}&theme=${encodeURIComponent(value)}">
+                  ${value.charAt(0).toUpperCase()}${value.slice(1)}
+                  <span class="option-note">Use the ${value} dashboard palette.</span>
+                </a>
+              `
+            )
+            .join('')}
+        </div>
+      </section>
+
+      <div class="actions">
+        <a class="button" href="${previewSrc}" target="_blank" rel="noreferrer">Open raw HTML</a>
+        <a class="button secondary" href="${previewBasePath}">Reset preview</a>
+      </div>
+    </aside>
+
+    <section class="preview">
+      <div class="preview-head">
+        <strong>${escapeHtml(typeOptions.find(([value]) => value === selectedType)?.[1] || 'Verification')}</strong>
+        <span class="preview-meta">Theme: ${escapeHtml(requestedTheme)}</span>
+      </div>
+      <iframe title="Email preview" src="${previewSrc}"></iframe>
+    </section>
+  </div>
+</body>
+</html>`;
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(200).send(page);
+};
+
 const sanitizeAuditMeta = (value = {}) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {};
@@ -2381,7 +2738,7 @@ const normalizeLinkedAccounts = (input = {}, current = {}) => {
   return next;
 };
 
-const normalizeTheme = (value, fallback = 'midnight') => {
+const normalizeTheme = (value, fallback = 'graphite') => {
   const candidate = sanitizeText(value, 20).toLowerCase();
   if (ALLOWED_THEMES.has(candidate)) return candidate;
   return fallback;

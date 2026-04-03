@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="midnight">
+<html lang="en" data-theme="graphite">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -13,26 +13,28 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg-1: #07111e;
-      --bg-2: #0b1727;
-      --bg-3: #112338;
-      --panel: rgba(9, 18, 31, 0.82);
-      --panel-strong: rgba(13, 24, 39, 0.94);
-      --panel-soft: rgba(15, 28, 46, 0.94);
-      --text: #edf3fb;
-      --muted: #95a5bd;
-      --line: rgba(176, 194, 220, 0.14);
-      --line-strong: rgba(176, 194, 220, 0.24);
-      --primary: #4d6f99;
-      --primary-strong: #385476;
-      --primary-soft: rgba(77, 111, 153, 0.2);
-      --secondary: #7d8ea5;
-      --secondary-soft: rgba(125, 142, 165, 0.14);
-      --shadow: 0 24px 60px rgba(1, 8, 18, 0.34);
-      --shadow-soft: 0 10px 28px rgba(1, 8, 18, 0.22);
-      --ring: rgba(120, 150, 190, 0.34);
-      --success: #73a589;
-      --warning: #c9a46f;
+      --bg-1: #111317;
+      --bg-2: #171a1f;
+      --bg-3: #222733;
+      --panel: rgba(20, 23, 28, 0.82);
+      --panel-strong: rgba(24, 28, 34, 0.94);
+      --panel-soft: rgba(28, 33, 41, 0.94);
+      --text: #eef1f6;
+      --muted: #a3aab7;
+      --line: rgba(188, 195, 209, 0.13);
+      --line-strong: rgba(188, 195, 209, 0.23);
+      --primary: #5e6f8f;
+      --primary-strong: #7889aa;
+      --primary-soft: rgba(94, 111, 143, 0.16);
+      --secondary: #8d97a8;
+      --secondary-soft: rgba(141, 151, 168, 0.12);
+      --shadow: 0 24px 60px rgba(5, 7, 11, 0.36);
+      --shadow-soft: 0 10px 28px rgba(5, 7, 11, 0.24);
+      --ring: rgba(120, 138, 170, 0.28);
+      --success: #7ea28f;
+      --warning: #c6a26e;
+      --ambient-top: rgba(112, 129, 163, 0.12);
+      --ambient-bottom: rgba(68, 76, 95, 0.16);
     }
 
     * {
@@ -49,7 +51,7 @@
       font-family: 'Manrope', sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top right, rgba(77, 111, 153, 0.18), transparent 34%),
+        radial-gradient(circle at top right, var(--ambient-top), transparent 34%),
         linear-gradient(180deg, var(--bg-1), var(--bg-2) 54%, var(--bg-3));
       background-attachment: fixed;
     }
@@ -70,7 +72,7 @@
       height: 24vw;
       top: -8vw;
       left: -4vw;
-      background: rgba(77, 111, 153, 0.12);
+      background: var(--ambient-top);
     }
 
     body::after {
@@ -78,7 +80,7 @@
       height: 28vw;
       right: -6vw;
       bottom: -10vw;
-      background: rgba(43, 63, 92, 0.16);
+      background: var(--ambient-bottom);
     }
 
     h1,

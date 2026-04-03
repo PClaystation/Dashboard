@@ -1,4 +1,34 @@
 :root,
+html[data-theme='graphite'] {
+  color-scheme: dark;
+  --bg-1: #111317;
+  --bg-2: #171a1f;
+  --bg-3: #222733;
+  --surface: rgba(20, 23, 28, 0.82);
+  --surface-strong: rgba(24, 28, 34, 0.94);
+  --surface-muted: rgba(28, 33, 41, 0.94);
+  --text: #eef1f6;
+  --muted: #a3aab7;
+  --line: rgba(188, 195, 209, 0.13);
+  --line-strong: rgba(188, 195, 209, 0.23);
+  --primary: #5e6f8f;
+  --primary-strong: #7889aa;
+  --primary-soft: rgba(94, 111, 143, 0.16);
+  --secondary: #8d97a8;
+  --secondary-soft: rgba(141, 151, 168, 0.12);
+  --danger: #d58682;
+  --warning: #c6a26e;
+  --success: #7ea28f;
+  --shadow: 0 24px 60px rgba(5, 7, 11, 0.36);
+  --shadow-soft: 0 10px 28px rgba(5, 7, 11, 0.24);
+  --ring: rgba(120, 138, 170, 0.28);
+  --ambient-top: rgba(112, 129, 163, 0.12);
+  --ambient-bottom: rgba(68, 76, 95, 0.16);
+  --density-pad: 1.2rem;
+  --density-gap: 1rem;
+  --sidebar-width: 308px;
+}
+
 html[data-theme='midnight'] {
   color-scheme: dark;
   --bg-1: #07111e;
@@ -22,6 +52,8 @@ html[data-theme='midnight'] {
   --shadow: 0 24px 60px rgba(1, 8, 18, 0.34);
   --shadow-soft: 0 10px 28px rgba(1, 8, 18, 0.22);
   --ring: rgba(120, 150, 190, 0.34);
+  --ambient-top: rgba(77, 111, 153, 0.16);
+  --ambient-bottom: rgba(43, 63, 92, 0.16);
   --density-pad: 1.2rem;
   --density-gap: 1rem;
   --sidebar-width: 308px;
@@ -50,6 +82,8 @@ html[data-theme='heritage'] {
   --shadow: 0 30px 80px rgba(19, 29, 40, 0.08);
   --shadow-soft: 0 14px 36px rgba(19, 29, 40, 0.06);
   --ring: rgba(20, 111, 99, 0.22);
+  --ambient-top: rgba(20, 111, 99, 0.11);
+  --ambient-bottom: rgba(195, 138, 74, 0.11);
 }
 
 html[data-theme='dawn'] {
@@ -70,6 +104,8 @@ html[data-theme='dawn'] {
   --secondary: #c68b54;
   --secondary-soft: rgba(198, 139, 84, 0.16);
   --ring: rgba(153, 87, 45, 0.22);
+  --ambient-top: rgba(153, 87, 45, 0.12);
+  --ambient-bottom: rgba(198, 139, 84, 0.12);
 }
 
 html[data-theme='night'] {
@@ -95,6 +131,8 @@ html[data-theme='night'] {
   --shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
   --shadow-soft: 0 14px 34px rgba(0, 0, 0, 0.2);
   --ring: rgba(167, 216, 195, 0.26);
+  --ambient-top: rgba(167, 216, 195, 0.12);
+  --ambient-bottom: rgba(240, 189, 134, 0.12);
 }
 
 html[data-theme='ocean'] {
@@ -120,6 +158,8 @@ html[data-theme='ocean'] {
   --shadow: 0 30px 80px rgba(1, 8, 18, 0.34);
   --shadow-soft: 0 14px 34px rgba(1, 8, 18, 0.24);
   --ring: rgba(102, 215, 208, 0.26);
+  --ambient-top: rgba(102, 215, 208, 0.13);
+  --ambient-bottom: rgba(36, 80, 102, 0.16);
 }
 
 html[data-density='compact'] {
@@ -158,7 +198,7 @@ body {
   color: var(--text);
   background-color: var(--bg-2);
   background:
-    radial-gradient(circle at top right, rgba(77, 111, 153, 0.16), transparent 34%),
+    radial-gradient(circle at top right, var(--ambient-top), transparent 34%),
     linear-gradient(180deg, var(--bg-1), var(--bg-2) 48%, var(--bg-3));
   background-attachment: fixed;
 }
@@ -166,17 +206,18 @@ body {
 .skip-link {
   position: absolute;
   left: 1rem;
-  top: -3.5rem;
+  top: 1rem;
   padding: 0.8rem 1rem;
   border-radius: 14px;
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface-strong) 96%, var(--bg-2));
   color: var(--text);
   z-index: 10004;
+  transform: translateY(calc(-100% - 1rem));
 }
 
 .skip-link:focus {
-  top: 1rem;
+  transform: translateY(0);
 }
 
 body::before,
@@ -196,13 +237,13 @@ body::after {
 body::before {
   top: -6vw;
   right: -4vw;
-  background: rgba(77, 111, 153, 0.12);
+  background: var(--ambient-top);
 }
 
 body::after {
   bottom: -10vw;
   left: -5vw;
-  background: rgba(43, 63, 92, 0.16);
+  background: var(--ambient-bottom);
 }
 
 h1,

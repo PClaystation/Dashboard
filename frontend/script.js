@@ -2375,7 +2375,7 @@ const clearDashboardUi = () => {
   renderAvatarPreviews(null);
 
   applyAppearance({
-    theme: 'midnight',
+    theme: 'graphite',
     compactMode: false,
     reducedMotion: false,
     highContrast: false,
@@ -2795,13 +2795,13 @@ const compressAvatarFile = async (file) => {
 };
 
 const applyAppearance = (appearance = {}) => {
-  const theme = safeText(appearance.theme || 'midnight').toLowerCase() || 'midnight';
+  const theme = safeText(appearance.theme || 'graphite').toLowerCase() || 'graphite';
   const density = safeText(appearance.dashboardDensity || 'comfortable').toLowerCase() || 'comfortable';
   const compactMode = Boolean(appearance.compactMode);
   const reducedMotion = Boolean(appearance.reducedMotion);
   const highContrast = Boolean(appearance.highContrast);
 
-  const resolvedTheme = theme === 'system' ? 'midnight' : theme;
+  const resolvedTheme = theme === 'system' ? 'graphite' : theme;
 
   document.documentElement.dataset.theme = resolvedTheme;
   document.documentElement.dataset.density = compactMode ? 'compact' : density;
@@ -3782,8 +3782,8 @@ const fillPreferences = (user) => {
   if (dom.notifySecurity) dom.notifySecurity.checked = Boolean(notifications.security);
 
   if (dom.appearanceTheme) {
-    const themeValue = safeText(appearance.theme || 'midnight').toLowerCase();
-    dom.appearanceTheme.value = themeValue === 'system' ? 'midnight' : themeValue;
+    const themeValue = safeText(appearance.theme || 'graphite').toLowerCase();
+    dom.appearanceTheme.value = themeValue === 'system' ? 'graphite' : themeValue;
   }
   if (dom.appearanceDensity) dom.appearanceDensity.value = appearance.dashboardDensity || 'comfortable';
   if (dom.appearanceCompactMode) dom.appearanceCompactMode.checked = Boolean(appearance.compactMode);
@@ -5761,7 +5761,7 @@ const buildPreferencesPayload = () => ({
     security: Boolean(dom.notifySecurity?.checked),
   },
   appearance: {
-    theme: safeText(dom.appearanceTheme?.value || 'midnight'),
+    theme: safeText(dom.appearanceTheme?.value || 'graphite'),
     compactMode: Boolean(dom.appearanceCompactMode?.checked),
     reducedMotion: Boolean(dom.appearanceReducedMotion?.checked),
     highContrast: Boolean(dom.appearanceHighContrast?.checked),
@@ -5812,7 +5812,7 @@ const setDashboardTipsEnabled = (enabled) => {
 };
 
 const handleAppearanceReset = async () => {
-  if (dom.appearanceTheme) dom.appearanceTheme.value = 'midnight';
+  if (dom.appearanceTheme) dom.appearanceTheme.value = 'graphite';
   if (dom.appearanceDensity) dom.appearanceDensity.value = 'comfortable';
   if (dom.appearanceCompactMode) dom.appearanceCompactMode.checked = false;
   if (dom.appearanceReducedMotion) dom.appearanceReducedMotion.checked = false;
@@ -6902,10 +6902,10 @@ const setupEventHandlers = () => {
   const systemThemeMedia = window.matchMedia('(prefers-color-scheme: dark)');
   if (systemThemeMedia && typeof systemThemeMedia.addEventListener === 'function') {
     systemThemeMedia.addEventListener('change', () => {
-      const selectedTheme = safeText(dom.appearanceTheme?.value || 'midnight').toLowerCase();
+      const selectedTheme = safeText(dom.appearanceTheme?.value || 'graphite').toLowerCase();
       if (selectedTheme === 'system') {
         applyAppearance({
-          theme: 'midnight',
+          theme: 'graphite',
           compactMode: Boolean(dom.appearanceCompactMode?.checked),
           reducedMotion: Boolean(dom.appearanceReducedMotion?.checked),
           highContrast: Boolean(dom.appearanceHighContrast?.checked),

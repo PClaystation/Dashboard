@@ -6,10 +6,11 @@
   <title>Continental ID Dashboard</title>
   <style>
     :root {
-      --boot-bg-1: #07111e;
-      --boot-bg-2: #0b1727;
-      --boot-bg-3: #112338;
-      --boot-muted: #95a5bd;
+      --boot-bg-1: #111317;
+      --boot-bg-2: #171a1f;
+      --boot-bg-3: #222733;
+      --boot-accent: rgba(112, 129, 163, 0.14);
+      --boot-muted: #a3aab7;
       color-scheme: dark;
     }
 
@@ -22,7 +23,7 @@
     body {
       background-color: var(--boot-bg-2);
       background:
-        radial-gradient(circle at top right, rgba(77, 111, 153, 0.18), transparent 34%),
+        radial-gradient(circle at top right, var(--boot-accent), transparent 34%),
         linear-gradient(180deg, var(--boot-bg-1), var(--boot-bg-2) 52%, var(--boot-bg-3));
     }
 
@@ -35,7 +36,7 @@
       text-align: center;
       background-color: var(--boot-bg-2);
       background:
-        radial-gradient(circle at 20% 18%, rgba(77, 111, 153, 0.18), transparent 34%),
+        radial-gradient(circle at 20% 18%, var(--boot-accent), transparent 34%),
         linear-gradient(180deg, var(--boot-bg-1), var(--boot-bg-2), var(--boot-bg-3));
     }
 
@@ -853,6 +854,7 @@
                 <label>
                   Theme
                   <select id="appearance-theme" name="theme">
+                    <option value="graphite">Graphite Navy</option>
                     <option value="midnight">Midnight Navy</option>
                     <option value="heritage">Heritage</option>
                     <option value="dawn">Legacy Dawn</option>

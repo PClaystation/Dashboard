@@ -211,8 +211,8 @@ const userSchema = new mongoose.Schema(
       appearance: {
         theme: {
           type: String,
-          enum: ['system', 'midnight', 'heritage', 'dawn', 'night', 'ocean'],
-          default: 'midnight',
+          enum: ['system', 'graphite', 'midnight', 'heritage', 'dawn', 'night', 'ocean'],
+          default: 'graphite',
         },
         compactMode: { type: Boolean, default: false },
         reducedMotion: { type: Boolean, default: false },
