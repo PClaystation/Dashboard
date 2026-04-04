@@ -59,6 +59,36 @@ html[data-theme='midnight'] {
   --sidebar-width: 308px;
 }
 
+html[data-theme='alpine'] {
+  color-scheme: dark;
+  --bg-1: #0b1418;
+  --bg-2: #132127;
+  --bg-3: #22404c;
+  --surface: rgba(13, 24, 29, 0.78);
+  --surface-strong: rgba(18, 31, 37, 0.92);
+  --surface-muted: rgba(24, 40, 48, 0.94);
+  --text: #f4f5ef;
+  --muted: #b5b7ad;
+  --line: rgba(214, 217, 204, 0.11);
+  --line-strong: rgba(214, 217, 204, 0.2);
+  --primary: #9fbfb4;
+  --primary-strong: #cfe0d8;
+  --primary-soft: rgba(159, 191, 180, 0.16);
+  --secondary: #a59772;
+  --secondary-soft: rgba(165, 151, 114, 0.14);
+  --danger: #8ea09a;
+  --warning: #c1bd93;
+  --success: #9cc2a5;
+  --shadow: 0 28px 72px rgba(1, 7, 11, 0.38);
+  --shadow-soft: 0 14px 34px rgba(1, 7, 11, 0.24);
+  --ring: rgba(181, 201, 188, 0.28);
+  --ambient-top: rgba(176, 195, 170, 0.14);
+  --ambient-bottom: rgba(112, 132, 108, 0.18);
+  --density-pad: 1.2rem;
+  --density-gap: 1rem;
+  --sidebar-width: 308px;
+}
+
 html[data-theme='heritage'] {
   color-scheme: light;
   --bg-1: #f7f2ea;
@@ -222,7 +252,7 @@ body {
   z-index: 10004;
 }
 
-.skip-link:focus {
+.skip-link:focus-visible {
   width: auto;
   height: auto;
   padding: 0.8rem 1rem;

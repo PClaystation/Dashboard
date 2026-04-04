@@ -61,6 +61,62 @@ A full-stack account dashboard with hardened auth/session handling, profile and 
    npm run migrate:users
    ```
 
+## Backend Env Reference
+
+Required:
+
+- `MONGO_URI`
+- `JWT_SECRET`
+- `REFRESH_TOKEN_SECRET`
+
+Common production settings:
+
+- `NODE_ENV=production`
+- `TRUST_PROXY=1` when running behind Nginx, Caddy, or another reverse proxy
+- `ALLOWED_ORIGINS=https://dashboard.example.com,https://login.example.com`
+- `ALLOW_LOCALHOST_ORIGINS=false`
+
+Auth tuning:
+
+- `JWT_EXPIRES_IN`
+- `REFRESH_TOKEN_EXPIRES_IN`
+- `RATE_LIMIT_WINDOW_MS`
+- `RATE_LIMIT_MAX`
+- `LOGIN_RATE_WINDOW_MS`
+- `LOGIN_RATE_MAX_ATTEMPTS`
+- `LOGIN_BLOCK_MS`
+- `MFA_RATE_WINDOW_MS`
+- `MFA_RATE_MAX_ATTEMPTS`
+- `MFA_BLOCK_MS`
+- `REFRESH_TOKEN_REPLAY_GRACE_MS`
+- `PASSWORD_RESET_TTL_MS`
+- `PASSWORD_RESET_EMAIL_COOLDOWN_MS`
+- `VERIFICATION_EMAIL_COOLDOWN_MS`
+- `EMAIL_VERIFICATION_TTL_MS`
+- `EMAIL_DAILY_LIMIT`
+- `EMAIL_MONTHLY_LIMIT`
+
+Passkeys / WebAuthn:
+
+- `WEBAUTHN_RP_NAME`
+- `WEBAUTHN_RP_ID`
+
+OAuth:
+
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+- `GITHUB_OAUTH_CALLBACK_URL`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_OAUTH_CALLBACK_URL`
+- `DISCORD_CLIENT_ID`
+- `DISCORD_CLIENT_SECRET`
+- `DISCORD_OAUTH_CALLBACK_URL`
+- `MICROSOFT_CLIENT_ID`
+- `MICROSOFT_CLIENT_SECRET`
+- `MICROSOFT_TENANT_ID`
+- `MICROSOFT_OAUTH_CALLBACK_URL`
+
 ## Frontend Setup
 
 You can serve `frontend/` with any static server (for example Live Server or `python -m http.server`).
@@ -76,11 +132,19 @@ For the current hosted static domains (`dashboard.continental-hub.com`, `login.c
 ## GitHub Pages Hosting
 
 - A deploy workflow is included at `.github/workflows/deploy-pages.yml`.
+- A backend syntax-check workflow is included at `.github/workflows/backend-check.yml`.
 - It publishes the `frontend/` folder to GitHub Pages and includes `CNAME`.
 - In your GitHub repo settings, set Pages to **GitHub Actions** as the source.
 - If your API is on a different origin, set backend `ALLOWED_ORIGINS` to include your Pages/custom domain.
 - If you proxy the API through the same public host on `443`, leave the frontend on its default same-origin `/api/*` setup instead of pointing browsers at `:5000`.
 - To mirror the auth pages into the sibling `Login` repo, run `bash scripts/sync-login-popup.sh`.
+
+## Production Notes
+
+- The repo currently ships deployment automation for the static frontend and a local deploy helper for the backend at `backend/deploy-backend.sh`.
+- The new backend workflow only verifies syntax with `npm run check`; it does not deploy, run integration tests, or validate secrets.
+- Microsoft OAuth is implemented in the backend config surface, but the checked-in dashboard UI currently exposes GitHub, Google, and Discord account linking.
+- Passkeys and cross-site refresh cookies depend on your final public origins, proxy setup, and HTTPS configuration, so validate those flows in the deployed environment instead of assuming local success maps to production.
 
 ## Key API Endpoints
 
