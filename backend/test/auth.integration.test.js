@@ -44,7 +44,11 @@ const createVerifiedUser = async ({
 let mongoServer;
 
 test.before(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryServer.create({
+    instance: {
+      launchTimeout: 30_000,
+    },
+  });
   await mongoose.connect(mongoServer.getUri(), {
     maxPoolSize: 10,
     serverSelectionTimeoutMS: 5000,
@@ -344,4 +348,158 @@ test('public profile directory and direct profile lookup only expose public acco
     .set('Origin', TEST_ORIGIN);
 
   assert.equal(hiddenProfileResponse.status, 404);
+});
+
+test('vanguard license route stays optional and returns configured entitlements when enabled', async () => {
+  const envKeys = [
+    'VANGUARD_API_KEY',
+    'VANGUARD_ALLOWED_GUILD_IDS',
+    'VANGUARD_LICENSE_AUTHORIZED',
+    'VANGUARD_LICENSE_REASON',
+    'VANGUARD_ENTITLEMENT_AI',
+    'VANGUARD_ENTITLEMENT_ADVANCED_VOTES',
+    'VANGUARD_ENTITLEMENT_GUARD_PRESETS',
+  ];
+  const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+
+  try {
+    delete process.env.VANGUARD_API_KEY;
+
+    const disabledResponse = await request(app)
+      .get('/api/vanguard/health')
+      .set('X-Vanguard-Api-Key', 'unused');
+
+    assert.equal(disabledResponse.status, 503);
+
+    process.env.VANGUARD_API_KEY = 'shared-secret';
+    process.env.VANGUARD_ALLOWED_GUILD_IDS = '111111111111111111,222222222222222222';
+    process.env.VANGUARD_LICENSE_AUTHORIZED = 'true';
+    process.env.VANGUARD_LICENSE_REASON = 'integration enabled';
+    process.env.VANGUARD_ENTITLEMENT_AI = 'true';
+    process.env.VANGUARD_ENTITLEMENT_ADVANCED_VOTES = 'true';
+    process.env.VANGUARD_ENTITLEMENT_GUARD_PRESETS = 'balanced,strict';
+
+    const response = await request(app)
+      .post('/api/vanguard/license/verify')
+      .set('X-Vanguard-Api-Key', 'shared-secret')
+      .set('X-Vanguard-Instance-Id', 'test-instance')
+      .send({
+        botUserId: '987654321012345678',
+        guildCount: 2,
+        guildIds: ['111111111111111111', '333333333333333333'],
+      });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.authorized, true);
+    assert.equal(response.body.reason, 'integration enabled');
+    assert.deepEqual(response.body.allowedGuildIds, ['111111111111111111', '222222222222222222']);
+    assert.deepEqual(response.body.entitlements, {
+      ai: true,
+      advancedVotes: true,
+      guardPresets: ['balanced', 'strict'],
+    });
+    assert.equal(response.body.instanceId, 'test-instance');
+  } finally {
+    for (const key of envKeys) {
+      if (previousEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previousEnv[key];
+      }
+    }
+  }
+});
+
+test('vanguard routes resolve, flag, and unflag Discord-linked users without changing auth flows', async () => {
+  const envKeys = ['VANGUARD_API_KEY'];
+  const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+
+  try {
+    process.env.VANGUARD_API_KEY = 'shared-secret';
+
+    const user = await createVerifiedUser({
+      email: 'discord.linked@example.com',
+      username: 'discord.linked',
+      displayName: 'Discord Linked',
+    });
+    user.oauthIdentities = [
+      {
+        provider: 'discord',
+        providerUserId: '123456789012345678',
+        username: 'discord-linked',
+        email: 'discord.linked@example.com',
+        emailVerified: true,
+        profileUrl: 'https://discord.com/users/123456789012345678',
+      },
+    ];
+    user.integrations = {
+      vanguard: {
+        trusted: true,
+      },
+    };
+    await user.save();
+
+    const resolveResponse = await request(app)
+      .post('/api/vanguard/users/resolve')
+      .set('X-Vanguard-Api-Key', 'shared-secret')
+      .send({ discordUserId: '123456789012345678' });
+
+    assert.equal(resolveResponse.status, 200);
+    assert.equal(resolveResponse.body.linked, true);
+    assert.equal(resolveResponse.body.user.username, 'discord.linked');
+    assert.equal(resolveResponse.body.flags.trusted, true);
+    assert.equal(resolveResponse.body.flags.flagged, false);
+
+    const flagResponse = await request(app)
+      .post('/api/vanguard/users/flag')
+      .set('X-Vanguard-Api-Key', 'shared-secret')
+      .set('X-Vanguard-Instance-Id', 'test-instance')
+      .send({
+        userId: '123456789012345678',
+        reason: 'manual moderation review',
+      });
+
+    assert.equal(flagResponse.status, 200);
+    assert.equal(flagResponse.body.flags.flagged, true);
+    assert.equal(flagResponse.body.flags.flagReason, 'manual moderation review');
+
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .set('Origin', TEST_ORIGIN)
+      .set('X-Forwarded-Proto', 'https')
+      .send({
+        identifier: 'discord.linked',
+        password: 'StrongPass1',
+      });
+
+    const meResponse = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${loginResponse.body.token}`);
+
+    assert.equal(meResponse.status, 200);
+    assert.equal(meResponse.body.user.vanguard.linkedDiscord, true);
+    assert.equal(meResponse.body.user.vanguard.trusted, true);
+    assert.equal(meResponse.body.user.vanguard.flagged, true);
+    assert.equal(meResponse.body.user.vanguard.flagReason, 'manual moderation review');
+
+    const unflagResponse = await request(app)
+      .post('/api/vanguard/users/unflag')
+      .set('X-Vanguard-Api-Key', 'shared-secret')
+      .send({ userId: '123456789012345678' });
+
+    assert.equal(unflagResponse.status, 200);
+    assert.equal(unflagResponse.body.flags.flagged, false);
+
+    const refreshedUser = await User.findById(user._id).lean();
+    assert.equal(refreshedUser.integrations.vanguard.flagged, false);
+    assert.equal(refreshedUser.integrations.vanguard.flagReason, '');
+  } finally {
+    for (const key of envKeys) {
+      if (previousEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previousEnv[key];
+      }
+    }
+  }
 });

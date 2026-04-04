@@ -121,6 +121,18 @@ OAuth:
 - `MICROSOFT_TENANT_ID`
 - `MICROSOFT_OAUTH_CALLBACK_URL`
 
+Optional Vanguard integration:
+
+- `VANGUARD_API_KEY` or `VANGUARD_API_KEYS`
+- `VANGUARD_API_KEY_HEADER`
+- `VANGUARD_INSTANCE_HEADER`
+- `VANGUARD_LICENSE_AUTHORIZED`
+- `VANGUARD_LICENSE_REASON`
+- `VANGUARD_ALLOWED_GUILD_IDS`
+- `VANGUARD_ENTITLEMENT_AI`
+- `VANGUARD_ENTITLEMENT_ADVANCED_VOTES`
+- `VANGUARD_ENTITLEMENT_GUARD_PRESETS`
+
 ## Frontend Setup
 
 You can serve `frontend/` with any static server (for example Live Server or `python -m http.server`).
@@ -186,6 +198,11 @@ Notes:
 - `GET /api/auth/export`
 - `DELETE /api/auth/account`
 - `GET /api/auth/verify-email?token=...`
+- `GET /api/vanguard/health`
+- `POST /api/vanguard/license/verify`
+- `POST /api/vanguard/users/resolve`
+- `POST /api/vanguard/users/flag`
+- `POST /api/vanguard/users/unflag`
 
 ## Resend Verification Flow
 

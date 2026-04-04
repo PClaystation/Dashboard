@@ -37,6 +37,7 @@ const {
   isValidUsername,
   normalizeUsername,
 } = require('../utils/userIdentity');
+const { buildVanguardAccountState } = require('../utils/vanguardIntegration');
 
 const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || '1h';
 const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
@@ -3481,6 +3482,7 @@ const buildUserPayload = (user) => {
     },
     linkedAccounts,
     oauthProviders,
+    vanguard: buildVanguardAccountState(user),
     preferences: {
       profilePublic: Boolean(
         hasOwn(user.preferences || {}, 'profilePublic') ? user.preferences?.profilePublic : true
@@ -3776,7 +3778,7 @@ const buildActivitySummary = (recentLogins = [], dailyCounts = []) => {
 };
 
 const FULL_USER_SELECT_FIELDS =
-  'email username displayName isVerified verificationToken verificationTokenExpires emailDelivery passwordResetToken passwordResetTokenExpires passwordResetRequestedAt lastLoginAt lastLoginIp recentLogins loginDayCounts knownDevices auditEvents profile linkedAccounts oauthIdentities preferences security refreshTokenVersion refreshSessions createdAt updatedAt password';
+  'email username displayName isVerified verificationToken verificationTokenExpires emailDelivery passwordResetToken passwordResetTokenExpires passwordResetRequestedAt lastLoginAt lastLoginIp recentLogins loginDayCounts knownDevices auditEvents profile linkedAccounts oauthIdentities integrations preferences security refreshTokenVersion refreshSessions createdAt updatedAt password';
 
 const ensureUserState = async (user, { ensureIdentity = true } = {}) => {
   if (!user) {

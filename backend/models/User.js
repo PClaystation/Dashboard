@@ -198,6 +198,16 @@ const userSchema = new mongoose.Schema(
       type: [oauthIdentitySchema],
       default: [],
     },
+    integrations: {
+      vanguard: {
+        trusted: { type: Boolean, default: false },
+        staff: { type: Boolean, default: false },
+        flagged: { type: Boolean, default: false },
+        aiDenied: { type: Boolean, default: false },
+        flagReason: { type: String, default: '', trim: true, maxlength: 240 },
+        flaggedAt: { type: Date, default: null },
+      },
+    },
     preferences: {
       profilePublic: { type: Boolean, default: true },
       searchable: { type: Boolean, default: true },

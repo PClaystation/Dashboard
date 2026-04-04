@@ -12,6 +12,7 @@ const cookieParser = require('cookie-parser');
 const ApiRateLimitBucket = require('./models/ApiRateLimitBucket');
 const authRoutes = require('./routes/authRoutes');
 const grimoireRoutes = require('./routes/grimoireRoutes');
+const vanguardRoutes = require('./routes/vanguardRoutes');
 const { migrateUsersToLatestSecurityState } = require('./utils/securityHardening');
 const { migrateUsersToLatestIdentity } = require('./utils/userIdentity');
 
@@ -211,7 +212,12 @@ app.use(
     },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Vanguard-Api-Key',
+      'X-Vanguard-Instance-Id',
+    ],
   })
 );
 
@@ -321,6 +327,7 @@ app.use('/api', apiRateLimiter);
 
 app.use('/api/auth', requireTrustedBrowserOrigin, authRoutes);
 app.use('/api/grimoire', grimoireRoutes);
+app.use('/api/vanguard', vanguardRoutes);
 
 app.use('/api', (req, res) => {
   return res.status(404).json({
