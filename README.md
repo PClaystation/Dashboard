@@ -218,6 +218,12 @@ Notes:
 ## Notes
 
 - `ALLOWED_ORIGINS` is comma-separated. `localhost`/`127.0.0.1` are allowed automatically only in development, or when `ALLOW_LOCALHOST_ORIGINS=true`.
+
+## Legal
+
+- Source code in this repository is licensed under the MIT license. See [`LICENSE`](LICENSE).
+- Service terms for the deployed dashboard are documented in [`TERMS.md`](TERMS.md).
+- The hosted privacy policy is maintained in [`frontend/privacy.html`](frontend/privacy.html).
 - `https://mpmc.ddns.net` remains a legacy trusted candidate, but the frontend will no longer treat it as the auth API unless it exposes the expected Continental ID health payload.
 - Login anti-bruteforce guardrails are configurable via `LOGIN_RATE_WINDOW_MS`, `LOGIN_RATE_MAX_ATTEMPTS`, and `LOGIN_BLOCK_MS`.
 - Password updates invalidate existing refresh sessions and force re-login.

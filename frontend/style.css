@@ -2265,6 +2265,11 @@ footer {
   justify-content: flex-end;
 }
 
+.oauth-provider-card .public-status-chips {
+  justify-content: flex-start;
+  margin-top: 0.25rem;
+}
+
 .progress-row {
   display: grid;
   grid-template-columns: auto 1fr auto;

@@ -253,6 +253,11 @@ const dom = {
   oauthMicrosoftStatus: document.getElementById('oauth-microsoft-status'),
   oauthMicrosoftConnectBtn: document.getElementById('oauth-microsoft-connect-btn'),
   oauthMicrosoftUnlinkBtn: document.getElementById('oauth-microsoft-unlink-btn'),
+  vanguardIdentityStatus: document.getElementById('vanguard-identity-status'),
+  vanguardLinkChip: document.getElementById('vanguard-link-chip'),
+  vanguardStandingChip: document.getElementById('vanguard-standing-chip'),
+  vanguardIdentityDetail: document.getElementById('vanguard-identity-detail'),
+  vanguardOpenDiscordLinkBtn: document.getElementById('vanguard-open-discord-link-btn'),
 
   passwordForm: document.getElementById('password-form'),
   passwordSaveBtn: document.getElementById('password-save-btn'),
@@ -1250,6 +1255,21 @@ const normalizeOauthProviderState = (provider, source = {}) => ({
   lastUsedAt: source?.lastUsedAt || null,
 });
 
+const normalizeVanguardState = (source = {}) => ({
+  linkedDiscord: Boolean(source?.linkedDiscord),
+  discordUserId: safeText(source?.discordUserId),
+  linkedAt: source?.linkedAt || null,
+  lastUsedAt: source?.lastUsedAt || null,
+  trusted: Boolean(source?.trusted),
+  staff: Boolean(source?.staff),
+  flagged: Boolean(source?.flagged),
+  bannedFromAi: Boolean(source?.bannedFromAi),
+  flagReason: safeText(source?.flagReason, 240),
+  flaggedAt: source?.flaggedAt || null,
+});
+
+const getVanguardState = (user = state.user) => normalizeVanguardState(user?.vanguard);
+
 const getOauthProviderElements = (provider) => {
   const normalized = safeText(provider).toLowerCase();
   if (normalized === 'github') {
@@ -1340,6 +1360,97 @@ const renderOauthProviders = (user = state.user) => {
       elements.unlinkBtn.hidden = !oauthProvider.linked;
       elements.unlinkBtn.disabled = !oauthProvider.linked;
     }
+  }
+};
+
+const renderVanguardIdentity = (user = state.user) => {
+  if (!dom.vanguardIdentityStatus || !dom.vanguardLinkChip || !dom.vanguardStandingChip) {
+    return;
+  }
+
+  if (!user) {
+    dom.vanguardIdentityStatus.textContent =
+      'Sign in to review how this Continental ID account appears to Vanguard-aware services.';
+    dom.vanguardLinkChip.textContent = 'Discord not linked';
+    dom.vanguardStandingChip.textContent = 'Brand standing unknown';
+    if (dom.vanguardIdentityDetail) {
+      dom.vanguardIdentityDetail.textContent =
+        'This is read-only account status. Vanguard itself is still managed outside this dashboard.';
+    }
+    if (dom.vanguardOpenDiscordLinkBtn) {
+      dom.vanguardOpenDiscordLinkBtn.textContent = 'Review Discord identity';
+      dom.vanguardOpenDiscordLinkBtn.disabled = true;
+      dom.vanguardOpenDiscordLinkBtn.onclick = null;
+    }
+    return;
+  }
+
+  const discordOauth = normalizeOauthProviderState('discord', user?.oauthProviders?.discord);
+  const vanguard = getVanguardState(user);
+
+  dom.vanguardLinkChip.textContent = vanguard.linkedDiscord ? 'Discord linked' : 'Discord not linked';
+
+  let standingLabel = 'Brand standing clear';
+  if (vanguard.bannedFromAi) {
+    standingLabel = 'Restricted for AI';
+  } else if (vanguard.flagged) {
+    standingLabel = 'Needs review';
+  } else if (vanguard.staff) {
+    standingLabel = 'Staff identity';
+  } else if (vanguard.trusted) {
+    standingLabel = 'Trusted brand standing';
+  }
+  dom.vanguardStandingChip.textContent = standingLabel;
+
+  if (vanguard.linkedDiscord) {
+    const activityText = vanguard.lastUsedAt
+      ? `Last recognized ${formatDate(vanguard.lastUsedAt)}.`
+      : vanguard.linkedAt
+        ? `Linked ${formatDate(vanguard.linkedAt)}.`
+        : 'Linked and available for recognition.';
+    dom.vanguardIdentityStatus.textContent =
+      `This Continental ID account can be recognized by Vanguard-aware services through Discord identity. ${activityText}`;
+  } else if (discordOauth.available) {
+    dom.vanguardIdentityStatus.textContent =
+      'Link Discord sign-in if you want Vanguard-aware services to recognize this Continental ID account.';
+  } else {
+    dom.vanguardIdentityStatus.textContent =
+      'Discord sign-in is not configured on this deployment, so Vanguard-aware recognition is not available here yet.';
+  }
+
+  if (dom.vanguardIdentityDetail) {
+    const details = [];
+    if (vanguard.bannedFromAi) {
+      details.push('This account is restricted from Vanguard AI features.');
+    } else if (vanguard.flagged) {
+      details.push(
+        vanguard.flagReason
+          ? `Brand standing is under review: ${vanguard.flagReason}.`
+          : 'Brand standing is currently marked for review.'
+      );
+    } else if (vanguard.staff) {
+      details.push('This account is marked as staff at the brand identity layer.');
+    } else if (vanguard.trusted) {
+      details.push('This account is marked as trusted at the brand identity layer.');
+    } else {
+      details.push('No Vanguard-related restrictions are currently attached to this account.');
+    }
+    details.push('This dashboard does not control Vanguard itself.');
+    dom.vanguardIdentityDetail.textContent = details.join(' ');
+  }
+
+  if (dom.vanguardOpenDiscordLinkBtn) {
+    dom.vanguardOpenDiscordLinkBtn.textContent = vanguard.linkedDiscord
+      ? 'Review Discord identity'
+      : 'Connect Discord';
+    dom.vanguardOpenDiscordLinkBtn.disabled = !discordOauth.available && !vanguard.linkedDiscord;
+    dom.vanguardOpenDiscordLinkBtn.onclick = () => {
+      if (vanguard.linkedDiscord) {
+        dom.oauthDiscordUnlinkBtn?.focus();
+        return;
+      }
+      handleOauthLink('discord');
+    };
   }
 };
 
@@ -2368,6 +2479,7 @@ const clearDashboardUi = () => {
   renderMfaState();
   renderPasskeys();
   renderOauthProviders(null);
+  renderVanguardIdentity(null);
 
   if (dom.insightLast7) dom.insightLast7.textContent = '0';
   if (dom.insightLast30) dom.insightLast30.textContent = '0';
@@ -2918,6 +3030,7 @@ const renderProfileChecklist = (user = state.user) => {
   }
 
   const migration = getMigrationState(user);
+  const vanguard = getVanguardState(user);
   const items = [
     {
       title: 'Returning account review',
@@ -2954,6 +3067,13 @@ const renderProfileChecklist = (user = state.user) => {
       complete: Boolean(user.isVerified),
     },
     {
+      title: 'Discord identity linked',
+      detail: vanguard.linkedDiscord
+        ? 'Vanguard-aware services can recognize this account through Discord.'
+        : 'Link Discord sign-in if you want brand-aware services to recognize this account.',
+      complete: vanguard.linkedDiscord,
+    },
+    {
       title: 'Location added',
       detail: safeText(user.profile?.location) ? 'Location is on file.' : 'Add a location for context.',
       complete: Boolean(safeText(user.profile?.location)),
@@ -2984,6 +3104,21 @@ const renderProfileChecklist = (user = state.user) => {
           ? 'Passwordless sign-in is ready.'
           : 'Add a passkey for faster sign-in on your devices.',
       complete: Number(user.security?.passkeys?.count || 0) > 0,
+    },
+    {
+      title: 'Brand service standing',
+      detail: vanguard.bannedFromAi
+        ? 'This account is restricted from Vanguard AI features.'
+        : vanguard.flagged
+          ? vanguard.flagReason
+            ? `This account is under brand review: ${vanguard.flagReason}.`
+            : 'This account is currently under brand review.'
+          : vanguard.staff
+            ? 'This account is marked as staff at the brand identity layer.'
+            : vanguard.trusted
+              ? 'This account is marked as trusted at the brand identity layer.'
+              : 'No Vanguard-related restrictions are attached to this account.',
+      complete: !vanguard.flagged && !vanguard.bannedFromAi,
     },
   ];
 
@@ -3045,6 +3180,8 @@ const getRecommendedActions = (user = state.user) => {
   const completion = Number(user.profile?.completion || 0);
   const activeSessions = Math.max(0, getActiveSessionCount());
   const migration = getMigrationState(user);
+  const discordOauth = normalizeOauthProviderState('discord', user?.oauthProviders?.discord);
+  const vanguard = getVanguardState(user);
 
   if (migration.suggested) {
     const migrationDetails = [];
@@ -3074,6 +3211,17 @@ const getRecommendedActions = (user = state.user) => {
       detail: 'Verification is still pending, so recovery and trust signals are weaker than they should be.',
       actionLabel: 'Resend email',
       onAction: () => handleResendVerification(),
+    });
+  }
+
+  if (!vanguard.linkedDiscord && discordOauth.available) {
+    actions.push({
+      tone: 'neutral',
+      title: 'Link your Discord identity',
+      detail:
+        'Connect Discord if you want Vanguard-aware services to recognize this Continental ID account. This dashboard still does not control Vanguard itself.',
+      actionLabel: 'Open identities',
+      onAction: () => openIdentitySection(dom.oauthDiscordConnectBtn),
     });
   }
 
@@ -3601,6 +3749,13 @@ const openSecuritySection = (sectionId, focusEl = null) => {
   }, 80);
 };
 
+const openIdentitySection = (focusEl = null) => {
+  switchTab('settings');
+  window.setTimeout(() => {
+    scrollToSection('settings-identities-card', focusEl);
+  }, 80);
+};
+
 const getSecurityGuidance = (user = state.user) => {
   if (!user) {
     return {
@@ -3768,6 +3923,7 @@ const fillLinkedAccounts = (user) => {
   if (dom.linkedApple) dom.linkedApple.value = linked.apple || '';
   if (dom.linkedMicrosoft) dom.linkedMicrosoft.value = linked.microsoft || '';
   renderOauthProviders(user);
+  renderVanguardIdentity(user);
   renderPublicProfilePreview(user);
 };
 

@@ -783,6 +783,28 @@
 
               </div>
 
+              <article id="vanguard-identity-card" class="oauth-provider-card">
+                <div class="oauth-provider-copy">
+                  <p class="eyebrow">Brand account</p>
+                  <h4>Vanguard identity status</h4>
+                  <p id="vanguard-identity-status" class="helper-line">
+                    Sign in to review how this Continental ID account appears to Vanguard-aware services.
+                  </p>
+                  <div class="public-status-chips" aria-live="polite">
+                    <span id="vanguard-link-chip" class="inline-chip">Discord not linked</span>
+                    <span id="vanguard-standing-chip" class="inline-chip">Brand standing unknown</span>
+                  </div>
+                  <p id="vanguard-identity-detail" class="helper-line">
+                    This is read-only account status. Vanguard itself is still managed outside this dashboard.
+                  </p>
+                </div>
+                <div class="oauth-provider-actions">
+                  <button id="vanguard-open-discord-link-btn" class="secondary-btn" type="button">
+                    Review Discord identity
+                  </button>
+                </div>
+              </article>
+
               <p class="helper-line">
                 Verified identity providers are used for sign-in and secure account linking. The
                 profile fields below still control what appears on your public profile.
@@ -1555,6 +1577,7 @@
       </div>
       <div class="cookie-popup-actions">
         <a class="secondary-btn cookie-popup-link" href="privacy.html" target="_blank" rel="noopener noreferrer">Privacy details</a>
+        <a class="secondary-btn cookie-popup-link" href="terms.html" target="_blank" rel="noopener noreferrer">Terms</a>
         <button id="cookie-accept" class="primary-btn" type="button">Accept</button>
       </div>
     </div>
@@ -1567,6 +1590,8 @@
       <div class="center-content">
         <p>
           &copy; 2026 PClaystation |
+          <a href="privacy.html" target="_blank" rel="noopener noreferrer">Privacy</a> |
+          <a href="terms.html" target="_blank" rel="noopener noreferrer">Terms</a> |
           <a href="https://github.com/PClaystation" target="_blank" rel="noopener noreferrer">GitHub</a> |
           <a href="mailto:continental.auth@gmail.com">Contact</a>
         </p>
