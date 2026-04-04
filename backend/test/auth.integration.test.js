@@ -260,3 +260,88 @@ test('revoking all sessions invalidates refresh cookies and access tokens on the
   assert.equal(refreshResponse.status, 200);
   assert.equal(refreshResponse.body.authenticated, false);
 });
+
+test('sessions endpoint returns the current session and allows revoking it explicitly', async () => {
+  await createVerifiedUser({
+    email: 'current.session@example.com',
+    username: 'current.session',
+  });
+
+  const loginResponse = await request(app)
+    .post('/api/auth/login')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .send({
+      identifier: 'current.session',
+      password: 'StrongPass1',
+      deviceLabel: 'MacBook Pro',
+    });
+
+  const accessToken = loginResponse.body.token;
+
+  const sessionsResponse = await request(app)
+    .get('/api/auth/sessions')
+    .set('Authorization', `Bearer ${accessToken}`);
+
+  assert.equal(sessionsResponse.status, 200);
+  assert.ok(Array.isArray(sessionsResponse.body.sessions));
+  assert.equal(sessionsResponse.body.sessions.length, 1);
+  assert.equal(sessionsResponse.body.sessions[0].current, true);
+  assert.equal(sessionsResponse.body.sessions[0].label, 'MacBook Pro');
+
+  const revokeResponse = await request(app)
+    .delete(`/api/auth/sessions/${encodeURIComponent(sessionsResponse.body.sessions[0].sid)}`)
+    .set('Authorization', `Bearer ${accessToken}`)
+    .send({});
+
+  assert.equal(revokeResponse.status, 200);
+  assert.equal(revokeResponse.body.revokedCurrentSession, true);
+  assert.equal(revokeResponse.body.forceRelogin, true);
+});
+
+test('public profile directory and direct profile lookup only expose public accounts', async () => {
+  const publicUser = await createVerifiedUser({
+    email: 'public.user@example.com',
+    username: 'public.user',
+    displayName: 'Public User',
+  });
+  publicUser.profile.headline = 'Building cleaner auth systems';
+  publicUser.profile.location = 'Stockholm';
+  publicUser.linkedAccounts.github = 'public-user';
+  publicUser.preferences.profilePublic = true;
+  publicUser.preferences.searchable = true;
+  publicUser.preferences.publicProfile.linkedAccounts = true;
+  await publicUser.save();
+
+  const privateUser = await createVerifiedUser({
+    email: 'private.user@example.com',
+    username: 'private.user',
+    displayName: 'Private User',
+  });
+  privateUser.preferences.profilePublic = false;
+  privateUser.preferences.searchable = false;
+  await privateUser.save();
+
+  const directoryResponse = await request(app)
+    .get('/api/auth/public-search')
+    .set('Origin', TEST_ORIGIN);
+
+  assert.equal(directoryResponse.status, 200);
+  assert.equal(directoryResponse.body.isDirectory, true);
+  assert.ok(directoryResponse.body.results.some((entry) => entry.username === 'public.user'));
+  assert.ok(!directoryResponse.body.results.some((entry) => entry.username === 'private.user'));
+
+  const profileResponse = await request(app)
+    .get('/api/auth/public/public.user')
+    .set('Origin', TEST_ORIGIN);
+
+  assert.equal(profileResponse.status, 200);
+  assert.equal(profileResponse.body.profile.username, 'public.user');
+  assert.equal(profileResponse.body.profile.linkedAccounts.github, 'public-user');
+
+  const hiddenProfileResponse = await request(app)
+    .get('/api/auth/public/private.user')
+    .set('Origin', TEST_ORIGIN);
+
+  assert.equal(hiddenProfileResponse.status, 404);
+});

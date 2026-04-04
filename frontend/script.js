@@ -30,7 +30,7 @@ const AVATAR_URL_VALIDATION_TIMEOUT_MS = 7000;
 const AVATAR_RENDER_TIMEOUT_MS = 10000;
 const AVATAR_REMOTE_MAX_DIMENSION = 4096;
 const AVATAR_ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
-const OAUTH_PROVIDERS = ['github', 'google', 'discord'];
+const OAUTH_PROVIDERS = ['github', 'google', 'discord', 'microsoft'];
 const BLOCKED_NAME_FRAGMENTS = [
   'anal',
   'anus',
@@ -250,6 +250,9 @@ const dom = {
   oauthDiscordStatus: document.getElementById('oauth-discord-status'),
   oauthDiscordConnectBtn: document.getElementById('oauth-discord-connect-btn'),
   oauthDiscordUnlinkBtn: document.getElementById('oauth-discord-unlink-btn'),
+  oauthMicrosoftStatus: document.getElementById('oauth-microsoft-status'),
+  oauthMicrosoftConnectBtn: document.getElementById('oauth-microsoft-connect-btn'),
+  oauthMicrosoftUnlinkBtn: document.getElementById('oauth-microsoft-unlink-btn'),
 
   passwordForm: document.getElementById('password-form'),
   passwordSaveBtn: document.getElementById('password-save-btn'),
@@ -1232,6 +1235,7 @@ const getOauthProviderLabel = (provider) => {
   if (normalized === 'github') return 'GitHub';
   if (normalized === 'google') return 'Google';
   if (normalized === 'discord') return 'Discord';
+  if (normalized === 'microsoft') return 'Microsoft';
   return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : 'Identity provider';
 };
 
@@ -1267,6 +1271,13 @@ const getOauthProviderElements = (provider) => {
       status: dom.oauthDiscordStatus,
       connectBtn: dom.oauthDiscordConnectBtn,
       unlinkBtn: dom.oauthDiscordUnlinkBtn,
+    };
+  }
+  if (normalized === 'microsoft') {
+    return {
+      status: dom.oauthMicrosoftStatus,
+      connectBtn: dom.oauthMicrosoftConnectBtn,
+      unlinkBtn: dom.oauthMicrosoftUnlinkBtn,
     };
   }
 

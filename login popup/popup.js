@@ -10,7 +10,7 @@ const PREFERRED_API_ORIGINS = Array.isArray(AUTH_CONFIG.preferredApiOrigins)
 const HOSTED_API_BASE_URL =
   AUTH_CONFIG.hostedApiBaseUrl || 'https://auth.continental-hub.com';
 const API_BASE_STORAGE_KEY = 'continental.authApiBaseUrl';
-const OAUTH_PROVIDERS = ['github', 'google', 'discord'];
+const OAUTH_PROVIDERS = ['github', 'google', 'discord', 'microsoft'];
 const USERNAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BLOCKED_NAME_FRAGMENTS = [
@@ -132,6 +132,7 @@ const loginPasskeyBtn = document.getElementById('login-passkey-btn');
 const loginGithubBtn = document.getElementById('login-github-btn');
 const loginGoogleBtn = document.getElementById('login-google-btn');
 const loginDiscordBtn = document.getElementById('login-discord-btn');
+const loginMicrosoftBtn = document.getElementById('login-microsoft-btn');
 const registerBtn = document.getElementById('register-btn');
 const loginPrimaryFields = document.getElementById('login-primary-fields');
 const loginMfaStep = document.getElementById('login-mfa-step');
@@ -357,6 +358,7 @@ const getOauthProviderLabel = (provider) => {
   if (normalized === 'github') return 'GitHub';
   if (normalized === 'google') return 'Google';
   if (normalized === 'discord') return 'Discord';
+  if (normalized === 'microsoft') return 'Microsoft';
   return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : 'Identity provider';
 };
 
@@ -365,6 +367,7 @@ const getOauthProviderButton = (provider) => {
   if (normalized === 'github') return loginGithubBtn;
   if (normalized === 'google') return loginGoogleBtn;
   if (normalized === 'discord') return loginDiscordBtn;
+  if (normalized === 'microsoft') return loginMicrosoftBtn;
   return null;
 };
 

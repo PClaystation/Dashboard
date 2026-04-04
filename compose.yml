@@ -1,0 +1,27 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/continental_dashboard
+      PORT: 5000
+      NODE_ENV: production
+      TRUST_PROXY: 1
+    ports:
+      - "5000:5000"
+
+volumes:
+  mongo-data:

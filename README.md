@@ -143,11 +143,26 @@ For the current hosted static domains (`dashboard.continental-hub.com`, `login.c
 - If you proxy the API through the same public host on `443`, leave the frontend on its default same-origin `/api/*` setup instead of pointing browsers at `:5000`.
 - To mirror the auth pages into the sibling `Login` repo, run `bash scripts/sync-login-popup.sh`.
 
+## Container Setup
+
+You can run the backend and MongoDB together with Docker Compose:
+
+```bash
+cp backend/.env.example backend/.env
+docker compose up --build
+```
+
+Notes:
+
+- `compose.yml` expects `backend/.env` to exist.
+- The compose stack sets `MONGO_URI` to the bundled `mongo` service automatically.
+- Update `ALLOWED_ORIGINS`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, email settings, OAuth secrets, and WebAuthn config before using the stack outside local testing.
+
 ## Production Notes
 
 - The repo currently ships deployment automation for the static frontend and a local deploy helper for the backend at `backend/deploy-backend.sh`.
 - The backend workflow runs `npm run check` and `npm test`; it still does not deploy or validate production secrets.
-- Microsoft OAuth is implemented in the backend config surface, but the checked-in dashboard UI currently exposes GitHub, Google, and Discord account linking.
+- The dashboard and login popup now expose Microsoft alongside GitHub, Google, and Discord when the provider is configured on the backend.
 - Passkeys and cross-site refresh cookies depend on your final public origins, proxy setup, and HTTPS configuration, so validate those flows in the deployed environment instead of assuming local success maps to production.
 
 ## Key API Endpoints
