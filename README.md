@@ -60,6 +60,10 @@ A full-stack account dashboard with hardened auth/session handling, profile and 
    ```bash
    npm run migrate:users
    ```
+6. Run the backend verification suite:
+   ```bash
+   npm test
+   ```
 
 ## Backend Env Reference
 
@@ -142,7 +146,7 @@ For the current hosted static domains (`dashboard.continental-hub.com`, `login.c
 ## Production Notes
 
 - The repo currently ships deployment automation for the static frontend and a local deploy helper for the backend at `backend/deploy-backend.sh`.
-- The new backend workflow only verifies syntax with `npm run check`; it does not deploy, run integration tests, or validate secrets.
+- The backend workflow runs `npm run check` and `npm test`; it still does not deploy or validate production secrets.
 - Microsoft OAuth is implemented in the backend config surface, but the checked-in dashboard UI currently exposes GitHub, Google, and Discord account linking.
 - Passkeys and cross-site refresh cookies depend on your final public origins, proxy setup, and HTTPS configuration, so validate those flows in the deployed environment instead of assuming local success maps to production.
 

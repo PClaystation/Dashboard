@@ -3,94 +3,448 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Privacy Notice | Continental ID</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Syne:wght@600;700&display=swap" rel="stylesheet">
+  <title>Privacy Policy | Continental ID</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <style>
-    .privacy-shell {
-      width: min(860px, 92vw);
-      margin: 2rem auto;
-      padding: 1.1rem;
+    .privacy-page {
+      width: min(1180px, calc(100vw - 2rem));
+      margin: 0 auto;
+      padding: 2rem 0 3rem;
+    }
+
+    .privacy-hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(1.5rem, 2vw, 2rem);
       border: 1px solid var(--line);
-      border-radius: 16px;
-      background: var(--panel);
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 24%, transparent), transparent 34%),
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 92%, var(--bg-2)), color-mix(in srgb, var(--surface) 96%, var(--bg-1)));
       box-shadow: var(--shadow);
     }
 
-    .privacy-shell h1,
-    .privacy-shell h2 {
-      margin-bottom: 0.75rem;
+    .privacy-hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -5rem -5rem auto;
+      width: 16rem;
+      height: 16rem;
+      border-radius: 50%;
+      background: radial-gradient(circle, color-mix(in srgb, var(--secondary) 20%, transparent), transparent 68%);
+      pointer-events: none;
     }
 
-    .privacy-shell section + section {
-      margin-top: 1.25rem;
+    .privacy-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin: 0 0 1rem;
+      padding: 0.45rem 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface-muted) 92%, transparent);
+      color: var(--primary-strong);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
     }
 
-    .privacy-shell p {
-      color: var(--muted);
-      line-height: 1.6;
+    .privacy-hero-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 1.25rem;
+      grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.95fr);
+      align-items: end;
+    }
+
+    .privacy-hero-copy h1 {
       margin: 0;
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2.4rem, 5vw, 4.35rem);
+      line-height: 0.96;
+      letter-spacing: -0.04em;
     }
 
-    .privacy-shell ul {
-      margin: 0.5rem 0 0;
-      padding-left: 1.1rem;
+    .privacy-hero-copy p {
+      max-width: 58ch;
+      margin: 1rem 0 0;
       color: var(--muted);
-      line-height: 1.6;
+      line-height: 1.7;
+      font-size: 1.02rem;
     }
 
-    .privacy-back-link {
-      display: inline-block;
-      margin-top: 1.25rem;
-      color: var(--primary);
+    .privacy-meta {
+      display: grid;
+      gap: 0.9rem;
+    }
+
+    .privacy-meta-card,
+    .privacy-summary-card,
+    .privacy-panel,
+    .privacy-contact-card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: color-mix(in srgb, var(--surface-strong) 92%, var(--bg-2));
+      box-shadow: var(--shadow-soft);
+    }
+
+    .privacy-meta-card {
+      padding: 1rem 1.1rem;
+    }
+
+    .privacy-meta-card strong,
+    .privacy-summary-card strong {
+      display: block;
+      margin-bottom: 0.3rem;
+      font-size: 0.92rem;
+      color: var(--text);
+    }
+
+    .privacy-meta-card span,
+    .privacy-summary-card p {
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .privacy-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.85rem;
+      margin-top: 1.4rem;
+    }
+
+    .privacy-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.95rem;
+      padding: 0.8rem 1.1rem;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      color: var(--text);
       text-decoration: none;
-      font-weight: 600;
+      font-weight: 700;
+      transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
     }
 
-    .privacy-back-link:hover {
+    .privacy-button:hover {
+      transform: translateY(-1px);
+      border-color: var(--line-strong);
+    }
+
+    .privacy-button-primary {
+      background: color-mix(in srgb, var(--primary) 20%, var(--surface-strong));
+    }
+
+    .privacy-button-secondary {
+      background: color-mix(in srgb, var(--surface-muted) 92%, transparent);
+    }
+
+    .privacy-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1rem;
+      margin-top: 1.1rem;
+    }
+
+    .privacy-summary-card {
+      padding: 1rem 1.1rem;
+    }
+
+    .privacy-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
+      gap: 1.1rem;
+      margin-top: 1.1rem;
+      align-items: start;
+    }
+
+    .privacy-nav,
+    .privacy-panel {
+      padding: 1.15rem;
+    }
+
+    .privacy-nav {
+      position: sticky;
+      top: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: color-mix(in srgb, var(--surface) 92%, var(--bg-2));
+      box-shadow: var(--shadow-soft);
+    }
+
+    .privacy-nav h2,
+    .privacy-panel h2,
+    .privacy-contact-card h2 {
+      margin: 0 0 0.9rem;
+      font-family: 'Syne', sans-serif;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+    }
+
+    .privacy-nav a {
+      display: block;
+      padding: 0.7rem 0.8rem;
+      border-radius: 12px;
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .privacy-nav a:hover {
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
+      color: var(--text);
+    }
+
+    .privacy-stack {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .privacy-panel {
+      padding: 1.25rem;
+    }
+
+    .privacy-panel p,
+    .privacy-panel li,
+    .privacy-contact-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .privacy-panel ul {
+      margin: 0;
+      padding-left: 1.15rem;
+      display: grid;
+      gap: 0.7rem;
+    }
+
+    .privacy-kicker {
+      margin: 0 0 0.55rem;
+      color: var(--primary-strong);
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .privacy-callout {
+      margin-top: 1rem;
+      padding: 1rem;
+      border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--line));
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--primary-soft) 72%, transparent);
+    }
+
+    .privacy-callout strong {
+      display: block;
+      margin-bottom: 0.35rem;
+      color: var(--text);
+    }
+
+    .privacy-contact-card {
+      margin-top: 1.1rem;
+      padding: 1.25rem;
+    }
+
+    .privacy-contact-card a {
+      color: var(--primary-strong);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .privacy-contact-card a:hover {
       text-decoration: underline;
+    }
+
+    @media (max-width: 980px) {
+      .privacy-hero-grid,
+      .privacy-layout,
+      .privacy-summary {
+        grid-template-columns: 1fr;
+      }
+
+      .privacy-nav {
+        position: static;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .privacy-page {
+        width: min(100vw - 1rem, 1180px);
+        padding: 1rem 0 2rem;
+      }
+
+      .privacy-hero,
+      .privacy-nav,
+      .privacy-panel,
+      .privacy-contact-card,
+      .privacy-meta-card,
+      .privacy-summary-card {
+        border-radius: 20px;
+      }
+
+      .privacy-button {
+        width: 100%;
+      }
     }
   </style>
 </head>
 <body>
-  <main class="privacy-shell">
-    <h1>Privacy Notice</h1>
-    <p>
-      Continental ID uses secure cookies and limited local browser storage to keep you signed in and remember interface
-      preferences.
-      This page explains what is stored and why.
-    </p>
-
-    <section>
-      <h2>What We Store</h2>
-      <ul>
-        <li>Secure session cookies set by the authentication API.</li>
-        <li>Local preference keys such as the active dashboard tab, cookie notice acknowledgement, and appearance toggles.</li>
-        <li>Access tokens are kept only in browser memory and are not persisted in local storage.</li>
-      </ul>
+  <main class="privacy-page">
+    <section class="privacy-hero" aria-labelledby="privacy-title">
+      <div class="privacy-hero-grid">
+        <div class="privacy-hero-copy">
+          <p class="privacy-eyebrow">Continental ID</p>
+          <h1 id="privacy-title">Privacy Policy</h1>
+          <p>
+            This dashboard is built to manage your Continental ID account, not to profile you for advertising.
+            We collect the account, security, and device information needed to sign you in, protect your account,
+            and let you control what is visible to other people.
+          </p>
+          <div class="privacy-actions">
+            <a class="privacy-button privacy-button-primary" href="index.html">Return to Dashboard</a>
+            <a class="privacy-button privacy-button-secondary" href="mailto:continental.auth@gmail.com">Contact Support</a>
+          </div>
+        </div>
+        <div class="privacy-meta">
+          <div class="privacy-meta-card">
+            <strong>Last updated</strong>
+            <span>April 4, 2026</span>
+          </div>
+          <div class="privacy-meta-card">
+            <strong>What this covers</strong>
+            <span>The Continental ID dashboard, account management flows, sign-in sessions, and related profile settings.</span>
+          </div>
+          <div class="privacy-meta-card">
+            <strong>Core approach</strong>
+            <span>Short-lived access tokens stay in memory, refresh sessions use secure cookies, and local browser storage is limited to interface preferences.</span>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section>
-      <h2>How It Is Used</h2>
-      <ul>
-        <li>Authenticate requests to protected dashboard endpoints.</li>
-        <li>Maintain your signed-in session across page reloads by refreshing from secure cookies.</li>
-        <li>Remember basic interface preferences on this device.</li>
-        <li>Track active sessions and account activity to help detect unauthorized access.</li>
-      </ul>
+    <section class="privacy-summary" aria-label="Policy highlights">
+      <article class="privacy-summary-card">
+        <strong>Authentication first</strong>
+        <p>We use your email, username, password, passkeys, session data, and security history to verify access and detect suspicious activity.</p>
+      </article>
+      <article class="privacy-summary-card">
+        <strong>Visibility controls</strong>
+        <p>You decide whether your profile is public, whether it is searchable, and which profile fields can appear publicly.</p>
+      </article>
+      <article class="privacy-summary-card">
+        <strong>User controls</strong>
+        <p>You can review active sessions, export your account data, update preferences, and permanently delete your account from the dashboard.</p>
+      </article>
     </section>
 
-    <section>
-      <h2>Control</h2>
-      <p>
-        You can sign out anytime to clear active session state from this browser. Browser settings can also be used
-        to clear site data and cookies.
-      </p>
-    </section>
+    <section class="privacy-layout">
+      <nav class="privacy-nav" aria-label="Privacy policy sections">
+        <h2>On this page</h2>
+        <a href="#collect">Information we collect</a>
+        <a href="#use">How we use it</a>
+        <a href="#cookies">Cookies and local storage</a>
+        <a href="#sharing">Sharing and third parties</a>
+        <a href="#security">Security and retention</a>
+        <a href="#controls">Your controls</a>
+        <a href="#contact">Contact</a>
+      </nav>
 
-    <a class="privacy-back-link" href="index.html">Return to Dashboard</a>
+      <div class="privacy-stack">
+        <section class="privacy-panel" id="collect">
+          <p class="privacy-kicker">Collection</p>
+          <h2>Information we collect</h2>
+          <ul>
+            <li>Account identity details such as email address, username, display name, password hash, and verification state.</li>
+            <li>Profile information you choose to provide, including avatar, headline, role, organization, bio, location, website, timezone, language, and linked account references.</li>
+            <li>Preference settings for privacy, notifications, appearance, accessibility, and public profile visibility.</li>
+            <li>Security and device information such as IP address, browser or device user-agent, recent login history, known devices, active sessions, audit events, MFA enrollment details, backup code hashes, and registered passkeys.</li>
+            <li>OAuth and linked identity details when you connect providers such as GitHub, Google, Discord, or Microsoft.</li>
+          </ul>
+          <div class="privacy-callout">
+            <strong>Important</strong>
+            Access tokens are designed to stay in browser memory only. They are not intentionally persisted to local storage.
+          </div>
+        </section>
+
+        <section class="privacy-panel" id="use">
+          <p class="privacy-kicker">Use</p>
+          <h2>How we use your information</h2>
+          <ul>
+            <li>To create and maintain your account, sign you in, refresh authenticated sessions, and let you manage your profile.</li>
+            <li>To secure the service, including rate-limiting sign-in attempts, monitoring account activity, detecting unusual sessions, and supporting MFA and passkeys.</li>
+            <li>To send operational emails you request or that are necessary for account security, such as verification messages, password resets, and security alerts.</li>
+            <li>To apply your visibility and appearance preferences on this device and across authenticated dashboard experiences.</li>
+            <li>To provide account tools such as active-session review, account export, linked-provider management, and account deletion.</li>
+          </ul>
+        </section>
+
+        <section class="privacy-panel" id="cookies">
+          <p class="privacy-kicker">Browser Storage</p>
+          <h2>Cookies and local storage</h2>
+          <ul>
+            <li>Secure authentication cookies are used to maintain refresh sessions and keep you signed in between page loads.</li>
+            <li>Limited local browser storage may be used for interface settings such as theme, density, reduced-motion preferences, active tab state, and cookie notice acknowledgement.</li>
+            <li>Browser storage is used to improve the dashboard experience, not to build advertising profiles across unrelated sites.</li>
+          </ul>
+          <div class="privacy-callout">
+            <strong>Your options</strong>
+            Signing out clears active session state for this browser. You can also remove cookies and site data from your browser settings at any time.
+          </div>
+        </section>
+
+        <section class="privacy-panel" id="sharing">
+          <p class="privacy-kicker">Sharing</p>
+          <h2>Sharing and third parties</h2>
+          <ul>
+            <li>We may use infrastructure and service providers that help operate the product, such as hosting, authentication support, and email delivery.</li>
+            <li>If you connect an external identity provider, we exchange the minimum information needed to complete sign-in or account linking for that provider.</li>
+            <li>Profile information that is marked public may be visible to other people according to your visibility settings.</li>
+            <li>We may disclose information if reasonably necessary to investigate abuse, protect the service, or comply with legal obligations.</li>
+          </ul>
+        </section>
+
+        <section class="privacy-panel" id="security">
+          <p class="privacy-kicker">Protection</p>
+          <h2>Security and retention</h2>
+          <ul>
+            <li>The product is designed around hardened session handling, refresh-token invalidation, sign-in throttling, and device or session tracking for account protection.</li>
+            <li>Sensitive security material such as passwords is stored as hashes, and backup codes are stored in hardened form rather than plain text.</li>
+            <li>Security histories such as recent logins, audit events, known devices, and active sessions are capped so they do not grow without limit.</li>
+            <li>Information is retained for as long as it is needed to operate the account, enforce security controls, or satisfy legal and operational requirements.</li>
+          </ul>
+        </section>
+
+        <section class="privacy-panel" id="controls">
+          <p class="privacy-kicker">Controls</p>
+          <h2>Your controls and choices</h2>
+          <ul>
+            <li>Update your profile information and control whether your profile is public or searchable.</li>
+            <li>Choose which profile fields can appear publicly, including whether linked accounts or personal details are exposed.</li>
+            <li>Review and revoke active sessions, rotate credentials, enable or disable MFA, and manage passkeys.</li>
+            <li>Export your account data from the dashboard when you want a copy of the information associated with your account.</li>
+            <li>Permanently delete your account from the dashboard if you no longer want to use the service.</li>
+          </ul>
+        </section>
+
+        <section class="privacy-contact-card" id="contact">
+          <p class="privacy-kicker">Contact</p>
+          <h2>Questions about privacy</h2>
+          <p>
+            If you have a question about this policy, account data, or a privacy-related request, contact
+            <a href="mailto:continental.auth@gmail.com">continental.auth@gmail.com</a>.
+          </p>
+        </section>
+      </div>
+    </section>
   </main>
 </body>
 </html>

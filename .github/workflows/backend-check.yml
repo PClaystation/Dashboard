@@ -33,3 +33,6 @@ jobs:
 
       - name: Run backend check
         run: npm run check
+
+      - name: Run backend tests
+        run: npm test

@@ -347,6 +347,10 @@ app.use((err, req, res, next) => {
 let server;
 
 const startServer = async () => {
+  if (server?.listening) {
+    return server;
+  }
+
   try {
     await connectToDatabase();
     console.log('MongoDB connected');
@@ -363,27 +367,39 @@ const startServer = async () => {
     const privateKey = fs.readFileSync(config.httpsKeyPath, 'utf8');
     const certificate = fs.readFileSync(config.httpsCertPath, 'utf8');
     server = https.createServer({ key: privateKey, cert: certificate }, app);
-    server.listen(config.port, config.host, () => {
-      console.log(`Auth service HTTPS running on https://${config.host}:${config.port}`);
+    await new Promise((resolve) => {
+      server.listen(config.port, config.host, resolve);
     });
-    return;
+    console.log(`Auth service HTTPS running on https://${config.host}:${config.port}`);
+    return server;
   }
 
   server = http.createServer(app);
-  server.listen(config.port, config.host, () => {
-    console.log(`Auth service HTTP running on http://${config.host}:${config.port}`);
+  await new Promise((resolve) => {
+    server.listen(config.port, config.host, resolve);
   });
+  console.log(`Auth service HTTP running on http://${config.host}:${config.port}`);
+  return server;
+};
+
+const stopServer = async () => {
+  const activeServer = server;
+  server = undefined;
+
+  if (activeServer) {
+    await new Promise((resolve) => activeServer.close(resolve));
+  }
+
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.connection.close();
+  }
 };
 
 const shutdown = async (signal) => {
   console.log(`Received ${signal}. Shutting down gracefully...`);
 
   try {
-    if (server) {
-      await new Promise((resolve) => server.close(resolve));
-    }
-
-    await mongoose.connection.close();
+    await stopServer();
     process.exit(0);
   } catch (err) {
     console.error('Error during shutdown:', err);
@@ -394,4 +410,14 @@ const shutdown = async (signal) => {
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-startServer();
+module.exports = {
+  app,
+  config,
+  connectToDatabase,
+  startServer,
+  stopServer,
+};
+
+if (require.main === module) {
+  startServer();
+}

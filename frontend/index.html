@@ -1526,12 +1526,19 @@
       </div>
     </div>
 
-    <div id="cookie-popup" class="cookie-popup hide">
-      <p>
-        We use cookies to keep you signed in.
-        <a href="privacy.html" target="_blank" rel="noopener noreferrer">Learn more</a>
-      </p>
-      <button id="cookie-accept" type="button">Got it</button>
+    <div id="cookie-popup" class="cookie-popup hide" role="dialog" aria-live="polite" aria-labelledby="cookie-title" aria-describedby="cookie-copy">
+      <div class="cookie-popup-icon" aria-hidden="true">C</div>
+      <div class="cookie-popup-copy">
+        <span class="cookie-popup-eyebrow">Privacy</span>
+        <h2 id="cookie-title">Cookie notice</h2>
+        <p id="cookie-copy">
+          We use secure cookies to keep you signed in and remember a few dashboard preferences.
+        </p>
+      </div>
+      <div class="cookie-popup-actions">
+        <a class="secondary-btn cookie-popup-link" href="privacy.html" target="_blank" rel="noopener noreferrer">Privacy details</a>
+        <button id="cookie-accept" class="primary-btn" type="button">Accept</button>
+      </div>
     </div>
 
     <footer>

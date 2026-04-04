@@ -97,7 +97,7 @@ const LINKED_PROVIDERS = [
   'microsoft',
 ];
 
-const ALLOWED_THEMES = new Set(['system', 'graphite', 'midnight', 'heritage', 'dawn', 'night', 'ocean']);
+const ALLOWED_THEMES = new Set(['system', 'graphite', 'midnight', 'alpine', 'heritage', 'dawn', 'night', 'ocean']);
 const ALLOWED_DENSITIES = new Set(['comfortable', 'compact', 'spacious']);
 
 const DEFAULT_NOTIFICATIONS = {
@@ -1109,6 +1109,24 @@ const EMAIL_THEME_PALETTES = {
     secondarySoft: '#2e261d',
     buttonText: '#ffffff',
   },
+  alpine: {
+    pageBg: '#0b1418',
+    shellBg: '#132127',
+    heroBg: '#22404c',
+    contentBg: '#16262c',
+    panelBg: '#1a3138',
+    shellBorder: '#36525b',
+    text: '#f4f5ef',
+    muted: '#b5b7ad',
+    footer: '#b5b7ad',
+    label: '#c1bfac',
+    accent: '#9fbfb4',
+    accentStrong: '#cfe0d8',
+    accentSoft: '#23363a',
+    secondary: '#a59772',
+    secondarySoft: '#332f24',
+    buttonText: '#0b1418',
+  },
   heritage: {
     pageBg: '#f7f2ea',
     shellBg: '#ffffff',
@@ -2013,7 +2031,7 @@ exports.previewEmailIndex = (req, res) => {
     ['login-alert', 'New Login Alert'],
     ['password-changed', 'Password Changed'],
   ];
-  const themeOptions = ['midnight', 'heritage', 'dawn', 'night', 'ocean'];
+  const themeOptions = ['midnight', 'alpine', 'heritage', 'dawn', 'night', 'ocean'];
   const previewBasePath = '/api/auth/email-preview';
   const previewSrc = `${previewBasePath}/${selectedType}?theme=${encodeURIComponent(requestedTheme)}`;
 
