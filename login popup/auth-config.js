@@ -4,6 +4,7 @@ window.__AUTH_CONFIG__ = {
     'https://dashboard.continental-hub.com',
     'https://grimoire.continental-hub.com',
     'https://login.continental-hub.com',
+    'https://vanguard.continental-hub.com',
     'https://pclaystation.github.io',
     'https://mpmc.ddns.net',
   ],

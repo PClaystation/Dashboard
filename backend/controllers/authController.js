@@ -134,12 +134,19 @@ const DEFAULT_PUBLIC_PROFILE = {
 
 const DEFAULT_DASHBOARD_ORIGIN = 'https://dashboard.continental-hub.com';
 const DEFAULT_LOGIN_ORIGIN = 'https://login.continental-hub.com';
+const DEFAULT_VANGUARD_ORIGIN = 'https://vanguard.continental-hub.com';
+const extraOauthAppOrigins = String(process.env.OAUTH_APP_ORIGINS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 const OAUTH_APP_ORIGINS = new Set([
   DEFAULT_DASHBOARD_ORIGIN,
   DEFAULT_LOGIN_ORIGIN,
+  DEFAULT_VANGUARD_ORIGIN,
   'https://pclaystation.github.io',
   'https://grimoire.continental-hub.com',
   'https://mpmc.ddns.net',
+  ...extraOauthAppOrigins,
 ]);
 const DEFAULT_LOGIN_POPUP_URL = `${DEFAULT_LOGIN_ORIGIN}/popup.html`;
 const DEFAULT_EMAIL_VERIFY_PATH = '/verify.html';
@@ -5131,6 +5138,8 @@ exports.finishOauthCallback = async (req, res) => {
         messagePayload: {
           type: 'LOGIN_SUCCESS',
           provider: config.provider,
+          accessToken: sessionTokens.accessToken,
+          token: sessionTokens.accessToken,
           user: buildUserPayload(user),
         },
       })

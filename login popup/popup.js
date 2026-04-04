@@ -434,6 +434,8 @@ const finishAuth = (payload) => {
     window.opener.postMessage(
       {
         type: 'LOGIN_SUCCESS',
+        accessToken: safeText(payload?.accessToken || payload?.token),
+        token: safeText(payload?.accessToken || payload?.token),
         user: payload?.user || null,
       },
       targetOrigin
