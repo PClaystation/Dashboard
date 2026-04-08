@@ -176,6 +176,7 @@ Notes:
 - The backend workflow runs `npm run check` and `npm test`; it still does not deploy or validate production secrets.
 - The dashboard and login popup now expose Microsoft alongside GitHub, Google, and Discord when the provider is configured on the backend.
 - Passkeys and cross-site refresh cookies depend on your final public origins, proxy setup, and HTTPS configuration, so validate those flows in the deployed environment instead of assuming local success maps to production.
+- Proxy clients such as StepCast can forward browser-originated `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/refresh_token`, and `GET /api/auth/me` traffic through their own backend as long as `ALLOWED_ORIGINS` includes the browser origin and the proxy passes through the refresh cookie and bearer token unchanged.
 
 ## Key API Endpoints
 

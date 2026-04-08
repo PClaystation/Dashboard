@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const mongoose = require('mongoose');
 const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
@@ -18,6 +20,7 @@ const { app } = require('../server');
 const User = require('../models/User');
 
 const TEST_ORIGIN = 'http://localhost:3000';
+const TERRA_TRECK_PAGES_ORIGIN = 'https://pclaystation.github.io';
 
 const sha256 = (value) =>
   crypto.createHash('sha256').update(String(value || '')).digest('hex');
@@ -64,6 +67,23 @@ test.after(async () => {
 
 test.beforeEach(async () => {
   await mongoose.connection.db.dropDatabase();
+});
+
+test('Terra-Treck GitHub Pages origin is trusted by hosted popup config and backend CORS', async () => {
+  const popupConfigPath = path.resolve(__dirname, '../../login popup/auth-config.js');
+  const popupConfigSource = fs.readFileSync(popupConfigPath, 'utf8');
+
+  assert.match(popupConfigSource, /https:\/\/pclaystation\.github\.io/);
+
+  const response = await request(app)
+    .options('/api/auth/refresh_token')
+    .set('Origin', TERRA_TRECK_PAGES_ORIGIN)
+    .set('Access-Control-Request-Method', 'POST')
+    .set('Access-Control-Request-Headers', 'content-type,authorization');
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers['access-control-allow-origin'], TERRA_TRECK_PAGES_ORIGIN);
+  assert.equal(response.headers['access-control-allow-credentials'], 'true');
 });
 
 test('register creates an unverified account and blocks login until verification', async () => {
