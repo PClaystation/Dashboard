@@ -1,6 +1,7 @@
 window.__AUTH_CONFIG__ = {
   localHosts: ['localhost', '127.0.0.1'],
   trustedAppOrigins: [
+    'https://blueprint.continental-hub.com',
     'https://dashboard.continental-hub.com',
     'https://grimoire.continental-hub.com',
     'https://login.continental-hub.com',
