@@ -690,6 +690,7 @@ const isOauthProviderAvailable = (provider) => {
 const serializeOauthIdentity = (identity = {}, providerConfig = null) => ({
   provider: sanitizeText(identity?.provider || providerConfig?.provider, 40).toLowerCase(),
   linked: Boolean(identity?.provider && identity?.providerUserId),
+  providerUserId: sanitizeText(identity?.providerUserId, 160),
   username: sanitizeText(identity?.username, 120),
   email: sanitizeText(identity?.email, 320).toLowerCase(),
   emailVerified: Boolean(identity?.emailVerified),
