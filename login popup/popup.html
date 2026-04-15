@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Continental ID Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="auth.css" />
 </head>
 <body class="auth-page">
@@ -12,22 +18,22 @@
       <div class="auth-brand-logo" aria-hidden="true">
         <img src="C2.png" alt="" />
       </div>
-      <p class="auth-eyebrow">Continental standard</p>
-      <h1>Sign in to Continental.</h1>
-      <p class="auth-brand-copy">Use one account for dashboard access.</p>
+      <p class="auth-eyebrow">Identity workspace</p>
+      <h1>Continental ID</h1>
+      <p class="auth-brand-copy">One sign-in for the dashboard, security tools, and account controls.</p>
       <ul class="auth-brand-list" aria-label="Authentication highlights">
-        <li>Email and username sign-in</li>
-        <li>MFA support</li>
-        <li>Secure sessions</li>
+        <li>Password or passkey</li>
+        <li>Linked providers</li>
+        <li>MFA ready</li>
       </ul>
-      <p class="auth-brand-footnote">Enable cookies for sign-in.</p>
+      <p class="auth-brand-footnote">Cookies required for sign-in.</p>
     </aside>
 
     <section class="auth-panel">
       <div class="auth-panel-heading">
         <p class="auth-eyebrow">Secure access</p>
         <h2 id="auth-title">Access your account</h2>
-        <p class="auth-panel-copy">Sign in or create a new account.</p>
+        <p class="auth-panel-copy">Use your password, passkey, or a linked provider.</p>
       </div>
 
       <div id="status-banner" class="status-banner" data-status="info" aria-live="polite" aria-atomic="true"></div>
@@ -98,46 +104,9 @@
             </div>
 
             <div class="inline-actions">
-              <p class="field-hint">Your password is not stored after you close the page.</p>
+              <p class="field-hint">Session only.</p>
               <a id="forgot-password-link" class="text-link" href="reset-password.html">Forgot password?</a>
             </div>
-          </div>
-
-          <div class="passkey-actions">
-            <button id="login-passkey-btn" class="secondary-btn" type="button">Sign in with passkey</button>
-            <p class="field-hint">Use a saved passkey instead of a password.</p>
-          </div>
-
-          <div class="oauth-actions">
-            <button id="login-github-btn" class="secondary-btn" type="button">Continue with GitHub</button>
-            <p class="field-hint">
-              Use a linked GitHub account, or create a new Continental ID account from a verified
-              GitHub email.
-            </p>
-          </div>
-
-          <div class="oauth-actions">
-            <button id="login-google-btn" class="secondary-btn" type="button">Continue with Google</button>
-            <p class="field-hint">
-              Use a linked Google account, or create a new Continental ID account from a verified
-              Google email.
-            </p>
-          </div>
-
-          <div class="oauth-actions">
-            <button id="login-discord-btn" class="secondary-btn" type="button">Continue with Discord</button>
-            <p class="field-hint">
-              Use a linked Discord account, or create a new Continental ID account from a verified
-              Discord email.
-            </p>
-          </div>
-
-          <div class="oauth-actions">
-            <button id="login-microsoft-btn" class="secondary-btn" type="button">Continue with Microsoft</button>
-            <p class="field-hint">
-              Use a linked Microsoft account, or create a new Continental ID account from a verified
-              Microsoft email.
-            </p>
           </div>
 
           <div id="login-mfa-step" class="mfa-step" aria-live="polite">
@@ -218,6 +187,103 @@
           </div>
 
           <button type="submit" id="login-btn" class="submit-btn">Sign in</button>
+
+          <section class="quick-access" aria-labelledby="quick-access-title">
+            <div class="quick-access-head">
+              <p id="quick-access-title" class="field-label">Quick access</p>
+              <p class="field-hint">Use a saved passkey or linked service.</p>
+            </div>
+
+            <div class="oauth-grid" role="group" aria-label="Quick sign-in options">
+              <button
+                id="login-passkey-btn"
+                class="secondary-btn quick-access-btn passkey-btn"
+                type="button"
+                data-idle-label="Passkey"
+                aria-label="Sign in with passkey"
+              >
+                <span class="button-content">
+                  <span class="button-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M14.5 3a5.5 5.5 0 1 0 4.7 8.35l1.05 1.05h1.75v1.75H20.25V15.9H18.5v1.75h-2.4l-1.3-1.3a5.5 5.5 0 0 0-.3-13.35Zm0 3a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z" />
+                    </svg>
+                  </span>
+                  <span class="button-label">Passkey</span>
+                </span>
+              </button>
+
+              <button
+                id="login-github-btn"
+                class="secondary-btn quick-access-btn oauth-provider provider-github"
+                type="button"
+                data-idle-label="GitHub"
+                aria-label="Continue with GitHub"
+              >
+                <span class="button-content">
+                  <span class="button-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+                    </svg>
+                  </span>
+                  <span class="button-label">GitHub</span>
+                </span>
+              </button>
+
+              <button
+                id="login-google-btn"
+                class="secondary-btn quick-access-btn oauth-provider provider-google"
+                type="button"
+                data-idle-label="Google"
+                aria-label="Continue with Google"
+              >
+                <span class="button-content">
+                  <span class="button-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />
+                    </svg>
+                  </span>
+                  <span class="button-label">Google</span>
+                </span>
+              </button>
+
+              <button
+                id="login-discord-btn"
+                class="secondary-btn quick-access-btn oauth-provider provider-discord"
+                type="button"
+                data-idle-label="Discord"
+                aria-label="Continue with Discord"
+              >
+                <span class="button-content">
+                  <span class="button-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M20.317 4.3698a19.7913 19.7913 0 0 0-4.8851-1.5152.0741.0741 0 0 0-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 0 0-.0785-.037 19.7363 19.7363 0 0 0-4.8852 1.515.0699.0699 0 0 0-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 0 0 .0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 0 0 .0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 0 0-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 0 1-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 0 1 .0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 0 1 .0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 0 1-.0066.1276 12.2986 12.2986 0 0 1-1.873.8914.0766.0766 0 0 0-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 0 0 .0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 0 0 .0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 0 0-.0312-.0286ZM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189Zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z" />
+                    </svg>
+                  </span>
+                  <span class="button-label">Discord</span>
+                </span>
+              </button>
+
+              <button
+                id="login-microsoft-btn"
+                class="secondary-btn quick-access-btn oauth-provider provider-microsoft"
+                type="button"
+                data-idle-label="Microsoft"
+                aria-label="Continue with Microsoft"
+              >
+                <span class="button-content">
+                  <span class="button-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path fill="#f25022" d="M2 2h9v9H2z" />
+                      <path fill="#7fba00" d="M13 2h9v9h-9z" />
+                      <path fill="#00a4ef" d="M2 13h9v9H2z" />
+                      <path fill="#ffb900" d="M13 13h9v9h-9z" />
+                    </svg>
+                  </span>
+                  <span class="button-label">Microsoft</span>
+                </span>
+              </button>
+            </div>
+          </section>
         </form>
 
         <div id="verification-actions" class="verification-actions" aria-live="polite">

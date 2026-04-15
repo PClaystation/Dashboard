@@ -424,9 +424,21 @@ const clearFormErrors = (form) => {
   }
 };
 
+const setButtonLabel = (button, label) => {
+  if (!button) return;
+  const labelSlot = button.querySelector('.button-label');
+  if (labelSlot) {
+    labelSlot.textContent = label;
+    return;
+  }
+  button.textContent = label;
+};
+
 const setBusy = (button, busy, idleLabel, busyLabel) => {
+  if (!button) return;
+  const resolvedIdleLabel = safeText(button.dataset.idleLabel) || idleLabel;
   button.disabled = busy;
-  button.textContent = busy ? busyLabel : idleLabel;
+  setButtonLabel(button, busy ? busyLabel : resolvedIdleLabel);
 };
 
 const finishAuth = (payload) => {
@@ -924,7 +936,7 @@ const handlePasskeySignIn = async () => {
 
   resetLoginChallenge({ clearStatus: true });
   showVerificationActions(false);
-  setBusy(loginPasskeyBtn, true, 'Sign in with passkey', 'Preparing...');
+  setBusy(loginPasskeyBtn, true, 'Passkey', 'Preparing...');
   setStatus('Preparing passkey sign-in...', 'info');
 
   try {
@@ -972,7 +984,7 @@ const handlePasskeySignIn = async () => {
     }
     setStatus(getRequestErrorMessage(error, 'Passkey sign-in failed.'), 'error');
   } finally {
-    setBusy(loginPasskeyBtn, false, 'Sign in with passkey', 'Preparing...');
+    setBusy(loginPasskeyBtn, false, 'Passkey', 'Preparing...');
   }
 };
 
@@ -981,7 +993,7 @@ const handleOauthSignIn = async (provider) => {
   const providerLabel = getOauthProviderLabel(normalizedProvider);
   const providerButton = getOauthProviderButton(normalizedProvider);
 
-  setBusy(providerButton, true, `Continue with ${providerLabel}`, 'Redirecting...');
+  setBusy(providerButton, true, providerLabel, 'Redirecting...');
   setStatus(`Opening ${providerLabel} sign-in...`, 'info');
 
   try {
@@ -989,7 +1001,7 @@ const handleOauthSignIn = async (provider) => {
     window.location.assign(buildOauthStartUrl(normalizedProvider));
   } catch (error) {
     setStatus(getRequestErrorMessage(error, `Could not start ${providerLabel} sign-in.`), 'error');
-    setBusy(providerButton, false, `Continue with ${providerLabel}`, 'Redirecting...');
+    setBusy(providerButton, false, providerLabel, 'Redirecting...');
   }
 };
 
