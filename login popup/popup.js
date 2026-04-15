@@ -387,6 +387,26 @@ const setStatus = (message, tone = 'error') => {
   statusBanner.classList.toggle('is-visible', Boolean(text));
 };
 
+const resolveVerificationIdentifier = (...candidates) => {
+  for (const candidate of candidates) {
+    const value = safeText(candidate);
+    if (value) return value;
+  }
+
+  return '';
+};
+
+const rememberVerificationIdentifier = (...candidates) => {
+  const identifier = resolveVerificationIdentifier(...candidates);
+  pendingVerificationIdentifier = identifier;
+
+  if (identifier && !safeText(loginIdentifierInput.value)) {
+    loginIdentifierInput.value = identifier;
+  }
+
+  return identifier;
+};
+
 const getRequestErrorMessage = (error, fallback) => {
   const message = safeText(error?.message);
   if (message && message !== 'Failed to fetch') {
@@ -816,7 +836,7 @@ const startLoginCooldown = (retryAfterSec) => {
 const handleResendVerification = async () => {
   const identifier = pendingVerificationIdentifier || safeText(loginIdentifierInput.value);
   if (!identifier) {
-    setStatus('Enter your email or username first so we know where to resend the verification link.', 'warn');
+    setStatus('Enter your email or username above so we know where to resend the verification link.', 'warn');
     loginIdentifierInput.focus();
     return;
   }
@@ -876,7 +896,7 @@ const requestAuth = async (endpoint, body, submitButton, labels) => {
       }
 
       if (data.requiresVerification) {
-        pendingVerificationIdentifier = body.identifier || body.email || body.username || '';
+        rememberVerificationIdentifier(body.identifier, body.email, body.username);
         if (endpoint === '/register') {
           loginIdentifierInput.value = body.email || body.username || '';
           switchTabs('login');
@@ -899,7 +919,7 @@ const requestAuth = async (endpoint, body, submitButton, labels) => {
         : Boolean(data.accessToken || data.token);
 
     if (!isAuthenticated) {
-      pendingVerificationIdentifier = body.identifier || body.email || body.username || '';
+      rememberVerificationIdentifier(body.identifier, body.email, body.username);
       if (endpoint === '/register') {
         loginIdentifierInput.value = body.email || body.username || '';
         switchTabs('login');
@@ -965,8 +985,24 @@ const handlePasskeySignIn = async () => {
 
     if (!verifyResponse.ok) {
       if (verifyPayload.requiresVerification) {
-        pendingVerificationIdentifier = '';
+        const identifier = rememberVerificationIdentifier(
+          verifyPayload.identifier,
+          verifyPayload.email,
+          verifyPayload.user?.email,
+          loginIdentifierInput.value
+        );
         showVerificationActions(true);
+        setStatus(
+          verifyPayload.message ||
+            (identifier
+              ? 'Verify your email before using this passkey.'
+              : 'Verify your email before using this passkey. Enter your email or username to resend the link.'),
+          identifier && verifyPayload.verificationEmail?.sent !== false ? 'success' : 'warn'
+        );
+        if (!identifier) {
+          loginIdentifierInput.focus();
+        }
+        return;
       }
       throw new Error(verifyPayload.message || 'Failed to complete passkey sign-in.');
     }

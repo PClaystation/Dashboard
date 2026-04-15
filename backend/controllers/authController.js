@@ -998,40 +998,449 @@ const renderOauthResultPage = ({
   targetOrigin = '',
   messagePayload = null,
   closeWindow = true,
-}) => `<!DOCTYPE html>
+}) => {
+  const safeTitle = String(title || 'Authentication complete');
+  const safeMessage = String(message || 'You can close this window.');
+  const normalizedTitle = safeTitle.toLowerCase();
+  const normalizedMessage = safeMessage.toLowerCase();
+  const isManualVerification =
+    normalizedTitle.includes('additional verification required') ||
+    normalizedMessage.includes('multi-factor authentication');
+  const isSuccess = Boolean(messagePayload);
+  const tone = isSuccess ? 'success' : isManualVerification ? 'action' : 'error';
+  const eyebrow = isSuccess
+    ? 'Secure handoff'
+    : isManualVerification
+      ? 'Additional verification'
+      : 'Sign-in issue';
+  const primaryLabel = isSuccess
+    ? 'Continue now'
+    : isManualVerification
+      ? 'Continue to secure sign-in'
+      : 'Return to sign-in';
+  const redirectDelayMs = isSuccess ? 1200 : isManualVerification ? 1600 : 2200;
+  const redirectNote = isSuccess
+    ? 'Your session is ready. Redirecting now.'
+    : isManualVerification
+      ? 'We are taking you back to the secure sign-in screen so you can finish with your password and MFA.'
+      : 'We are taking you back to the previous sign-in step so you can try again.';
+  const helperTitle = isSuccess
+    ? 'What happens next'
+    : isManualVerification
+      ? 'Finish sign-in in 3 steps'
+      : 'Next steps';
+  const helperItems = isSuccess
+    ? [
+        'Your app receives the completed sign-in result.',
+        'This window can close or redirect automatically.',
+        'If nothing happens, use the button below to continue.',
+      ]
+    : isManualVerification
+      ? [
+          'Your provider account was recognized successfully.',
+          'Enter your Continental ID password on the next screen.',
+          'Complete MFA with your authenticator app or a backup code.',
+        ]
+      : [
+          'Return to the secure sign-in screen.',
+          'Try the same provider again or use another method.',
+          'If the issue persists, retry from the app that opened this window.',
+        ];
+  const helperList = helperItems
+    .map((item, index) => `<li><span>${index + 1}</span><p>${escapeHtml(item)}</p></li>`)
+    .join('');
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(title)}</title>
+  <title>${escapeHtml(safeTitle)}</title>
   <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; min-height: 100vh; display: grid; place-items: center; background: #111516; color: #f6efe3; }
-    main { width: min(540px, calc(100% - 2rem)); padding: 2rem; border-radius: 24px; background: rgba(248,244,236,0.96); color: #132022; box-shadow: 0 24px 60px rgba(0,0,0,0.28); }
-    h1 { margin-top: 0; font-size: 1.5rem; }
-    p { line-height: 1.6; }
-    a { color: #146f63; font-weight: 700; }
+    :root {
+      color-scheme: dark;
+      --page: #08111d;
+      --page-soft: #102033;
+      --surface: rgba(8, 17, 29, 0.78);
+      --panel: rgba(12, 24, 39, 0.9);
+      --panel-border: rgba(182, 202, 231, 0.14);
+      --text: #edf3fb;
+      --text-soft: #b3c3d8;
+      --action: #84a2d6;
+      --action-soft: rgba(132, 162, 214, 0.14);
+      --success: #7cb792;
+      --success-soft: rgba(124, 183, 146, 0.14);
+      --error: #e48c88;
+      --error-soft: rgba(228, 140, 136, 0.14);
+      --shadow: 0 32px 90px rgba(0, 0, 0, 0.38);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: 'Avenir Next', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(132, 162, 214, 0.2), transparent 34%),
+        radial-gradient(circle at bottom left, rgba(33, 61, 97, 0.26), transparent 28%),
+        linear-gradient(180deg, #06101b, var(--page) 54%, var(--page-soft));
+    }
+
+    main {
+      position: relative;
+      width: min(760px, 100%);
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 30px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(20px);
+    }
+
+    main::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(140deg, rgba(255, 255, 255, 0.08), transparent 28%),
+        linear-gradient(320deg, rgba(132, 162, 214, 0.14), transparent 36%);
+      pointer-events: none;
+    }
+
+    .shell {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(240px, 0.88fr) minmax(320px, 1fr);
+      min-height: 100%;
+    }
+
+    .hero,
+    .content {
+      padding: 32px;
+    }
+
+    .hero {
+      background:
+        linear-gradient(180deg, rgba(132, 162, 214, 0.16), rgba(8, 17, 29, 0.08)),
+        linear-gradient(160deg, rgba(5, 14, 24, 0.94), rgba(14, 27, 43, 0.88));
+      border-right: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(232, 239, 249, 0.82);
+      background: rgba(255, 255, 255, 0.06);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .hero-badge::before {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: ${tone === 'success' ? 'var(--success)' : tone === 'action' ? 'var(--action)' : 'var(--error)'};
+      box-shadow: 0 0 0 6px ${tone === 'success'
+        ? 'var(--success-soft)'
+        : tone === 'action'
+          ? 'var(--action-soft)'
+          : 'var(--error-soft)'};
+    }
+
+    .hero h1,
+    .content h2 {
+      margin: 0;
+      font-family: 'Sora', 'Avenir Next', 'Segoe UI Variable', sans-serif;
+      line-height: 1.05;
+    }
+
+    .hero h1 {
+      margin-top: 22px;
+      font-size: clamp(2rem, 6vw, 3rem);
+      max-width: 10ch;
+    }
+
+    .hero p {
+      margin: 16px 0 0;
+      max-width: 28ch;
+      line-height: 1.65;
+      color: rgba(233, 241, 251, 0.74);
+    }
+
+    .hero-note {
+      margin-top: 26px;
+      padding: 16px 18px;
+      border: 1px solid ${tone === 'success'
+        ? 'rgba(124, 183, 146, 0.2)'
+        : tone === 'action'
+          ? 'rgba(132, 162, 214, 0.2)'
+          : 'rgba(228, 140, 136, 0.2)'};
+      border-radius: 18px;
+      background: ${tone === 'success'
+        ? 'var(--success-soft)'
+        : tone === 'action'
+          ? 'var(--action-soft)'
+          : 'var(--error-soft)'};
+      color: ${tone === 'success' ? '#d8f3e1' : tone === 'action' ? '#dde8fb' : '#ffd9d4'};
+    }
+
+    .hero-note strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 0.95rem;
+      color: #f7fbff;
+    }
+
+    .content {
+      display: grid;
+      gap: 20px;
+      background: linear-gradient(180deg, var(--panel), rgba(9, 19, 31, 0.94));
+    }
+
+    .summary {
+      padding: 18px;
+      border: 1px solid var(--panel-border);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .summary p {
+      margin: 0;
+      line-height: 1.65;
+      color: var(--text-soft);
+    }
+
+    .steps {
+      padding: 20px;
+      border-radius: 22px;
+      border: 1px solid var(--panel-border);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(132, 162, 214, 0.05));
+    }
+
+    .steps h2 {
+      font-size: 1.05rem;
+      margin-bottom: 16px;
+    }
+
+    .steps ol {
+      display: grid;
+      gap: 14px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .steps li {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .steps span {
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: #f6fbff;
+      background: linear-gradient(135deg, #8fa6cf, #4d6f99);
+      box-shadow: 0 10px 22px rgba(6, 14, 23, 0.28);
+    }
+
+    .steps li p {
+      margin: 4px 0 0;
+      color: var(--text-soft);
+      line-height: 1.55;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .primary,
+    .secondary {
+      min-height: 48px;
+      padding: 0 18px;
+      border-radius: 999px;
+      border: 0;
+      font: inherit;
+      font-weight: 800;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.18s ease, opacity 0.18s ease, background-color 0.18s ease;
+    }
+
+    .primary {
+      flex: 1 1 220px;
+      color: #f7fbff;
+      background: linear-gradient(135deg, #8fa6cf, #4d6f99);
+      box-shadow: 0 16px 28px rgba(22, 38, 59, 0.34);
+    }
+
+    .secondary {
+      flex: 1 1 180px;
+      border: 1px solid var(--panel-border);
+      color: var(--text-soft);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .primary:hover,
+    .secondary:hover {
+      transform: translateY(-1px);
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+      color: #8ea2be;
+      font-size: 0.92rem;
+    }
+
+    .footer strong {
+      color: #dfe9f8;
+    }
+
+    @media (max-width: 720px) {
+      body { padding: 14px; }
+      .shell { grid-template-columns: 1fr; }
+      .hero { border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+      .hero,
+      .content { padding: 24px 20px; }
+      .hero h1 { max-width: none; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <h1>${escapeHtml(title)}</h1>
-    <p>${escapeHtml(message)}</p>
-    <p><a href="${escapeHtml(redirectUrl)}">Continue</a></p>
+    <div class="shell">
+      <section class="hero">
+        <div class="hero-badge">${escapeHtml(eyebrow)}</div>
+        <h1>${escapeHtml(safeTitle)}</h1>
+        <p>${escapeHtml(safeMessage)}</p>
+        <div class="hero-note">
+          <strong>${escapeHtml(redirectNote)}</strong>
+          Use the button below if the redirect does not happen automatically.
+        </div>
+      </section>
+
+      <section class="content">
+        <div class="summary">
+          <p>${isManualVerification
+            ? 'Your identity provider sign-in completed, but account policy still requires your regular Continental ID sign-in flow.'
+            : isSuccess
+              ? 'Your secure sign-in has been accepted. This window will finish the handoff automatically.'
+              : 'This sign-in attempt could not be completed from the provider callback alone, so we are routing you back to a safer recovery point.'}</p>
+        </div>
+
+        <section class="steps" aria-labelledby="oauth-helper-title">
+          <h2 id="oauth-helper-title">${escapeHtml(helperTitle)}</h2>
+          <ol>${helperList}</ol>
+        </section>
+
+        <div class="actions">
+          <a id="continue-link" class="primary" href="${escapeHtml(redirectUrl)}">${escapeHtml(primaryLabel)}</a>
+          <button id="close-window-btn" class="secondary" type="button">Close this window</button>
+        </div>
+
+        <div class="footer">
+          <span id="redirect-copy">Redirecting in <strong id="redirect-countdown">${Math.ceil(
+            redirectDelayMs / 1000
+          )}</strong>s</span>
+          <span>Continental ID secure callback</span>
+        </div>
+      </section>
+    </div>
   </main>
   <script>
     const payload = ${JSON.stringify(messagePayload || null)};
     const targetOrigin = ${JSON.stringify(targetOrigin || '')};
     const redirectUrl = ${JSON.stringify(redirectUrl)};
+    const closeWindow = ${JSON.stringify(Boolean(closeWindow))};
+    const redirectDelayMs = ${JSON.stringify(redirectDelayMs)};
+    const countdownEl = document.getElementById('redirect-countdown');
+    const redirectCopyEl = document.getElementById('redirect-copy');
+    const closeWindowBtn = document.getElementById('close-window-btn');
+
+    let hasRedirected = false;
+    let countdownTimer = 0;
+
+    const closePopup = () => {
+      window.close();
+    };
+
+    const startRedirectCountdown = () => {
+      if (!redirectUrl || hasRedirected) {
+        if (redirectCopyEl) {
+          redirectCopyEl.textContent = 'You can close this window when you are done.';
+        }
+        return;
+      }
+
+      const startedAt = Date.now();
+      const renderCountdown = () => {
+        const remainingMs = Math.max(0, redirectDelayMs - (Date.now() - startedAt));
+        const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+
+        if (countdownEl) {
+          countdownEl.textContent = String(remainingSeconds);
+        }
+
+        if (remainingMs <= 0) {
+          window.clearInterval(countdownTimer);
+          hasRedirected = true;
+          window.location.replace(redirectUrl);
+        }
+      };
+
+      renderCountdown();
+      countdownTimer = window.setInterval(renderCountdown, 250);
+    };
+
+    if (closeWindowBtn) {
+      closeWindowBtn.addEventListener('click', closePopup);
+    }
+
     if (payload && window.opener && !window.opener.closed && targetOrigin) {
       window.opener.postMessage(payload, targetOrigin);
-      ${closeWindow ? 'window.close();' : ''}
-    }
-    if (!window.opener || window.opener.closed || !targetOrigin) {
-      window.setTimeout(() => { window.location.replace(redirectUrl); }, 250);
+      if (closeWindow) {
+        if (redirectCopyEl) {
+          redirectCopyEl.textContent = 'Sign-in complete. Closing this window.';
+        }
+        window.setTimeout(closePopup, 120);
+      } else {
+        startRedirectCountdown();
+      }
+    } else {
+      startRedirectCountdown();
     }
   </script>
 </body>
 </html>`;
+};
 
 const prepareEmailVerification = (user) => {
   const verification = createEmailVerificationToken();

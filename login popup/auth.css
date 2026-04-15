@@ -28,6 +28,11 @@
   --auth-radius-lg: 20px;
   --auth-radius-md: 14px;
   --auth-radius-sm: 10px;
+  --auth-font-body: 'Avenir Next', 'Segoe UI Variable Text', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --auth-font-display: 'Avenir Next Condensed', 'Avenir Next', 'Segoe UI Variable Display', 'Segoe UI',
+    'Helvetica Neue', Arial, sans-serif;
+  --auth-focus-ring: rgba(214, 228, 251, 0.96);
+  --auth-focus-ring-soft: rgba(143, 166, 207, 0.32);
 }
 
 * {
@@ -41,7 +46,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: 'Manrope', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  font-family: var(--auth-font-body);
   color: var(--auth-text);
   background:
     radial-gradient(circle at top right, rgba(108, 132, 175, 0.2), transparent 34%),
@@ -131,7 +136,7 @@ body.auth-page {
 .auth-panel-heading h1,
 .auth-panel-heading h2 {
   margin: 0;
-  font-family: 'Sora', 'Manrope', 'Segoe UI Variable', sans-serif;
+  font-family: var(--auth-font-display);
   line-height: 1.1;
 }
 
@@ -230,6 +235,19 @@ body.auth-page {
   background: linear-gradient(135deg, rgba(108, 132, 175, 0.22), rgba(56, 84, 118, 0.26));
   color: var(--auth-brand-ink);
   box-shadow: 0 10px 22px rgba(1, 8, 18, 0.22);
+}
+
+.auth-tab:focus-visible,
+.input-action:focus-visible,
+.link-btn:focus-visible,
+.text-link:focus-visible,
+.submit-btn:focus-visible,
+.secondary-btn:focus-visible,
+.ghost-btn:focus-visible,
+.mfa-method-btn:focus-visible {
+  outline: 2px solid var(--auth-focus-ring);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px var(--auth-focus-ring-soft);
 }
 
 .auth-tab-panel {
