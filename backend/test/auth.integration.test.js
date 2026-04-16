@@ -20,7 +20,7 @@ const { app } = require('../server');
 const User = require('../models/User');
 
 const TEST_ORIGIN = 'http://localhost:3000';
-const TERRA_TRECK_PAGES_ORIGIN = 'https://pclaystation.github.io';
+const TERRA_TRECK_PAGES_ORIGIN = 'https://charlemagne404.github.io';
 
 const sha256 = (value) =>
   crypto.createHash('sha256').update(String(value || '')).digest('hex');
@@ -73,7 +73,7 @@ test('Terra-Treck GitHub Pages origin is trusted by hosted popup config and back
   const popupConfigPath = path.resolve(__dirname, '../../login popup/auth-config.js');
   const popupConfigSource = fs.readFileSync(popupConfigPath, 'utf8');
 
-  assert.match(popupConfigSource, /https:\/\/pclaystation\.github\.io/);
+  assert.match(popupConfigSource, /https:\/\/charlemagne404\.github\.io/);
 
   const response = await request(app)
     .options('/api/auth/refresh_token')

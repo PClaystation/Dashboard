@@ -143,7 +143,7 @@ const OAUTH_APP_ORIGINS = new Set([
   DEFAULT_DASHBOARD_ORIGIN,
   DEFAULT_LOGIN_ORIGIN,
   DEFAULT_VANGUARD_ORIGIN,
-  'https://pclaystation.github.io',
+  'https://charlemagne404.github.io',
   'https://grimoire.continental-hub.com',
   'https://mpmc.ddns.net',
   ...extraOauthAppOrigins,

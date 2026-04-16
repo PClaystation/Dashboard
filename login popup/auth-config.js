@@ -6,7 +6,7 @@ window.__AUTH_CONFIG__ = {
     'https://grimoire.continental-hub.com',
     'https://login.continental-hub.com',
     'https://vanguard.continental-hub.com',
-    'https://pclaystation.github.io',
+    'https://charlemagne404.github.io',
     'https://mpmc.ddns.net',
   ],
   trustedApiOrigins: [

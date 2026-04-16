@@ -3,7 +3,7 @@ const HOSTED_STATIC_HOSTS = new Set([
   'dashboard.continental-hub.com',
   'grimoire.continental-hub.com',
   'login.continental-hub.com',
-  'pclaystation.github.io',
+  'charlemagne404.github.io',
   'mpmc.ddns.net',
 ]);
 const PREFERRED_API_BASE_URLS = [

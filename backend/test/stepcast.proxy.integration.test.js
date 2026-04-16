@@ -16,7 +16,7 @@ process.env.TRUST_PROXY = '1';
 const { app } = require('../server');
 const User = require('../models/User');
 
-const STEPCAST_PAGES_ORIGIN = 'https://pclaystation.github.io';
+const STEPCAST_PAGES_ORIGIN = 'https://charlemagne404.github.io';
 
 const getRefreshCookie = (response) =>
   response.headers['set-cookie']?.find((value) => value.startsWith('refreshToken=')) || '';
