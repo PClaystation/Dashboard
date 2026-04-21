@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 const fs = require('fs');
+const jwt = require('jsonwebtoken');
 const path = require('path');
 const mongoose = require('mongoose');
 const request = require('supertest');
@@ -18,14 +19,17 @@ process.env.TRUST_PROXY = '1';
 
 const { app } = require('../server');
 const User = require('../models/User');
+const { dedupePasskeysAcrossUsers } = require('../utils/passkeyHardening');
 
 const TEST_ORIGIN = 'http://localhost:3000';
 const TERRA_TRECK_PAGES_ORIGIN = 'https://charlemagne404.github.io';
 
 const sha256 = (value) =>
   crypto.createHash('sha256').update(String(value || '')).digest('hex');
-const getRefreshCookie = (response) =>
-  response.headers['set-cookie']?.find((value) => value.startsWith('refreshToken=')) || '';
+const getCookie = (response, name) =>
+  response.headers['set-cookie']?.find((value) => value.startsWith(`${name}=`)) || '';
+const getRefreshCookie = (response) => getCookie(response, 'refreshToken');
+const getDeviceCookie = (response) => getCookie(response, 'deviceId');
 
 const createVerifiedUser = async ({
   email = 'verified@example.com',
@@ -162,7 +166,9 @@ test('verified users can log in, read their profile, and refresh their session',
   assert.equal(loginResponse.body.authenticated, true);
   assert.ok(loginResponse.body.token);
   const refreshCookie = getRefreshCookie(loginResponse);
+  const deviceCookie = getDeviceCookie(loginResponse);
   assert.ok(refreshCookie);
+  assert.ok(deviceCookie);
 
   const accessToken = loginResponse.body.token;
 
@@ -185,6 +191,153 @@ test('verified users can log in, read their profile, and refresh their session',
   assert.ok(
     refreshResponse.headers['set-cookie']?.some((value) => value.startsWith('refreshToken='))
   );
+});
+
+test('middleware rejects hardened access tokens with the wrong audience', async () => {
+  const user = await createVerifiedUser({
+    email: 'audience@example.com',
+    username: 'audience.user',
+  });
+
+  const invalidAccessToken = jwt.sign(
+    {
+      type: 'access_token',
+      userId: String(user._id),
+      tokenVersion: user.refreshTokenVersion,
+      sid: 'wrong-audience-session',
+    },
+    process.env.JWT_SECRET,
+    {
+      algorithm: 'HS256',
+      audience: 'continental-id:refresh',
+      expiresIn: '1h',
+      issuer: process.env.APP_NAME,
+      subject: String(user._id),
+    }
+  );
+
+  const response = await request(app)
+    .get('/api/auth/me')
+    .set('Authorization', `Bearer ${invalidAccessToken}`);
+
+  assert.equal(response.status, 401);
+});
+
+test('reusing a rotated refresh token revokes the underlying session', async () => {
+  await createVerifiedUser({
+    email: 'replay@example.com',
+    username: 'replay.user',
+  });
+
+  const loginResponse = await request(app)
+    .post('/api/auth/login')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .send({
+      identifier: 'replay.user',
+      password: 'StrongPass1',
+    });
+
+  const originalRefreshCookie = getRefreshCookie(loginResponse);
+  assert.ok(originalRefreshCookie);
+
+  const rotatedResponse = await request(app)
+    .post('/api/auth/refresh_token')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .set('Cookie', originalRefreshCookie)
+    .send({});
+
+  assert.equal(rotatedResponse.status, 200);
+  const rotatedRefreshCookie = getRefreshCookie(rotatedResponse);
+  assert.ok(rotatedRefreshCookie);
+  assert.notEqual(rotatedRefreshCookie, originalRefreshCookie);
+
+  const storedUser = await User.findOne({ username: 'replay.user' });
+  assert.ok(storedUser);
+  assert.equal(storedUser.refreshSessions.length, 1);
+  storedUser.refreshSessions[0].previousRefreshTokenGraceUntil = new Date(Date.now() - 1000);
+  await storedUser.save();
+
+  const replayResponse = await request(app)
+    .post('/api/auth/refresh_token')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .set('Cookie', originalRefreshCookie)
+    .send({});
+
+  assert.equal(replayResponse.status, 200);
+  assert.equal(replayResponse.body.authenticated, false);
+
+  const currentCookieAfterReplayResponse = await request(app)
+    .post('/api/auth/refresh_token')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .set('Cookie', rotatedRefreshCookie)
+    .send({});
+
+  assert.equal(currentCookieAfterReplayResponse.status, 200);
+  assert.equal(currentCookieAfterReplayResponse.body.authenticated, false);
+});
+
+test('login throttles repeated failures across multiple identifiers from the same IP', async () => {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const response = await request(app)
+      .post('/api/auth/login')
+      .set('Origin', TEST_ORIGIN)
+      .set('X-Forwarded-Proto', 'https')
+      .send({
+        identifier: `ghostuser${attempt}`,
+        password: 'WrongPass1',
+      });
+
+    assert.equal(response.status, 400);
+  }
+
+  const blockedResponse = await request(app)
+    .post('/api/auth/login')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .send({
+      identifier: 'ghostuser-final',
+      password: 'WrongPass1',
+    });
+
+  assert.equal(blockedResponse.status, 429);
+  assert.ok(blockedResponse.body.retryAfterSec >= 1);
+});
+
+test('public verification resend is throttled before it can spin indefinitely', async () => {
+  const user = await createVerifiedUser({
+    email: 'verify.resend@example.com',
+    username: 'verify.resend',
+  });
+
+  user.isVerified = false;
+  user.verificationToken = '';
+  user.verificationTokenExpires = null;
+  user.emailDelivery.verificationLastSentAt = null;
+  user.auditEvents = [];
+  await user.save();
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await request(app)
+      .post('/api/auth/resend-verification-public')
+      .set('Origin', TEST_ORIGIN)
+      .set('X-Forwarded-Proto', 'https')
+      .send({
+        identifier: 'verify.resend',
+      });
+
+    assert.equal(response.status, 200);
+  }
+
+  const refreshedUser = await User.findById(user._id).lean();
+  const resendEvents = (refreshedUser.auditEvents || []).filter(
+    (event) => event.type === 'verification_resent_public'
+  );
+
+  assert.equal(resendEvents.length, 3);
 });
 
 test('request-password-reset sets a reset token and reset-password updates the password', async () => {
@@ -321,6 +474,79 @@ test('sessions endpoint returns the current session and allows revoking it expli
   assert.equal(revokeResponse.status, 200);
   assert.equal(revokeResponse.body.revokedCurrentSession, true);
   assert.equal(revokeResponse.body.forceRelogin, true);
+});
+
+test('passkey hardening removes duplicate credential ids before index sync', async () => {
+  const owner = await createVerifiedUser({
+    email: 'passkey.owner@example.com',
+    username: 'passkey.owner',
+  });
+  const duplicate = await createVerifiedUser({
+    email: 'passkey.duplicate@example.com',
+    username: 'passkey.duplicate',
+  });
+
+  const indexes = await User.collection.indexes();
+  const passkeyIndex = indexes.find((index) => index.name === 'security.passkeys.credentialId_1');
+  if (passkeyIndex) {
+    await User.collection.dropIndex(passkeyIndex.name);
+  }
+
+  const sharedCredentialId = 'shared-passkey-credential';
+  await User.collection.updateOne(
+    { _id: owner._id },
+    {
+      $set: {
+        'security.passkeys': [
+          {
+            credentialId: sharedCredentialId,
+            publicKey: Buffer.from('owner-public-key'),
+            counter: 1,
+            transports: ['internal'],
+            deviceType: 'singleDevice',
+            backedUp: false,
+            aaguid: 'owner-aaguid',
+            name: 'Owner passkey',
+            createdAt: new Date(),
+            lastUsedAt: null,
+          },
+        ],
+      },
+    }
+  );
+  await User.collection.updateOne(
+    { _id: duplicate._id },
+    {
+      $set: {
+        'security.passkeys': [
+          {
+            credentialId: sharedCredentialId,
+            publicKey: Buffer.from('duplicate-public-key'),
+            counter: 1,
+            transports: ['internal'],
+            deviceType: 'singleDevice',
+            backedUp: false,
+            aaguid: 'duplicate-aaguid',
+            name: 'Duplicate passkey',
+            createdAt: new Date(),
+            lastUsedAt: null,
+          },
+        ],
+      },
+    }
+  );
+
+  const result = await dedupePasskeysAcrossUsers();
+  assert.equal(result.updated, 1);
+  assert.equal(result.removed, 1);
+
+  await User.syncIndexes();
+
+  const ownerAfterHardening = await User.findById(owner._id).lean();
+  const duplicateAfterHardening = await User.findById(duplicate._id).lean();
+
+  assert.equal(ownerAfterHardening.security.passkeys.length, 1);
+  assert.equal(duplicateAfterHardening.security.passkeys.length, 0);
 });
 
 test('public profile directory and direct profile lookup only expose public accounts', async () => {

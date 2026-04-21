@@ -27,6 +27,15 @@ const {
   verifyStoredBackupCodeHash,
 } = require('../utils/securityHardening');
 const {
+  ACCESS_TOKEN_AUDIENCE,
+  DEVICE_COOKIE_AUDIENCE,
+  OAUTH_STATE_AUDIENCE,
+  REFRESH_TOKEN_AUDIENCE,
+  WEBAUTHN_CHALLENGE_AUDIENCE,
+  signTypedJwt,
+  verifyTypedJwt,
+} = require('../utils/tokenHardening');
+const {
   DISPLAY_NAME_MODERATION_MESSAGE,
   USERNAME_VALIDATION_MESSAGE,
   USERNAME_MODERATION_MESSAGE,
@@ -39,7 +48,7 @@ const {
 } = require('../utils/userIdentity');
 const { buildVanguardAccountState } = require('../utils/vanguardIntegration');
 
-const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || '1h';
+const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || '15m';
 const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -49,6 +58,18 @@ const MAX_ACTIVE_SESSIONS = 12;
 const LOGIN_RATE_WINDOW_MS = Number(process.env.LOGIN_RATE_WINDOW_MS) || 10 * 60 * 1000;
 const LOGIN_RATE_MAX_ATTEMPTS = Number(process.env.LOGIN_RATE_MAX_ATTEMPTS) || 8;
 const LOGIN_BLOCK_MS = Number(process.env.LOGIN_BLOCK_MS) || 15 * 60 * 1000;
+const PASSWORD_RESET_RATE_WINDOW_MS =
+  Number(process.env.PASSWORD_RESET_RATE_WINDOW_MS) || 15 * 60 * 1000;
+const PASSWORD_RESET_RATE_MAX_ATTEMPTS =
+  Number(process.env.PASSWORD_RESET_RATE_MAX_ATTEMPTS) || 4;
+const PASSWORD_RESET_BLOCK_MS =
+  Number(process.env.PASSWORD_RESET_BLOCK_MS) || 60 * 60 * 1000;
+const VERIFICATION_RESEND_RATE_WINDOW_MS =
+  Number(process.env.VERIFICATION_RESEND_RATE_WINDOW_MS) || 15 * 60 * 1000;
+const VERIFICATION_RESEND_RATE_MAX_ATTEMPTS =
+  Number(process.env.VERIFICATION_RESEND_RATE_MAX_ATTEMPTS) || 4;
+const VERIFICATION_RESEND_BLOCK_MS =
+  Number(process.env.VERIFICATION_RESEND_BLOCK_MS) || 60 * 60 * 1000;
 const MFA_RATE_WINDOW_MS = Number(process.env.MFA_RATE_WINDOW_MS) || 10 * 60 * 1000;
 const MFA_RATE_MAX_ATTEMPTS = Number(process.env.MFA_RATE_MAX_ATTEMPTS) || 5;
 const MFA_BLOCK_MS = Number(process.env.MFA_BLOCK_MS) || 15 * 60 * 1000;
@@ -70,7 +91,9 @@ const EMAIL_DAILY_LIMIT = Number(process.env.EMAIL_DAILY_LIMIT) || 100;
 const EMAIL_MONTHLY_LIMIT = Number(process.env.EMAIL_MONTHLY_LIMIT) || 3000;
 const NEW_DEVICE_SESSION_WINDOW_MS = 15 * 60 * 1000;
 const MAX_PASSKEYS = 20;
+const DEVICE_ID_COOKIE = 'deviceId';
 const WEBAUTHN_CHALLENGE_COOKIE = 'webauthnChallenge';
+const DEVICE_ID_TTL_MS = Number(process.env.DEVICE_ID_TTL_MS) || 365 * DAY_MS;
 const WEBAUTHN_CHALLENGE_TTL_MS = 10 * 60 * 1000;
 const WEBAUTHN_RP_NAME = process.env.WEBAUTHN_RP_NAME || 'Continental ID';
 const WEBAUTHN_DEFAULT_RP_ID = process.env.WEBAUTHN_RP_ID || 'continental-hub.com';
@@ -135,18 +158,30 @@ const DEFAULT_PUBLIC_PROFILE = {
 const DEFAULT_DASHBOARD_ORIGIN = 'https://dashboard.continental-hub.com';
 const DEFAULT_LOGIN_ORIGIN = 'https://login.continental-hub.com';
 const DEFAULT_VANGUARD_ORIGIN = 'https://vanguard.continental-hub.com';
-const extraOauthAppOrigins = String(process.env.OAUTH_APP_ORIGINS || '')
-  .split(',')
-  .map((value) => value.trim())
-  .filter(Boolean);
-const OAUTH_APP_ORIGINS = new Set([
+const DEFAULT_OAUTH_APP_ORIGINS = [
   DEFAULT_DASHBOARD_ORIGIN,
   DEFAULT_LOGIN_ORIGIN,
   DEFAULT_VANGUARD_ORIGIN,
   'https://charlemagne404.github.io',
   'https://grimoire.continental-hub.com',
   'https://mpmc.ddns.net',
-  ...extraOauthAppOrigins,
+];
+const configuredOauthAppOrigins = Array.from(
+  new Set(
+    [
+      ...String(process.env.OAUTH_APP_ORIGINS || '').split(','),
+      ...String(process.env.ALLOWED_ORIGINS || '').split(','),
+    ]
+      .map((value) => value.trim())
+      .filter(Boolean)
+  )
+);
+const allowDefaultOauthAppOrigins =
+  String(process.env.NODE_ENV || 'development') !== 'production' ||
+  String(process.env.ALLOW_DEFAULT_TRUSTED_ORIGINS || 'false') === 'true';
+const OAUTH_APP_ORIGINS = new Set([
+  ...(allowDefaultOauthAppOrigins ? DEFAULT_OAUTH_APP_ORIGINS : []),
+  ...configuredOauthAppOrigins,
 ]);
 const DEFAULT_LOGIN_POPUP_URL = `${DEFAULT_LOGIN_ORIGIN}/popup.html`;
 const DEFAULT_EMAIL_VERIFY_PATH = '/verify.html';
@@ -450,13 +485,37 @@ const isTrustedOauthAppOrigin = (origin) => {
   }
 };
 
+const getDefaultTrustedOauthAppOrigin = () => {
+  if (isTrustedOauthAppOrigin(DEFAULT_DASHBOARD_ORIGIN)) {
+    return DEFAULT_DASHBOARD_ORIGIN;
+  }
+
+  const firstTrustedOrigin = Array.from(OAUTH_APP_ORIGINS).find((origin) => isTrustedOauthAppOrigin(origin));
+  return firstTrustedOrigin || '';
+};
+
 const resolveTrustedOauthAppOrigin = (value, fallback = DEFAULT_DASHBOARD_ORIGIN) => {
   const origin = normalizeOrigin(value);
-  return isTrustedOauthAppOrigin(origin) ? origin : fallback;
+  if (isTrustedOauthAppOrigin(origin)) {
+    return origin;
+  }
+
+  const normalizedFallback = normalizeOrigin(fallback);
+  if (isTrustedOauthAppOrigin(normalizedFallback)) {
+    return normalizedFallback;
+  }
+
+  return getDefaultTrustedOauthAppOrigin();
 };
 
 const resolveTrustedOauthRedirectUrl = (value, fallbackOrigin = DEFAULT_DASHBOARD_ORIGIN) => {
-  const safeOrigin = resolveTrustedOauthAppOrigin(fallbackOrigin, DEFAULT_DASHBOARD_ORIGIN);
+  const safeOrigin = resolveTrustedOauthAppOrigin(
+    fallbackOrigin,
+    getDefaultTrustedOauthAppOrigin() || DEFAULT_DASHBOARD_ORIGIN
+  );
+  if (!safeOrigin) {
+    return '';
+  }
 
   try {
     const resolved = new URL(String(value || '/'), safeOrigin);
@@ -470,17 +529,13 @@ const resolveTrustedOauthRedirectUrl = (value, fallbackOrigin = DEFAULT_DASHBOAR
 };
 
 const buildOauthStateToken = (payload) =>
-  jwt.sign(
-    {
-      type: 'oauth_state',
-      ...payload,
-    },
-    process.env.JWT_SECRET,
-    {
-      algorithm: 'HS256',
-      expiresIn: OAUTH_STATE_TTL_SEC,
-    }
-  );
+  signTypedJwt({
+    secret: process.env.JWT_SECRET,
+    payload,
+    expiresIn: OAUTH_STATE_TTL_SEC,
+    audience: OAUTH_STATE_AUDIENCE,
+    type: 'oauth_state',
+  });
 
 const readOauthStateToken = (state) => {
   const token = sanitizeText(state, 4000);
@@ -489,13 +544,12 @@ const readOauthStateToken = (state) => {
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET, {
-      algorithms: ['HS256'],
+    return verifyTypedJwt({
+      token,
+      secret: process.env.JWT_SECRET,
+      audience: OAUTH_STATE_AUDIENCE,
+      type: 'oauth_state',
     });
-    if (payload?.type !== 'oauth_state') {
-      throw new Error('invalid');
-    }
-    return payload;
   } catch {
     throw createHttpError(400, 'OAuth state is missing or invalid.');
   }
@@ -2756,11 +2810,37 @@ const normalizeDeviceFingerprintSource = (userAgent = '') =>
   sanitizeText(String(userAgent || '').toLowerCase().replace(/\/\d+(?:\.\d+)*/g, ''), 260) ||
   'unknown-device';
 
-const buildDeviceFingerprint = (userAgent = '') => hashToken(normalizeDeviceFingerprintSource(userAgent));
+const sanitizeDeviceId = (value) => sanitizeText(value, 120);
 
-const rememberKnownDevice = (user, req, requestedLabel = '') => {
+const readPersistedDeviceId = (req) => {
+  const token = sanitizeText(req.cookies?.[DEVICE_ID_COOKIE], 4000);
+  if (!token) return '';
+
+  try {
+    const payload = verifyTypedJwt({
+      token,
+      secret: process.env.JWT_SECRET,
+      audience: DEVICE_COOKIE_AUDIENCE,
+      type: 'device_cookie',
+    });
+    const userAgentFamily = normalizeDeviceFingerprintSource(parseUserAgent(req));
+    if (sanitizeText(payload?.ua, 260) !== userAgentFamily) {
+      return '';
+    }
+    return sanitizeDeviceId(payload?.did);
+  } catch {
+    return '';
+  }
+};
+
+const createDeviceId = () => crypto.randomUUID();
+
+const buildDeviceFingerprint = (deviceId = '', userAgent = '') =>
+  hashToken(`${sanitizeDeviceId(deviceId) || 'legacy-device'}:${normalizeDeviceFingerprintSource(userAgent)}`);
+
+const rememberKnownDevice = (user, req, requestedLabel = '', deviceId = '') => {
   const userAgent = parseUserAgent(req);
-  const fingerprint = buildDeviceFingerprint(userAgent);
+  const fingerprint = buildDeviceFingerprint(deviceId, userAgent);
   const label = buildSessionLabel(requestedLabel, userAgent);
   const now = new Date();
   const ip = parseClientIp(req);
@@ -3270,6 +3350,17 @@ const buildCookieOptions = (req) => {
   };
 };
 
+const buildDeviceCookieOptions = (req) => {
+  const cookieOptions = buildCookieOptions(req);
+  return {
+    httpOnly: true,
+    secure: cookieOptions.secure,
+    sameSite: cookieOptions.sameSite,
+    path: '/',
+    maxAge: DEVICE_ID_TTL_MS,
+  };
+};
+
 const clearRefreshCookie = (res, req) => {
   const cookieOptions = buildCookieOptions(req);
   res.clearCookie('refreshToken', {
@@ -3278,6 +3369,38 @@ const clearRefreshCookie = (res, req) => {
     sameSite: cookieOptions.sameSite,
     path: cookieOptions.path,
   });
+};
+
+const persistDeviceCookie = (res, req, deviceId = '', userAgent = '') => {
+  const did = sanitizeDeviceId(deviceId);
+  if (!did) {
+    return '';
+  }
+
+  const deviceToken = signTypedJwt({
+    secret: process.env.JWT_SECRET,
+    payload: {
+      did,
+      ua: normalizeDeviceFingerprintSource(userAgent),
+    },
+    expiresIn: Math.max(60, Math.floor(DEVICE_ID_TTL_MS / 1000)),
+    audience: DEVICE_COOKIE_AUDIENCE,
+    type: 'device_cookie',
+  });
+
+  res.cookie(DEVICE_ID_COOKIE, deviceToken, buildDeviceCookieOptions(req));
+  return did;
+};
+
+const ensureDeviceCookie = (res, req) => {
+  const userAgent = parseUserAgent(req);
+  const existingDeviceId = readPersistedDeviceId(req);
+  if (existingDeviceId) {
+    persistDeviceCookie(res, req, existingDeviceId, userAgent);
+    return existingDeviceId;
+  }
+
+  return persistDeviceCookie(res, req, createDeviceId(), userAgent);
 };
 
 const buildWebAuthnChallengeCookieOptions = (req) => {
@@ -3302,14 +3425,13 @@ const clearWebAuthnChallengeCookie = (res, req) => {
 };
 
 const storeWebAuthnChallenge = (res, req, payload) => {
-  const challengeToken = jwt.sign(
-    {
-      type: 'webauthn_challenge',
-      ...payload,
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: Math.max(30, Math.floor(WEBAUTHN_CHALLENGE_TTL_MS / 1000)) }
-  );
+  const challengeToken = signTypedJwt({
+    secret: process.env.JWT_SECRET,
+    payload,
+    expiresIn: Math.max(30, Math.floor(WEBAUTHN_CHALLENGE_TTL_MS / 1000)),
+    audience: WEBAUTHN_CHALLENGE_AUDIENCE,
+    type: 'webauthn_challenge',
+  });
 
   res.cookie(
     WEBAUTHN_CHALLENGE_COOKIE,
@@ -3326,15 +3448,14 @@ const readWebAuthnChallenge = (req, expectedFlow = '') => {
 
   let payload;
   try {
-    payload = jwt.verify(token, process.env.JWT_SECRET, {
-      algorithms: ['HS256'],
+    payload = verifyTypedJwt({
+      token,
+      secret: process.env.JWT_SECRET,
+      audience: WEBAUTHN_CHALLENGE_AUDIENCE,
+      type: 'webauthn_challenge',
     });
   } catch {
     throw createHttpError(400, 'This passkey request expired. Start again.');
-  }
-
-  if (payload?.type !== 'webauthn_challenge') {
-    throw createHttpError(400, 'This passkey request is invalid.');
   }
 
   if (expectedFlow && payload?.flow !== expectedFlow) {
@@ -3345,33 +3466,33 @@ const readWebAuthnChallenge = (req, expectedFlow = '') => {
 };
 
 const signToken = (user, sid) =>
-  jwt.sign(
-    {
+  signTypedJwt({
+    secret: process.env.JWT_SECRET,
+    payload: {
       userId: toObjectIdString(user._id),
       tokenVersion: user.refreshTokenVersion,
       sid: sanitizeText(sid, 120) || undefined,
     },
-    process.env.JWT_SECRET,
-    {
-      algorithm: 'HS256',
-      expiresIn: ACCESS_TOKEN_TTL,
-    }
-  );
+    audience: ACCESS_TOKEN_AUDIENCE,
+    expiresIn: ACCESS_TOKEN_TTL,
+    subject: toObjectIdString(user._id),
+    type: 'access_token',
+  });
 
 const signRefreshToken = (user, sid, refreshTokenId) =>
-  jwt.sign(
-    {
+  signTypedJwt({
+    secret: process.env.REFRESH_TOKEN_SECRET,
+    payload: {
       userId: toObjectIdString(user._id),
       tokenVersion: user.refreshTokenVersion,
       sid: sanitizeText(sid, 120) || undefined,
       jti: sanitizeText(refreshTokenId, 120) || undefined,
     },
-    process.env.REFRESH_TOKEN_SECRET,
-    {
-      algorithm: 'HS256',
-      expiresIn: REFRESH_TOKEN_TTL,
-    }
-  );
+    audience: REFRESH_TOKEN_AUDIENCE,
+    expiresIn: REFRESH_TOKEN_TTL,
+    subject: toObjectIdString(user._id),
+    type: 'refresh_token',
+  });
 
 const appendRecentLogin = (user, req) => {
   const entry = {
@@ -3565,7 +3686,7 @@ const reissueCurrentRefreshSession = (user, req, sid, session, requestedLabel = 
   return buildTokenPair(user, sid, currentRefreshTokenId);
 };
 
-const issueInteractiveSession = async (req, user, options = {}) => {
+const issueInteractiveSession = async (req, res, user, options = {}) => {
   const {
     deviceLabel = '',
     auditType = 'login',
@@ -3577,7 +3698,8 @@ const issueInteractiveSession = async (req, user, options = {}) => {
     alertDetails = null,
   } = options;
 
-  const device = rememberKnownDevice(user, req, deviceLabel);
+  const deviceId = ensureDeviceCookie(res, req);
+  const device = rememberKnownDevice(user, req, deviceLabel, deviceId);
   appendRecentLogin(user, req);
   appendAuditEvent(
     user,
@@ -3616,7 +3738,7 @@ const issueInteractiveSession = async (req, user, options = {}) => {
 };
 
 const completeInteractiveSignIn = async (res, req, user, options = {}) => {
-  const { sessionTokens } = await issueInteractiveSession(req, user, options);
+  const { sessionTokens } = await issueInteractiveSession(req, res, user, options);
 
   res.cookie('refreshToken', sessionTokens.refreshToken, buildCookieOptions(req));
 
@@ -4224,7 +4346,43 @@ const getUserById = async (id, { ensureIdentity = true } = {}) => {
   return ensureUserState(user, { ensureIdentity });
 };
 
-const loginRateKey = (identifier, req) => `${normalizeLoginIdentifier(identifier)}|${parseClientIp(req)}`;
+const uniqThrottleKeys = (keys = []) =>
+  Array.from(
+    new Set(
+      (Array.isArray(keys) ? keys : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+const buildLoginThrottleKeys = ({ identifier = '', req, user = null } = {}) => {
+  const normalizedIdentifier = normalizeLoginIdentifier(identifier);
+  const ip = parseClientIp(req);
+  const userId = toObjectIdString(user?._id);
+
+  return uniqThrottleKeys([
+    ip ? `login:ip:${ip}` : '',
+    normalizedIdentifier ? `login:identifier:${normalizedIdentifier}` : '',
+    normalizedIdentifier && ip ? `login:identifier-ip:${normalizedIdentifier}|${ip}` : '',
+    userId ? `login:user:${userId}` : '',
+    userId && ip ? `login:user-ip:${userId}|${ip}` : '',
+  ]);
+};
+
+const buildPublicActionThrottleKeys = (action, { identifier = '', req, user = null } = {}) => {
+  const prefix = sanitizeText(action, 40).toLowerCase();
+  const normalizedIdentifier = normalizeLoginIdentifier(identifier);
+  const ip = parseClientIp(req);
+  const userId = toObjectIdString(user?._id);
+
+  return uniqThrottleKeys([
+    prefix && ip ? `${prefix}:ip:${ip}` : '',
+    prefix && normalizedIdentifier ? `${prefix}:identifier:${normalizedIdentifier}` : '',
+    prefix && normalizedIdentifier && ip ? `${prefix}:identifier-ip:${normalizedIdentifier}|${ip}` : '',
+    prefix && userId ? `${prefix}:user:${userId}` : '',
+    prefix && userId && ip ? `${prefix}:user-ip:${userId}|${ip}` : '',
+  ]);
+};
 
 const findUserByLoginIdentifier = async (identifier) => {
   const normalized = normalizeLoginIdentifier(identifier);
@@ -4327,18 +4485,48 @@ const clearThrottleFailures = async (key) => {
   await LoginThrottle.deleteOne({ key });
 };
 
-const getLoginThrottleState = async (key) => getThrottleState(key, LOGIN_RATE_WINDOW_MS);
+const getAggregateThrottleState = async (keys, windowMs) => {
+  const uniqueKeys = uniqThrottleKeys(keys);
 
-const registerLoginFailure = async (key) =>
-  registerThrottleFailure(key, {
+  for (const key of uniqueKeys) {
+    const state = await getThrottleState(key, windowMs);
+    if (state.blocked) {
+      return state;
+    }
+  }
+
+  return { blocked: false, retryAfterSec: 0 };
+};
+
+const registerThrottleFailures = async (keys, options) => {
+  const uniqueKeys = uniqThrottleKeys(keys);
+  await Promise.all(uniqueKeys.map((key) => registerThrottleFailure(key, options)));
+};
+
+const clearThrottleFailuresForKeys = async (keys) => {
+  const uniqueKeys = uniqThrottleKeys(keys);
+  await Promise.all(uniqueKeys.map((key) => clearThrottleFailures(key)));
+};
+
+const getLoginThrottleState = async (keys) => getAggregateThrottleState(keys, LOGIN_RATE_WINDOW_MS);
+
+const registerLoginFailure = async (keys) =>
+  registerThrottleFailures(keys, {
     windowMs: LOGIN_RATE_WINDOW_MS,
     maxAttempts: LOGIN_RATE_MAX_ATTEMPTS,
     blockMs: LOGIN_BLOCK_MS,
   });
 
-const clearLoginFailures = async (key) => {
-  await clearThrottleFailures(key);
+const clearLoginFailures = async (keys) => {
+  await clearThrottleFailuresForKeys(keys);
 };
+
+const consumePublicActionThrottle = async (keys, { windowMs, maxAttempts, blockMs }) =>
+  registerThrottleFailures(keys, {
+    windowMs,
+    maxAttempts,
+    blockMs,
+  });
 
 const buildMfaThrottleKey = (user) => `mfa:${toObjectIdString(user?._id)}`;
 const getMfaThrottleState = async (user) =>
@@ -4470,15 +4658,20 @@ const resolveRefreshSessionFromCookie = async (req, res) => {
 
   let payload;
   try {
-    payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET, {
-      algorithms: ['HS256'],
+    payload = verifyTypedJwt({
+      token,
+      secret: process.env.REFRESH_TOKEN_SECRET,
+      audience: REFRESH_TOKEN_AUDIENCE,
+      type: 'refresh_token',
+      allowLegacy: true,
     });
   } catch {
     clearRefreshCookie(res, req);
     return null;
   }
 
-  const user = await getUserById(payload.userId);
+  const userId = sanitizeText(payload?.userId || payload?.sub, 120);
+  const user = await getUserById(userId);
   if (!user) {
     clearRefreshCookie(res, req);
     return null;
@@ -4631,8 +4824,8 @@ exports.login = async (req, res) => {
   const mfaCode = sanitizeMfaCode(req.body?.mfaCode);
   const backupCode = sanitizeBackupCode(req.body?.backupCode);
 
-  const rateKey = loginRateKey(identifier, req);
-  const throttle = await getLoginThrottleState(rateKey);
+  let throttleKeys = buildLoginThrottleKeys({ identifier, req });
+  let throttle = await getLoginThrottleState(throttleKeys);
   if (throttle.blocked) {
     return res.status(429).json({
       message: `Too many failed login attempts. Try again in ${throttle.retryAfterSec} seconds.`,
@@ -4642,26 +4835,37 @@ exports.login = async (req, res) => {
 
   try {
     if ((!isValidEmail(identifier) && !isValidUsername(identifier)) || typeof password !== 'string') {
-      await registerLoginFailure(rateKey);
+      await registerLoginFailure(throttleKeys);
       return res.status(400).json({ message: 'Invalid credentials.' });
     }
 
     const user = await findUserByLoginIdentifier(identifier);
+    if (user) {
+      throttleKeys = buildLoginThrottleKeys({ identifier, req, user });
+      throttle = await getLoginThrottleState(throttleKeys);
+      if (throttle.blocked) {
+        return res.status(429).json({
+          message: `Too many failed login attempts. Try again in ${throttle.retryAfterSec} seconds.`,
+          retryAfterSec: throttle.retryAfterSec,
+        });
+      }
+    }
+
     if (!user) {
-      await registerLoginFailure(rateKey);
+      await registerLoginFailure(throttleKeys);
       return res.status(400).json({ message: 'Invalid credentials.' });
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      await registerLoginFailure(rateKey);
+      await registerLoginFailure(throttleKeys);
       return res.status(400).json({ message: 'Invalid credentials.' });
     }
 
     await ensureUserIdentityFields(user);
 
     if (!user.isVerified) {
-      await clearLoginFailures(rateKey);
+      await clearLoginFailures(throttleKeys);
 
       let verificationDelivery = { sent: false, reason: 'cooldown' };
       if (!(hasPendingEmailVerification(user) && getVerificationEmailCooldownRemainingMs(user) > 0)) {
@@ -4716,7 +4920,7 @@ exports.login = async (req, res) => {
 
     }
 
-    await clearLoginFailures(rateKey);
+    await clearLoginFailures(throttleKeys);
     return completeInteractiveSignIn(res, req, user, {
       deviceLabel: req.body?.deviceLabel,
     });
@@ -4760,13 +4964,42 @@ exports.requestPasswordReset = async (req, res) => {
   );
   const genericMessage =
     'If an account matches that sign-in, a password reset link will be sent shortly.';
+  let throttleKeys = buildPublicActionThrottleKeys('password-reset', { identifier, req });
 
   try {
+    let throttle = await getAggregateThrottleState(throttleKeys, PASSWORD_RESET_RATE_WINDOW_MS);
+    if (throttle.blocked) {
+      return res.status(200).json({ message: genericMessage });
+    }
+
     if (!identifier || (!isValidEmail(identifier) && !isValidUsername(identifier))) {
+      await consumePublicActionThrottle(throttleKeys, {
+        windowMs: PASSWORD_RESET_RATE_WINDOW_MS,
+        maxAttempts: PASSWORD_RESET_RATE_MAX_ATTEMPTS,
+        blockMs: PASSWORD_RESET_BLOCK_MS,
+      });
       return res.status(200).json({ message: genericMessage });
     }
 
     const user = await findUserByLoginIdentifier(identifier);
+    if (user) {
+      throttleKeys = buildPublicActionThrottleKeys('password-reset', { identifier, req, user });
+      throttle = await getAggregateThrottleState(throttleKeys, PASSWORD_RESET_RATE_WINDOW_MS);
+      if (throttle.blocked) {
+        return res.status(200).json({ message: genericMessage });
+      }
+    }
+
+    await consumePublicActionThrottle(throttleKeys, {
+      windowMs: PASSWORD_RESET_RATE_WINDOW_MS,
+      maxAttempts: PASSWORD_RESET_RATE_MAX_ATTEMPTS,
+      blockMs: PASSWORD_RESET_BLOCK_MS,
+    });
+    throttle = await getAggregateThrottleState(throttleKeys, PASSWORD_RESET_RATE_WINDOW_MS);
+    if (throttle.blocked) {
+      return res.status(200).json({ message: genericMessage });
+    }
+
     if (!user) {
       return res.status(200).json({ message: genericMessage });
     }
@@ -4794,13 +5027,51 @@ exports.publicResendVerificationEmail = async (req, res) => {
   );
   const genericMessage =
     'If that sign-in belongs to an unverified account, a verification link will be sent shortly.';
+  let throttleKeys = buildPublicActionThrottleKeys('verification-resend', { identifier, req });
 
   try {
+    let throttle = await getAggregateThrottleState(
+      throttleKeys,
+      VERIFICATION_RESEND_RATE_WINDOW_MS
+    );
+    if (throttle.blocked) {
+      return res.status(200).json({ message: genericMessage });
+    }
+
     if (!identifier || (!isValidEmail(identifier) && !isValidUsername(identifier))) {
+      await consumePublicActionThrottle(throttleKeys, {
+        windowMs: VERIFICATION_RESEND_RATE_WINDOW_MS,
+        maxAttempts: VERIFICATION_RESEND_RATE_MAX_ATTEMPTS,
+        blockMs: VERIFICATION_RESEND_BLOCK_MS,
+      });
       return res.status(200).json({ message: genericMessage });
     }
 
     const user = await findUserByLoginIdentifier(identifier);
+    if (user) {
+      throttleKeys = buildPublicActionThrottleKeys('verification-resend', { identifier, req, user });
+      throttle = await getAggregateThrottleState(
+        throttleKeys,
+        VERIFICATION_RESEND_RATE_WINDOW_MS
+      );
+      if (throttle.blocked) {
+        return res.status(200).json({ message: genericMessage });
+      }
+    }
+
+    await consumePublicActionThrottle(throttleKeys, {
+      windowMs: VERIFICATION_RESEND_RATE_WINDOW_MS,
+      maxAttempts: VERIFICATION_RESEND_RATE_MAX_ATTEMPTS,
+      blockMs: VERIFICATION_RESEND_BLOCK_MS,
+    });
+    throttle = await getAggregateThrottleState(
+      throttleKeys,
+      VERIFICATION_RESEND_RATE_WINDOW_MS
+    );
+    if (throttle.blocked) {
+      return res.status(200).json({ message: genericMessage });
+    }
+
     if (!user || user.isVerified) {
       return res.status(200).json({ message: genericMessage });
     }
@@ -5289,6 +5560,9 @@ exports.startOauthLogin = async (req, res) => {
   try {
     const config = getOauthProviderConfig(req.params.provider, req);
     const targetOrigin = resolveTrustedOauthAppOrigin(req.query?.origin || DEFAULT_DASHBOARD_ORIGIN);
+    if (!targetOrigin) {
+      throw createHttpError(503, 'OAuth app origins are not configured on this server.');
+    }
     const redirectUrl = resolveTrustedOauthRedirectUrl(req.query?.redirect, targetOrigin);
     const returnTo = resolveTrustedOauthRedirectUrl(
       req.query?.returnTo || req.query?.return_to || resolveLoginPopupPageUrl(req) || redirectUrl,
@@ -5341,6 +5615,9 @@ exports.startOauthLink = async (req, res) => {
     const targetOrigin = resolveTrustedOauthAppOrigin(
       req.body?.origin || browserOrigin || DEFAULT_DASHBOARD_ORIGIN
     );
+    if (!targetOrigin) {
+      throw createHttpError(503, 'OAuth app origins are not configured on this server.');
+    }
     const redirectUrl = resolveTrustedOauthRedirectUrl(req.body?.redirect, targetOrigin);
     const returnTo = resolveTrustedOauthRedirectUrl(req.body?.returnTo || redirectUrl, targetOrigin);
     const state = buildOauthStateToken({
@@ -5529,7 +5806,7 @@ exports.finishOauthCallback = async (req, res) => {
       });
     }
 
-    const { sessionTokens } = await issueInteractiveSession(req, user, {
+    const { sessionTokens } = await issueInteractiveSession(req, res, user, {
       auditType: 'oauth_login',
       auditMessage: `Signed in with ${providerLabel}.`,
       auditMeta: {

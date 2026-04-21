@@ -1,5 +1,8 @@
-const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const {
+  ACCESS_TOKEN_AUDIENCE,
+  verifyTypedJwt,
+} = require('../utils/tokenHardening');
 
 module.exports = async (req, res, next) => {
   const header = req.headers.authorization || '';
@@ -11,19 +14,24 @@ module.exports = async (req, res, next) => {
 
   let decoded;
   try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET, {
-      algorithms: ['HS256'],
+    decoded = verifyTypedJwt({
+      token,
+      secret: process.env.JWT_SECRET,
+      audience: ACCESS_TOKEN_AUDIENCE,
+      type: 'access_token',
+      allowLegacy: true,
     });
   } catch (err) {
     return res.status(401).json({ message: 'Token invalid or expired.' });
   }
 
-  if (!decoded?.userId) {
+  const userId = String(decoded?.userId || decoded?.sub || '').trim();
+  if (!userId) {
     return res.status(401).json({ message: 'Invalid token payload.' });
   }
 
   try {
-    const user = await User.findById(decoded.userId).select('_id refreshTokenVersion refreshSessions');
+    const user = await User.findById(userId).select('_id refreshTokenVersion refreshSessions');
     if (!user) {
       return res.status(401).json({ message: 'User not found for token.' });
     }

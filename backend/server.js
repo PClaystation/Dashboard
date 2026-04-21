@@ -10,15 +10,18 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 
 const ApiRateLimitBucket = require('./models/ApiRateLimitBucket');
+const LoginThrottle = require('./models/LoginThrottle');
+const User = require('./models/User');
 const authRoutes = require('./routes/authRoutes');
 const grimoireRoutes = require('./routes/grimoireRoutes');
 const vanguardRoutes = require('./routes/vanguardRoutes');
+const { dedupePasskeysAcrossUsers } = require('./utils/passkeyHardening');
 const { migrateUsersToLatestSecurityState } = require('./utils/securityHardening');
 const { migrateUsersToLatestIdentity } = require('./utils/userIdentity');
 
 const app = express();
 
-const REQUIRED_ALLOWED_ORIGINS = [
+const DEFAULT_ALLOWED_ORIGINS = [
   'https://charlemagne404.github.io',
   'https://dashboard.continental-hub.com',
   'https://grimoire.continental-hub.com',
@@ -40,7 +43,7 @@ const config = {
   mongoUri: process.env.MONGO_URI,
   jwtSecret: process.env.JWT_SECRET,
   refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
-  allowedOrigins: Array.from(new Set([...REQUIRED_ALLOWED_ORIGINS, ...allowedOriginsFromEnv])),
+  allowedOrigins: [],
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX) || 180,
   httpsKeyPath:
@@ -49,8 +52,17 @@ const config = {
     process.env.HTTPS_CERT_PATH || '/etc/letsencrypt/live/mpmc.ddns.net/fullchain.pem',
 };
 const isProduction = config.nodeEnv === 'production';
+const allowDefaultTrustedOrigins =
+  !isProduction || String(process.env.ALLOW_DEFAULT_TRUSTED_ORIGINS || 'false') === 'true';
 const allowLocalDevOrigins =
   !isProduction || String(process.env.ALLOW_LOCALHOST_ORIGINS || 'false') === 'true';
+
+config.allowedOrigins = Array.from(
+  new Set([
+    ...(allowDefaultTrustedOrigins ? DEFAULT_ALLOWED_ORIGINS : []),
+    ...allowedOriginsFromEnv,
+  ])
+);
 
 const parseTrustProxy = (value, fallback = false) => {
   if (value === undefined) return fallback;
@@ -364,6 +376,12 @@ const startServer = async () => {
     console.log('MongoDB connected');
     await migrateUsersToLatestIdentity({ logger: console });
     await migrateUsersToLatestSecurityState({ logger: console });
+    await dedupePasskeysAcrossUsers({ logger: console });
+    await Promise.all([
+      User.syncIndexes(),
+      LoginThrottle.syncIndexes(),
+      ApiRateLimitBucket.syncIndexes(),
+    ]);
   } catch (err) {
     console.error('Server startup failed:', err);
     process.exit(1);
