@@ -36,6 +36,8 @@ const createVerifiedUser = async ({
   username = 'verified.user',
   password = 'StrongPass1',
   displayName = 'Verified User',
+  accountRole = 'user',
+  accountStatus = 'active',
 } = {}) => {
   const user = new User({
     email,
@@ -43,6 +45,8 @@ const createVerifiedUser = async ({
     displayName,
     password,
     isVerified: true,
+    accountRole,
+    accountStatus,
   });
   await user.save();
   return user;
@@ -191,6 +195,173 @@ test('verified users can log in, read their profile, and refresh their session',
   assert.ok(
     refreshResponse.headers['set-cookie']?.some((value) => value.startsWith('refreshToken='))
   );
+});
+
+test('the first registered account becomes the bootstrap owner account', async () => {
+  const response = await request(app)
+    .post('/api/auth/register')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .send({
+      email: 'bootstrap.owner@example.com',
+      username: 'bootstrap.owner',
+      displayName: 'Bootstrap Owner',
+      password: 'StrongPass1',
+    });
+
+  assert.equal(response.status, 201);
+
+  const createdUser = await User.findOne({ email: 'bootstrap.owner@example.com' }).lean();
+  assert.ok(createdUser);
+  assert.equal(createdUser.accountRole, 'owner');
+  assert.equal(createdUser.accountStatus, 'active');
+});
+
+test('non-owner accounts cannot access owner management endpoints', async () => {
+  await createVerifiedUser({
+    email: 'plain.user@example.com',
+    username: 'plain.user',
+  });
+
+  const loginResponse = await request(app)
+    .post('/api/auth/login')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .send({
+      identifier: 'plain.user',
+      password: 'StrongPass1',
+    });
+
+  const response = await request(app)
+    .get('/api/auth/owner/users')
+    .set('Authorization', `Bearer ${loginResponse.body.token}`);
+
+  assert.equal(response.status, 403);
+});
+
+test('owner accounts can review users and suspend a target account', async () => {
+  const owner = await createVerifiedUser({
+    email: 'owner@example.com',
+    username: 'owner.user',
+    accountRole: 'owner',
+  });
+  const target = await createVerifiedUser({
+    email: 'target@example.com',
+    username: 'target.user',
+    displayName: 'Target User',
+  });
+
+  const ownerLogin = await request(app)
+    .post('/api/auth/login')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .send({
+      identifier: 'owner.user',
+      password: 'StrongPass1',
+    });
+  const targetLogin = await request(app)
+    .post('/api/auth/login')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .send({
+      identifier: 'target.user',
+      password: 'StrongPass1',
+    });
+
+  const ownerMe = await request(app)
+    .get('/api/auth/me')
+    .set('Authorization', `Bearer ${ownerLogin.body.token}`);
+  assert.equal(ownerMe.status, 200);
+  assert.equal(ownerMe.body.user.authority.isOwner, true);
+
+  const listResponse = await request(app)
+    .get('/api/auth/owner/users')
+    .set('Authorization', `Bearer ${ownerLogin.body.token}`);
+  assert.equal(listResponse.status, 200);
+  assert.ok(listResponse.body.users.some((entry) => entry.userId === String(target._id)));
+
+  const updateResponse = await request(app)
+    .patch(`/api/auth/owner/users/${target._id}`)
+    .set('Authorization', `Bearer ${ownerLogin.body.token}`)
+    .send({
+      authority: {
+        status: 'suspended',
+        statusReason: 'Manual review',
+      },
+      vanguard: {
+        flagged: true,
+        flagReason: 'Manual review',
+      },
+    });
+
+  assert.equal(updateResponse.status, 200);
+  assert.equal(updateResponse.body.ownerUser.authority.status, 'suspended');
+  assert.equal(updateResponse.body.ownerUser.authority.statusReason, 'Manual review');
+  assert.equal(updateResponse.body.ownerUser.vanguard.flagged, true);
+
+  const suspendedUser = await User.findById(target._id).lean();
+  assert.equal(suspendedUser.accountStatus, 'suspended');
+  assert.equal(suspendedUser.accountStatusReason, 'Manual review');
+  assert.equal(suspendedUser.integrations.vanguard.flagged, true);
+  assert.equal(suspendedUser.refreshSessions.length, 0);
+
+  const targetMe = await request(app)
+    .get('/api/auth/me')
+    .set('Authorization', `Bearer ${targetLogin.body.token}`);
+  assert.ok([401, 403].includes(targetMe.status));
+
+  const refreshResponse = await request(app)
+    .post('/api/auth/refresh_token')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .set('Cookie', getRefreshCookie(targetLogin))
+    .send({});
+  assert.equal(refreshResponse.status, 200);
+  assert.equal(refreshResponse.body.authenticated, false);
+
+  const summaryResponse = await request(app)
+    .get('/api/auth/owner/summary')
+    .set('Authorization', `Bearer ${ownerLogin.body.token}`);
+  assert.equal(summaryResponse.status, 200);
+  assert.equal(summaryResponse.body.summary.totalUsers, 2);
+  assert.equal(summaryResponse.body.summary.suspended, 1);
+});
+
+test('owner accounts can delete other accounts but not the last remaining owner', async () => {
+  const owner = await createVerifiedUser({
+    email: 'delete.owner@example.com',
+    username: 'delete.owner',
+    accountRole: 'owner',
+  });
+  const target = await createVerifiedUser({
+    email: 'delete.target@example.com',
+    username: 'delete.target',
+  });
+
+  const ownerLogin = await request(app)
+    .post('/api/auth/login')
+    .set('Origin', TEST_ORIGIN)
+    .set('X-Forwarded-Proto', 'https')
+    .send({
+      identifier: 'delete.owner',
+      password: 'StrongPass1',
+    });
+
+  const deleteTargetResponse = await request(app)
+    .delete(`/api/auth/owner/users/${target._id}`)
+    .set('Authorization', `Bearer ${ownerLogin.body.token}`)
+    .send({});
+  assert.equal(deleteTargetResponse.status, 200);
+
+  const deletedTarget = await User.findById(target._id).lean();
+  assert.equal(deletedTarget, null);
+
+  const deleteOwnerResponse = await request(app)
+    .delete(`/api/auth/owner/users/${owner._id}`)
+    .set('Authorization', `Bearer ${ownerLogin.body.token}`)
+    .send({});
+  assert.equal(deleteOwnerResponse.status, 400);
+  assert.match(deleteOwnerResponse.body.message, /active owner account must remain/i);
 });
 
 test('middleware rejects hardened access tokens with the wrong audience', async () => {

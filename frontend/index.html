@@ -113,6 +113,7 @@
       <button id="tab-profile" class="tab-btn" data-tab="profile" type="button" role="tab" aria-controls="profile" aria-selected="false">Profile</button>
       <button id="tab-security" class="tab-btn" data-tab="security" type="button" role="tab" aria-controls="security" aria-selected="false">Security</button>
       <button id="tab-activity" class="tab-btn" data-tab="activity" type="button" role="tab" aria-controls="activity" aria-selected="false">Activity</button>
+      <button id="tab-owner" class="tab-btn" data-tab="owner" type="button" role="tab" aria-controls="owner" aria-selected="false" hidden>Owner</button>
       <button id="tab-settings" class="tab-btn" data-tab="settings" type="button" role="tab" aria-controls="settings" aria-selected="false">Settings</button>
     </nav>
 
@@ -1243,6 +1244,230 @@
           </article>
         </section>
 
+        <section id="owner" class="tab-content" role="tabpanel" aria-labelledby="tab-owner" hidden>
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Platform control</p>
+              <h2>Owner Workspace</h2>
+            </div>
+          </div>
+
+          <article class="section-card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Operations</p>
+                <h3>Account oversight</h3>
+              </div>
+              <span id="owner-access-chip" class="inline-chip">Owner access required</span>
+            </div>
+            <p id="owner-summary-copy" class="helper-line section-intro">
+              Review the full account base, then step into a user record to manage status, verification, security, and recovery.
+            </p>
+
+            <section class="metrics-grid owner-summary-grid" aria-label="Owner summary">
+              <article class="metric-card">
+                <p class="metric-label">Total users</p>
+                <p class="metric-value" id="owner-total-users">0</p>
+              </article>
+              <article class="metric-card">
+                <p class="metric-label">Owners</p>
+                <p class="metric-value" id="owner-total-owners">0</p>
+              </article>
+              <article class="metric-card">
+                <p class="metric-label">Suspended</p>
+                <p class="metric-value" id="owner-total-suspended">0</p>
+              </article>
+              <article class="metric-card">
+                <p class="metric-label">Flagged</p>
+                <p class="metric-value" id="owner-total-flagged">0</p>
+              </article>
+            </section>
+          </article>
+
+          <div class="owner-grid">
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Directory</p>
+                  <h3>Manage users</h3>
+                </div>
+              </div>
+
+              <form id="owner-filter-form" class="owner-filter-bar">
+                <input id="owner-search" type="search" placeholder="Search email, username, headline, role, or organization" />
+                <select id="owner-role-filter" aria-label="Owner role filter">
+                  <option value="">All roles</option>
+                  <option value="user">Users</option>
+                  <option value="owner">Owners</option>
+                </select>
+                <select id="owner-status-filter" aria-label="Owner status filter">
+                  <option value="">All statuses</option>
+                  <option value="active">Active</option>
+                  <option value="suspended">Suspended</option>
+                </select>
+                <button id="owner-apply-filters-btn" class="secondary-btn" type="submit">Apply Filters</button>
+                <button id="owner-refresh-btn" class="secondary-btn" type="button">Refresh List</button>
+              </form>
+
+              <p id="owner-results-summary" class="helper-line">Owner access required.</p>
+              <ul
+                id="owner-user-list"
+                class="activity-list owner-user-list"
+                data-collapsible-max-height="640"
+                data-collapsible-label="owner users"
+              >
+                <li>Owner access required.</li>
+              </ul>
+            </article>
+
+            <article class="section-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Account record</p>
+                  <h3>Selected user</h3>
+                </div>
+              </div>
+
+              <p id="owner-selected-summary" class="helper-line section-intro">
+                Select a user from the list to review their account state and run owner-level actions.
+              </p>
+              <div id="owner-selected-chips" class="preview-chip-list">
+                <span class="preview-empty">No user selected.</span>
+              </div>
+
+              <form id="owner-user-form" class="form-grid compact-form">
+                <label>
+                  Continental ID
+                  <input id="owner-user-id" type="text" readonly />
+                </label>
+                <label>
+                  Email
+                  <input id="owner-user-email" type="text" readonly />
+                </label>
+                <label>
+                  Created
+                  <input id="owner-user-created" type="text" readonly />
+                </label>
+                <label>
+                  Last login
+                  <input id="owner-user-last-login" type="text" readonly />
+                </label>
+                <label>
+                  Display name
+                  <input id="owner-user-display-name" type="text" maxlength="60" />
+                </label>
+                <label>
+                  Username
+                  <input id="owner-user-username" type="text" minlength="3" maxlength="30" />
+                </label>
+                <label>
+                  Headline
+                  <input id="owner-user-headline" type="text" maxlength="100" />
+                </label>
+                <label>
+                  Role
+                  <input id="owner-user-profile-role" type="text" maxlength="100" placeholder="Moderator, engineer, designer" />
+                </label>
+                <label>
+                  Organization
+                  <input id="owner-user-organization" type="text" maxlength="100" />
+                </label>
+                <label>
+                  Location
+                  <input id="owner-user-location" type="text" maxlength="120" />
+                </label>
+                <label>
+                  Platform role
+                  <select id="owner-user-role">
+                    <option value="user">User</option>
+                    <option value="owner">Owner</option>
+                  </select>
+                </label>
+                <label>
+                  Account status
+                  <select id="owner-user-status">
+                    <option value="active">Active</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
+                </label>
+                <label class="wide-field">
+                  Status reason
+                  <input id="owner-user-status-reason" type="text" maxlength="240" placeholder="Required when suspending an account" />
+                </label>
+                <div class="public-profile-visibility wide-field">
+                  <div class="public-profile-visibility-head">
+                    <p class="mini-label">Owner controls</p>
+                    <p class="helper-line">These settings change how the account can operate and how it appears in public services.</p>
+                  </div>
+                  <div class="public-profile-grid">
+                    <label class="visibility-toggle" for="owner-user-verified">
+                      <span>
+                        <strong>Email verified</strong>
+                        <small>Controls whether normal sign-in is allowed.</small>
+                      </span>
+                      <input id="owner-user-verified" type="checkbox" />
+                    </label>
+                    <label class="visibility-toggle" for="owner-user-profile-public">
+                      <span>
+                        <strong>Public profile</strong>
+                        <small>Publish or hide the live public card.</small>
+                      </span>
+                      <input id="owner-user-profile-public" type="checkbox" />
+                    </label>
+                    <label class="visibility-toggle" for="owner-user-searchable">
+                      <span>
+                        <strong>Searchable</strong>
+                        <small>Allow or block profile discovery in search.</small>
+                      </span>
+                      <input id="owner-user-searchable" type="checkbox" />
+                    </label>
+                    <label class="visibility-toggle" for="owner-user-vanguard-trusted">
+                      <span>
+                        <strong>Vanguard trusted</strong>
+                        <small>Mark this identity as trusted in Vanguard-aware tools.</small>
+                      </span>
+                      <input id="owner-user-vanguard-trusted" type="checkbox" />
+                    </label>
+                    <label class="visibility-toggle" for="owner-user-vanguard-staff">
+                      <span>
+                        <strong>Vanguard staff</strong>
+                        <small>Expose staff standing to Vanguard-aware services.</small>
+                      </span>
+                      <input id="owner-user-vanguard-staff" type="checkbox" />
+                    </label>
+                    <label class="visibility-toggle" for="owner-user-vanguard-flagged">
+                      <span>
+                        <strong>Flagged for review</strong>
+                        <small>Place the account into manual review.</small>
+                      </span>
+                      <input id="owner-user-vanguard-flagged" type="checkbox" />
+                    </label>
+                    <label class="visibility-toggle" for="owner-user-vanguard-banned">
+                      <span>
+                        <strong>AI denied</strong>
+                        <small>Block Vanguard AI features for this identity.</small>
+                      </span>
+                      <input id="owner-user-vanguard-banned" type="checkbox" />
+                    </label>
+                  </div>
+                </div>
+                <label class="wide-field">
+                  Vanguard flag reason
+                  <input id="owner-user-vanguard-flag-reason" type="text" maxlength="240" placeholder="Explain why the account is flagged" />
+                </label>
+                <div class="owner-form-actions wide-field">
+                  <button id="owner-user-save-btn" class="primary-btn" type="submit">Save Owner Changes</button>
+                  <button id="owner-user-revoke-sessions-btn" class="secondary-btn" type="button">Revoke Sessions</button>
+                  <button id="owner-user-reset-mfa-btn" class="secondary-btn" type="button">Reset MFA</button>
+                  <button id="owner-user-resend-verification-btn" class="secondary-btn" type="button">Resend Verification</button>
+                  <button id="owner-user-send-reset-btn" class="secondary-btn" type="button">Send Password Reset</button>
+                  <button id="owner-user-delete-btn" class="danger-btn" type="button">Delete Account</button>
+                </div>
+              </form>
+            </article>
+          </div>
+        </section>
+
       </main>
 
       <aside class="dashboard-sidebar">
@@ -1285,7 +1510,7 @@
             <button id="open-launcher-btn" class="secondary-btn" type="button">Open launcher</button>
             <button id="jump-unsaved-btn" class="ghost-btn" type="button">Review unsaved</button>
           </div>
-          <p class="helper-line keyboard-hint">Shortcuts: Cmd/Ctrl+K launcher, / activity filter, Alt+1..5 switch tabs.</p>
+          <p class="helper-line keyboard-hint">Shortcuts: Cmd/Ctrl+K launcher, / activity filter, Alt+1..6 switch tabs.</p>
         </section>
 
         <section class="sidebar-card">

@@ -374,6 +374,53 @@ const dom = {
   activityMixLegend: document.getElementById('activity-mix-legend'),
   activityHighlightGrid: document.getElementById('activity-highlight-grid'),
 
+  ownerTab: document.getElementById('tab-owner'),
+  ownerPanel: document.getElementById('owner'),
+  ownerAccessChip: document.getElementById('owner-access-chip'),
+  ownerSummaryCopy: document.getElementById('owner-summary-copy'),
+  ownerTotalUsers: document.getElementById('owner-total-users'),
+  ownerTotalOwners: document.getElementById('owner-total-owners'),
+  ownerTotalSuspended: document.getElementById('owner-total-suspended'),
+  ownerTotalFlagged: document.getElementById('owner-total-flagged'),
+  ownerFilterForm: document.getElementById('owner-filter-form'),
+  ownerSearch: document.getElementById('owner-search'),
+  ownerRoleFilter: document.getElementById('owner-role-filter'),
+  ownerStatusFilter: document.getElementById('owner-status-filter'),
+  ownerApplyFiltersBtn: document.getElementById('owner-apply-filters-btn'),
+  ownerRefreshBtn: document.getElementById('owner-refresh-btn'),
+  ownerResultsSummary: document.getElementById('owner-results-summary'),
+  ownerUserList: document.getElementById('owner-user-list'),
+  ownerSelectedSummary: document.getElementById('owner-selected-summary'),
+  ownerSelectedChips: document.getElementById('owner-selected-chips'),
+  ownerUserForm: document.getElementById('owner-user-form'),
+  ownerUserId: document.getElementById('owner-user-id'),
+  ownerUserEmail: document.getElementById('owner-user-email'),
+  ownerUserCreated: document.getElementById('owner-user-created'),
+  ownerUserLastLogin: document.getElementById('owner-user-last-login'),
+  ownerUserDisplayName: document.getElementById('owner-user-display-name'),
+  ownerUserUsername: document.getElementById('owner-user-username'),
+  ownerUserHeadline: document.getElementById('owner-user-headline'),
+  ownerUserProfileRole: document.getElementById('owner-user-profile-role'),
+  ownerUserOrganization: document.getElementById('owner-user-organization'),
+  ownerUserLocation: document.getElementById('owner-user-location'),
+  ownerUserRole: document.getElementById('owner-user-role'),
+  ownerUserStatus: document.getElementById('owner-user-status'),
+  ownerUserStatusReason: document.getElementById('owner-user-status-reason'),
+  ownerUserVerified: document.getElementById('owner-user-verified'),
+  ownerUserProfilePublic: document.getElementById('owner-user-profile-public'),
+  ownerUserSearchable: document.getElementById('owner-user-searchable'),
+  ownerUserVanguardTrusted: document.getElementById('owner-user-vanguard-trusted'),
+  ownerUserVanguardStaff: document.getElementById('owner-user-vanguard-staff'),
+  ownerUserVanguardFlagged: document.getElementById('owner-user-vanguard-flagged'),
+  ownerUserVanguardBanned: document.getElementById('owner-user-vanguard-banned'),
+  ownerUserVanguardFlagReason: document.getElementById('owner-user-vanguard-flag-reason'),
+  ownerUserSaveBtn: document.getElementById('owner-user-save-btn'),
+  ownerUserRevokeSessionsBtn: document.getElementById('owner-user-revoke-sessions-btn'),
+  ownerUserResetMfaBtn: document.getElementById('owner-user-reset-mfa-btn'),
+  ownerUserResendVerificationBtn: document.getElementById('owner-user-resend-verification-btn'),
+  ownerUserSendResetBtn: document.getElementById('owner-user-send-reset-btn'),
+  ownerUserDeleteBtn: document.getElementById('owner-user-delete-btn'),
+
   deleteForm: document.getElementById('delete-form'),
   deleteOpenBtn: document.getElementById('delete-open-btn'),
   deleteAccountBtn: document.getElementById('delete-account-btn'),
@@ -724,6 +771,16 @@ const state = {
     uniqueIps: 0,
     recentDays: [],
   },
+  ownerSummary: {
+    totalUsers: 0,
+    owners: 0,
+    suspended: 0,
+    flagged: 0,
+  },
+  ownerUsers: [],
+  ownerSelectedUserId: '',
+  ownerSelectedUser: null,
+  ownerSelectedAuditEvents: [],
   sessions: [],
   devices: [],
   sessionLimit: null,
@@ -1592,6 +1649,25 @@ const getFirstName = (user = state.user) => {
 const getMigrationState = (user = state.user) =>
   user?.migration && typeof user.migration === 'object' ? user.migration : {};
 
+const normalizeOwnerSummary = (summary = {}) => ({
+  totalUsers: Math.max(0, Number(summary?.totalUsers || 0)),
+  owners: Math.max(0, Number(summary?.owners || 0)),
+  suspended: Math.max(0, Number(summary?.suspended || 0)),
+  flagged: Math.max(0, Number(summary?.flagged || 0)),
+});
+
+const getAuthorityState = (user = state.user) =>
+  user?.authority && typeof user.authority === 'object' ? user.authority : {};
+
+const isOwnerUser = (user = state.user) => Boolean(getAuthorityState(user).isOwner);
+
+const getSelectedOwnerUser = () => {
+  if (state.ownerSelectedUser && state.ownerSelectedUser.userId === state.ownerSelectedUserId) {
+    return state.ownerSelectedUser;
+  }
+  return state.ownerUsers.find((entry) => entry.userId === state.ownerSelectedUserId) || null;
+};
+
 const normalizeAvatarInput = (value) => {
   const raw = safeText(value);
   if (!raw) return '';
@@ -2409,6 +2485,16 @@ const clearDashboardUi = () => {
   state.activity = [];
   state.auditEvents = [];
   state.activitySummary = normalizeActivitySummary();
+  state.ownerSummary = {
+    totalUsers: 0,
+    owners: 0,
+    suspended: 0,
+    flagged: 0,
+  };
+  state.ownerUsers = [];
+  state.ownerSelectedUserId = '';
+  state.ownerSelectedUser = null;
+  state.ownerSelectedAuditEvents = [];
   state.sessions = [];
   state.devices = [];
   state.sessionLimit = null;
@@ -2438,6 +2524,8 @@ const clearDashboardUi = () => {
   if (dom.notificationForm) dom.notificationForm.reset();
   if (dom.appearanceForm) dom.appearanceForm.reset();
   if (dom.deleteForm) dom.deleteForm.reset();
+  if (dom.ownerFilterForm) dom.ownerFilterForm.reset();
+  if (dom.ownerUserForm) dom.ownerUserForm.reset();
   for (const form of trackedForms) {
     markFormClean(form);
   }
@@ -2485,6 +2573,10 @@ const clearDashboardUi = () => {
   if (dom.insightLast30) dom.insightLast30.textContent = '0';
   if (dom.insightIps) dom.insightIps.textContent = '0';
   if (dom.sessionLimitNote) dom.sessionLimitNote.textContent = 'Limit: --';
+  renderOwnerAccess();
+  renderOwnerSummary();
+  renderOwnerUserList();
+  renderOwnerUserDetail();
   renderVerificationState();
   renderActionCenter(null);
   renderProfileChecklist(null);
@@ -2978,6 +3070,196 @@ const renderInsights = () => {
   if (dom.insightLast30) dom.insightLast30.textContent = String(state.activitySummary.last30Days || 0);
   if (dom.insightIps) dom.insightIps.textContent = String(state.activitySummary.uniqueIps || 0);
   if (dom.insightVerified) dom.insightVerified.textContent = state.user?.isVerified ? 'Verified' : 'Pending';
+};
+
+const createOwnerChip = (text) => {
+  const chip = document.createElement('span');
+  chip.className = 'preview-chip';
+  chip.textContent = safeText(text);
+  return chip;
+};
+
+const renderOwnerAccess = () => {
+  const hasOwnerAccess = isOwnerUser(state.user);
+
+  if (dom.ownerTab) {
+    dom.ownerTab.hidden = !hasOwnerAccess;
+  }
+  if (dom.ownerPanel && !hasOwnerAccess) {
+    dom.ownerPanel.hidden = true;
+  }
+  if (dom.ownerAccessChip) {
+    dom.ownerAccessChip.textContent = hasOwnerAccess ? 'Owner access live' : 'Owner access required';
+  }
+
+  if (!hasOwnerAccess && state.activeTab === 'owner') {
+    switchTab('overview', { historyMode: 'replace' });
+  }
+};
+
+const renderOwnerSummary = () => {
+  const summary = normalizeOwnerSummary(state.ownerSummary);
+  if (dom.ownerTotalUsers) dom.ownerTotalUsers.textContent = String(summary.totalUsers);
+  if (dom.ownerTotalOwners) dom.ownerTotalOwners.textContent = String(summary.owners);
+  if (dom.ownerTotalSuspended) dom.ownerTotalSuspended.textContent = String(summary.suspended);
+  if (dom.ownerTotalFlagged) dom.ownerTotalFlagged.textContent = String(summary.flagged);
+
+  if (dom.ownerSummaryCopy) {
+    dom.ownerSummaryCopy.textContent = isOwnerUser(state.user)
+      ? `${summary.totalUsers} total accounts, ${summary.owners} owner accounts, ${summary.suspended} suspended accounts, and ${summary.flagged} accounts currently flagged for review.`
+      : 'Owner access is hidden for this account.';
+  }
+};
+
+const renderOwnerUserList = () => {
+  if (!dom.ownerUserList || !dom.ownerResultsSummary) return;
+
+  if (!isOwnerUser(state.user)) {
+    dom.ownerResultsSummary.textContent = 'Owner access required.';
+    dom.ownerUserList.innerHTML = '<li>Owner access required.</li>';
+    return;
+  }
+
+  const users = Array.isArray(state.ownerUsers) ? state.ownerUsers : [];
+  const query = safeText(dom.ownerSearch?.value);
+  dom.ownerResultsSummary.textContent = query
+    ? `${users.length} matching account${users.length === 1 ? '' : 's'} for "${query}".`
+    : `${users.length} account${users.length === 1 ? '' : 's'} loaded.`;
+
+  if (!users.length) {
+    dom.ownerUserList.innerHTML = '<li>No matching users found.</li>';
+    return;
+  }
+
+  dom.ownerUserList.innerHTML = '';
+  for (const entry of users) {
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'owner-user-button';
+    if (entry.userId === state.ownerSelectedUserId) {
+      button.classList.add('is-selected');
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'owner-user-meta';
+    const copy = document.createElement('div');
+    copy.className = 'owner-user-copy';
+    const title = document.createElement('strong');
+    title.textContent = safeText(entry.displayName || entry.username || entry.email || entry.userId);
+    const subtitle = document.createElement('p');
+    subtitle.className = 'helper-line';
+    subtitle.textContent = [
+      safeText(entry.handle || entry.username),
+      safeText(entry.email),
+    ].filter(Boolean).join(' • ') || 'No identity data';
+    const detail = document.createElement('p');
+    detail.className = 'helper-line';
+    detail.textContent = [
+      safeText(entry.profile?.headline),
+      safeText(entry.profile?.role),
+      safeText(entry.profile?.organization),
+    ].filter(Boolean).join(' • ') || 'No headline, role, or organization saved.';
+    copy.append(title, subtitle, detail);
+
+    const time = document.createElement('span');
+    time.className = 'mini-label';
+    time.textContent = entry.lastLoginAt ? `Last login ${formatDateCompact(entry.lastLoginAt)}` : 'No login yet';
+    meta.append(copy, time);
+
+    const badges = document.createElement('div');
+    badges.className = 'owner-user-badges';
+    badges.append(
+      createOwnerChip(entry.authority?.isOwner ? 'Owner' : 'User'),
+      createOwnerChip(entry.authority?.status === 'suspended' ? 'Suspended' : 'Active'),
+      createOwnerChip(entry.isVerified ? 'Verified' : 'Unverified')
+    );
+    if (entry.security?.mfaEnabled) badges.append(createOwnerChip('MFA'));
+    if (Number(entry.security?.passkeyCount || 0) > 0) badges.append(createOwnerChip('Passkeys'));
+    if (entry.vanguard?.flagged) badges.append(createOwnerChip('Flagged'));
+    if (entry.vanguard?.bannedFromAi) badges.append(createOwnerChip('AI denied'));
+
+    button.append(meta, badges);
+    button.addEventListener('click', () => {
+      selectOwnerUser(entry.userId);
+    });
+    li.appendChild(button);
+    dom.ownerUserList.appendChild(li);
+  }
+};
+
+const renderOwnerUserDetail = () => {
+  if (!dom.ownerUserForm || !dom.ownerSelectedSummary || !dom.ownerSelectedChips) return;
+
+  const user = getSelectedOwnerUser();
+  const inputs = dom.ownerUserForm.querySelectorAll('input, select, button');
+  const disabled = !isOwnerUser(state.user) || !user;
+  for (const element of inputs) {
+    element.disabled = disabled;
+  }
+
+  if (!user) {
+    if (dom.ownerSelectedSummary) {
+      dom.ownerSelectedSummary.textContent = isOwnerUser(state.user)
+        ? 'Select a user from the list to review their account state and run owner-level actions.'
+        : 'Owner access required.';
+    }
+    if (dom.ownerSelectedChips) {
+      dom.ownerSelectedChips.innerHTML = '<span class="preview-empty">No user selected.</span>';
+    }
+    if (dom.ownerUserForm) dom.ownerUserForm.reset();
+    return;
+  }
+
+  if (dom.ownerUserId) dom.ownerUserId.value = safeText(user.userId);
+  if (dom.ownerUserEmail) dom.ownerUserEmail.value = safeText(user.email);
+  if (dom.ownerUserCreated) dom.ownerUserCreated.value = formatDate(user.createdAt);
+  if (dom.ownerUserLastLogin) dom.ownerUserLastLogin.value = user.lastLoginAt ? formatDate(user.lastLoginAt) : 'No login yet';
+  if (dom.ownerUserDisplayName) dom.ownerUserDisplayName.value = safeText(user.displayName);
+  if (dom.ownerUserUsername) dom.ownerUserUsername.value = safeText(user.username);
+  if (dom.ownerUserHeadline) dom.ownerUserHeadline.value = safeText(user.profile?.headline);
+  if (dom.ownerUserProfileRole) dom.ownerUserProfileRole.value = safeText(user.profile?.role);
+  if (dom.ownerUserOrganization) dom.ownerUserOrganization.value = safeText(user.profile?.organization);
+  if (dom.ownerUserLocation) dom.ownerUserLocation.value = safeText(user.profile?.location);
+  if (dom.ownerUserRole) dom.ownerUserRole.value = safeText(user.authority?.role || 'user');
+  if (dom.ownerUserStatus) dom.ownerUserStatus.value = safeText(user.authority?.status || 'active');
+  if (dom.ownerUserStatusReason) dom.ownerUserStatusReason.value = safeText(user.authority?.statusReason);
+  if (dom.ownerUserVerified) dom.ownerUserVerified.checked = Boolean(user.isVerified);
+  if (dom.ownerUserProfilePublic) dom.ownerUserProfilePublic.checked = Boolean(user.preferences?.profilePublic);
+  if (dom.ownerUserSearchable) dom.ownerUserSearchable.checked = Boolean(user.preferences?.searchable);
+  if (dom.ownerUserVanguardTrusted) dom.ownerUserVanguardTrusted.checked = Boolean(user.vanguard?.trusted);
+  if (dom.ownerUserVanguardStaff) dom.ownerUserVanguardStaff.checked = Boolean(user.vanguard?.staff);
+  if (dom.ownerUserVanguardFlagged) dom.ownerUserVanguardFlagged.checked = Boolean(user.vanguard?.flagged);
+  if (dom.ownerUserVanguardBanned) dom.ownerUserVanguardBanned.checked = Boolean(user.vanguard?.bannedFromAi);
+  if (dom.ownerUserVanguardFlagReason) dom.ownerUserVanguardFlagReason.value = safeText(user.vanguard?.flagReason);
+
+  if (dom.ownerSelectedSummary) {
+    dom.ownerSelectedSummary.textContent = `${safeText(user.email)} • ${
+      user.authority?.status === 'suspended' ? 'Suspended account' : 'Active account'
+    } • ${Number(user.security?.activeSessions || 0)} active session${
+      Number(user.security?.activeSessions || 0) === 1 ? '' : 's'
+    }.`;
+  }
+
+  dom.ownerSelectedChips.innerHTML = '';
+  const chips = [
+    user.authority?.isOwner ? 'Owner' : 'User',
+    user.isVerified ? 'Verified' : 'Unverified',
+    user.security?.mfaEnabled ? 'MFA on' : 'MFA off',
+    Number(user.security?.passkeyCount || 0) > 0
+      ? `${Number(user.security?.passkeyCount || 0)} passkeys`
+      : 'No passkeys',
+  ];
+  if (user.vanguard?.flagged) chips.push('Vanguard flagged');
+  if (user.vanguard?.bannedFromAi) chips.push('AI denied');
+  if (user.preferences?.profilePublic) chips.push(user.preferences?.searchable ? 'Public + searchable' : 'Public only');
+  for (const text of chips) {
+    dom.ownerSelectedChips.appendChild(createOwnerChip(text));
+  }
+
+  if (dom.ownerUserResendVerificationBtn) {
+    dom.ownerUserResendVerificationBtn.disabled = disabled || Boolean(user.isVerified);
+  }
 };
 
 const renderVerificationState = (user = state.user) => {
@@ -5066,6 +5348,17 @@ const syncUiWithUser = (user) => {
   renderOverviewActivity();
   renderActivityBars();
   renderInsights();
+  renderOwnerAccess();
+  if (!isOwnerUser(user)) {
+    state.ownerSummary = normalizeOwnerSummary();
+    state.ownerUsers = [];
+    state.ownerSelectedUserId = '';
+    state.ownerSelectedUser = null;
+    state.ownerSelectedAuditEvents = [];
+  }
+  renderOwnerSummary();
+  renderOwnerUserList();
+  renderOwnerUserDetail();
   renderVerificationState(user);
   renderDevices();
   renderServices();
@@ -5163,6 +5456,97 @@ const loadSessions = async () => {
   renderSecurityPosture(state.user);
 };
 
+const loadOwnerSummary = async () => {
+  if (!isOwnerUser(state.user)) {
+    state.ownerSummary = normalizeOwnerSummary();
+    renderOwnerSummary();
+    return null;
+  }
+
+  const data = await apiRequest('/owner/summary', { method: 'GET', auth: true });
+  state.ownerSummary = normalizeOwnerSummary(data.summary);
+  renderOwnerSummary();
+  return data.summary;
+};
+
+const loadOwnerUser = async (userId) => {
+  if (!isOwnerUser(state.user) || !safeText(userId)) {
+    state.ownerSelectedUserId = '';
+    state.ownerSelectedUser = null;
+    state.ownerSelectedAuditEvents = [];
+    renderOwnerUserDetail();
+    return null;
+  }
+
+  const data = await apiRequest(`/owner/users/${encodeURIComponent(userId)}`, {
+    method: 'GET',
+    auth: true,
+  });
+  state.ownerSelectedUserId = safeText(userId);
+  state.ownerSelectedUser = data.ownerUser || null;
+  state.ownerSelectedAuditEvents = Array.isArray(data.auditEvents)
+    ? data.auditEvents.map((event) => normalizeAuditEvent(event))
+    : [];
+  state.ownerUsers = state.ownerUsers.map((entry) =>
+    entry.userId === state.ownerSelectedUserId ? { ...entry, ...(data.ownerUser || {}) } : entry
+  );
+  renderOwnerUserList();
+  renderOwnerUserDetail();
+  return data.ownerUser;
+};
+
+const loadOwnerUsers = async ({ preserveSelection = true, selectedUserId = '' } = {}) => {
+  if (!isOwnerUser(state.user)) {
+    state.ownerUsers = [];
+    state.ownerSelectedUserId = '';
+    state.ownerSelectedUser = null;
+    state.ownerSelectedAuditEvents = [];
+    renderOwnerUserList();
+    renderOwnerUserDetail();
+    return [];
+  }
+
+  const params = new URLSearchParams();
+  const query = safeText(dom.ownerSearch?.value);
+  const role = safeText(dom.ownerRoleFilter?.value).toLowerCase();
+  const status = safeText(dom.ownerStatusFilter?.value).toLowerCase();
+  if (query) params.set('q', query);
+  if (role) params.set('role', role);
+  if (status) params.set('status', status);
+  params.set('limit', '80');
+
+  const data = await apiRequest(`/owner/users?${params.toString()}`, { method: 'GET', auth: true });
+  state.ownerUsers = Array.isArray(data.users) ? data.users : [];
+
+  const preferredUserId = safeText(selectedUserId)
+    || (preserveSelection ? safeText(state.ownerSelectedUserId) : '')
+    || safeText(state.ownerUsers[0]?.userId);
+  const hasPreferredUser = state.ownerUsers.some((entry) => entry.userId === preferredUserId);
+
+  state.ownerSelectedUserId = hasPreferredUser ? preferredUserId : '';
+  state.ownerSelectedUser = state.ownerUsers.find((entry) => entry.userId === state.ownerSelectedUserId) || null;
+  renderOwnerUserList();
+  renderOwnerUserDetail();
+
+  if (state.ownerSelectedUserId) {
+    await loadOwnerUser(state.ownerSelectedUserId);
+  }
+
+  return state.ownerUsers;
+};
+
+const loadOwnerData = async ({ preserveSelection = true } = {}) => {
+  if (!isOwnerUser(state.user)) {
+    renderOwnerAccess();
+    renderOwnerSummary();
+    renderOwnerUserList();
+    renderOwnerUserDetail();
+    return;
+  }
+
+  await Promise.all([loadOwnerSummary(), loadOwnerUsers({ preserveSelection })]);
+};
+
 const loadDashboardData = async ({ silent = false } = {}) => {
   if (!silent && dom.loadingMessage) {
     dom.loadingMessage.textContent = 'Loading dashboard...';
@@ -5187,6 +5571,14 @@ const loadDashboardData = async ({ silent = false } = {}) => {
 
   if (sessionsError && !state.user) {
     throw sessionsError;
+  }
+
+  try {
+    await loadOwnerData();
+  } catch (error) {
+    if (state.appVisible && isOwnerUser(state.user)) {
+      showToast('Account loaded, but owner tools could not be refreshed.', 'warn', 3600);
+    }
   }
 
   for (const form of trackedForms) {
@@ -5375,6 +5767,185 @@ const exportAccountJson = async () => {
   const fileName = `continental-account-export-${new Date().toISOString().slice(0, 10)}.json`;
   downloadJsonFile(fileName, data);
   showToast('Account export downloaded.', 'success');
+};
+
+const getSelectedOwnerUserOrThrow = () => {
+  const user = getSelectedOwnerUser();
+  if (!user) {
+    throw new Error('Select a user from the owner list first.');
+  }
+  return user;
+};
+
+const buildOwnerUserUpdatePayload = () => {
+  const selectedUser = getSelectedOwnerUserOrThrow();
+  const username = safeText(dom.ownerUserUsername?.value).toLowerCase();
+  const displayName = safeText(dom.ownerUserDisplayName?.value);
+  const status = safeText(dom.ownerUserStatus?.value).toLowerCase() || 'active';
+  const statusReason = safeText(dom.ownerUserStatusReason?.value);
+  const flagged = Boolean(dom.ownerUserVanguardFlagged?.checked);
+  const flagReason = safeText(dom.ownerUserVanguardFlagReason?.value);
+
+  if (!/^[a-z0-9](?:[a-z0-9._-]{1,28}[a-z0-9])?$/.test(username)) {
+    throw new Error('Username must be 3-30 characters and can only use letters, numbers, dots, hyphens, or underscores.');
+  }
+  if (containsBlockedNameTerm(username)) {
+    throw new Error('Choose a different username. Usernames cannot contain offensive or hateful language.');
+  }
+  if (displayName.length < 2) {
+    throw new Error('Display name must be at least 2 characters.');
+  }
+  if (containsBlockedNameTerm(displayName)) {
+    throw new Error('Choose a different display name. Display names cannot contain offensive or hateful language.');
+  }
+  if (status === 'suspended' && !statusReason) {
+    throw new Error('Add a suspension reason before saving this owner update.');
+  }
+  if (flagged && !flagReason) {
+    throw new Error('Add a Vanguard flag reason before saving a flagged account.');
+  }
+
+  return {
+    displayName,
+    username,
+    isVerified: Boolean(dom.ownerUserVerified?.checked),
+    profile: {
+      headline: safeText(dom.ownerUserHeadline?.value),
+      role: safeText(dom.ownerUserProfileRole?.value),
+      organization: safeText(dom.ownerUserOrganization?.value),
+      location: safeText(dom.ownerUserLocation?.value),
+    },
+    authority: {
+      role: safeText(dom.ownerUserRole?.value).toLowerCase() || 'user',
+      status,
+      statusReason,
+    },
+    preferences: {
+      profilePublic: Boolean(dom.ownerUserProfilePublic?.checked),
+      searchable: Boolean(dom.ownerUserSearchable?.checked),
+    },
+    vanguard: {
+      trusted: Boolean(dom.ownerUserVanguardTrusted?.checked),
+      staff: Boolean(dom.ownerUserVanguardStaff?.checked),
+      flagged,
+      bannedFromAi: Boolean(dom.ownerUserVanguardBanned?.checked),
+      flagReason,
+    },
+    selectedUserId: selectedUser.userId,
+  };
+};
+
+const refreshOwnerWorkspace = async (selectedUserId = state.ownerSelectedUserId) => {
+  const currentUserId = safeText(state.user?.userId || state.user?.continentalId);
+  if (selectedUserId && currentUserId && selectedUserId === currentUserId) {
+    await loadCurrentUser();
+  }
+
+  if (isOwnerUser(state.user)) {
+    await loadOwnerData({ preserveSelection: true });
+  }
+};
+
+const selectOwnerUser = async (userId) => {
+  const nextUserId = safeText(userId);
+  if (!nextUserId || !isOwnerUser(state.user)) return;
+
+  state.ownerSelectedUserId = nextUserId;
+  state.ownerSelectedUser = state.ownerUsers.find((entry) => entry.userId === nextUserId) || null;
+  renderOwnerUserList();
+  renderOwnerUserDetail();
+
+  try {
+    await loadOwnerUser(nextUserId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
+const handleOwnerSave = async (event) => {
+  event.preventDefault();
+
+  let payload;
+  try {
+    payload = buildOwnerUserUpdatePayload();
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  }
+
+  setButtonBusy(dom.ownerUserSaveBtn, true, 'Saving...');
+  try {
+    const result = await apiRequest(`/owner/users/${encodeURIComponent(payload.selectedUserId)}`, {
+      method: 'PATCH',
+      body: {
+        displayName: payload.displayName,
+        username: payload.username,
+        isVerified: payload.isVerified,
+        profile: payload.profile,
+        authority: payload.authority,
+        preferences: payload.preferences,
+        vanguard: payload.vanguard,
+      },
+    });
+    showToast(result.message || 'Owner changes saved.', 'success');
+    await refreshOwnerWorkspace(payload.selectedUserId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    setButtonBusy(dom.ownerUserSaveBtn, false);
+  }
+};
+
+const runOwnerUserAction = async ({
+  button,
+  userId,
+  endpoint,
+  method = 'POST',
+  body,
+  busyLabel = 'Saving...',
+  successMessage = 'Owner action completed.',
+  confirmConfig = null,
+}) => {
+  const selectedUser = getSelectedOwnerUserOrThrow();
+  const targetUserId = safeText(userId || selectedUser.userId);
+  if (!targetUserId) {
+    throw new Error('Select a user from the owner list first.');
+  }
+
+  if (confirmConfig) {
+    const result = await openDecisionModal(confirmConfig);
+    if (!result) {
+      return null;
+    }
+  }
+
+  setButtonBusy(button, true, busyLabel);
+  try {
+    const result = await apiRequest(endpoint(targetUserId), {
+      method,
+      body,
+    });
+
+    if (result.deletedOwnAccount) {
+      handleUnauthenticatedState({
+        message: result.message || 'Your account was deleted.',
+      });
+      return result;
+    }
+
+    if (result.forceRelogin && targetUserId === safeText(state.user?.userId || state.user?.continentalId)) {
+      handleUnauthenticatedState({
+        message: result.message || 'Your session is no longer valid. Please sign in again.',
+      });
+      return result;
+    }
+
+    showToast(result.message || successMessage, 'success');
+    await refreshOwnerWorkspace(targetUserId);
+    return result;
+  } finally {
+    setButtonBusy(button, false);
+  }
 };
 
 const handleProfileSave = async (event) => {
@@ -6299,8 +6870,10 @@ const runManualRefresh = async () => {
   }
 };
 
+const getAvailableTabButtons = () => dom.tabButtons.filter((button) => !button.hidden);
+
 const getKnownTabIds = () =>
-  new Set(dom.tabButtons.map((button) => safeText(button.dataset.tab)).filter(Boolean));
+  new Set(getAvailableTabButtons().map((button) => safeText(button.dataset.tab)).filter(Boolean));
 
 const normalizeTabId = (tabId) => {
   const normalized = safeText(tabId);
@@ -6369,24 +6942,25 @@ const setupTabs = () => {
     });
 
     button.addEventListener('keydown', (event) => {
-      const currentIndex = dom.tabButtons.indexOf(button);
+      const availableButtons = getAvailableTabButtons();
+      const currentIndex = availableButtons.indexOf(button);
       if (currentIndex === -1) return;
 
       let nextIndex = currentIndex;
       if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-        nextIndex = (currentIndex + 1) % dom.tabButtons.length;
+        nextIndex = (currentIndex + 1) % availableButtons.length;
       } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-        nextIndex = (currentIndex - 1 + dom.tabButtons.length) % dom.tabButtons.length;
+        nextIndex = (currentIndex - 1 + availableButtons.length) % availableButtons.length;
       } else if (event.key === 'Home') {
         nextIndex = 0;
       } else if (event.key === 'End') {
-        nextIndex = dom.tabButtons.length - 1;
+        nextIndex = availableButtons.length - 1;
       } else {
         return;
       }
 
       event.preventDefault();
-      const nextButton = dom.tabButtons[nextIndex];
+      const nextButton = availableButtons[nextIndex];
       nextButton?.focus();
       if (nextButton?.dataset?.tab) {
         switchTab(nextButton.dataset.tab, { historyMode: 'push', focusPanel: true });
@@ -6535,7 +7109,7 @@ const setupKeyboardShortcuts = () => {
     if (!isEditableTarget(event.target) && event.altKey && /^[1-9]$/.test(key)) {
       event.preventDefault();
       const tabIndex = Number(key) - 1;
-      const tabButton = dom.tabButtons[tabIndex];
+      const tabButton = getAvailableTabButtons()[tabIndex];
       if (!tabButton?.dataset?.tab) return;
       switchTab(tabButton.dataset.tab);
       return;
@@ -6549,7 +7123,7 @@ const setupKeyboardShortcuts = () => {
 
     if (!isEditableTarget(event.target) && key === '?') {
       event.preventDefault();
-      showToast('Shortcuts: Cmd/Ctrl+K launcher, Cmd/Ctrl+Shift+R refresh, Alt+1..5 switch tabs.', 'warn', 5000);
+      showToast('Shortcuts: Cmd/Ctrl+K launcher, Cmd/Ctrl+Shift+R refresh, Alt+1..6 switch tabs.', 'warn', 5000);
     }
   });
 };
@@ -6922,6 +7496,167 @@ const setupEventHandlers = () => {
   if (dom.activityExportBtn) dom.activityExportBtn.addEventListener('click', exportActivityCsv);
   if (dom.activityFilter) dom.activityFilter.addEventListener('input', renderActivity);
   if (dom.activityKind) dom.activityKind.addEventListener('change', renderActivity);
+
+  if (dom.ownerFilterForm) {
+    dom.ownerFilterForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setButtonBusy(dom.ownerApplyFiltersBtn, true, 'Loading...');
+      try {
+        await loadOwnerUsers({ preserveSelection: false });
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        setButtonBusy(dom.ownerApplyFiltersBtn, false);
+      }
+    });
+  }
+
+  if (dom.ownerRefreshBtn) {
+    dom.ownerRefreshBtn.addEventListener('click', async () => {
+      setButtonBusy(dom.ownerRefreshBtn, true, 'Refreshing...');
+      try {
+        await loadOwnerData({ preserveSelection: true });
+        showToast('Owner workspace refreshed.', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        setButtonBusy(dom.ownerRefreshBtn, false);
+      }
+    });
+  }
+
+  if (dom.ownerUserForm) {
+    dom.ownerUserForm.addEventListener('submit', handleOwnerSave);
+  }
+
+  if (dom.ownerUserRevokeSessionsBtn) {
+    dom.ownerUserRevokeSessionsBtn.addEventListener('click', async () => {
+      try {
+        const selectedUser = getSelectedOwnerUserOrThrow();
+        await runOwnerUserAction({
+          button: dom.ownerUserRevokeSessionsBtn,
+          endpoint: (userId) => `/owner/users/${encodeURIComponent(userId)}/revoke-sessions`,
+          busyLabel: 'Revoking...',
+          successMessage: 'Sessions revoked.',
+          confirmConfig: {
+            title: 'Revoke all sessions',
+            copy: `Type ${safeText(selectedUser.username || selectedUser.email)} to revoke every active session for this account.`,
+            confirmLabel: 'Revoke Sessions',
+            confirmClassName: 'danger-btn',
+            fields: [
+              {
+                id: 'owner-confirm-revoke-sessions',
+                name: 'confirmText',
+                label: 'Confirm account handle or email',
+                placeholder: safeText(selectedUser.username || selectedUser.email),
+                required: true,
+              },
+            ],
+            validate: (values) =>
+              safeText(values.confirmText).toLowerCase() === safeText(selectedUser.username || selectedUser.email).toLowerCase()
+                ? ''
+                : 'Enter the selected account handle or email to confirm.',
+          },
+        });
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  }
+
+  if (dom.ownerUserResetMfaBtn) {
+    dom.ownerUserResetMfaBtn.addEventListener('click', async () => {
+      try {
+        await runOwnerUserAction({
+          button: dom.ownerUserResetMfaBtn,
+          endpoint: (userId) => `/owner/users/${encodeURIComponent(userId)}/reset-mfa`,
+          busyLabel: 'Resetting...',
+          successMessage: 'MFA reset.',
+          confirmConfig: {
+            title: 'Reset MFA',
+            copy: 'Type RESET to clear every MFA secret and backup code for this account.',
+            confirmLabel: 'Reset MFA',
+            confirmClassName: 'danger-btn',
+            fields: [
+              {
+                id: 'owner-confirm-reset-mfa',
+                name: 'confirmText',
+                label: 'Type RESET',
+                placeholder: 'RESET',
+                required: true,
+              },
+            ],
+            validate: (values) => (safeText(values.confirmText).toUpperCase() === 'RESET' ? '' : 'Type RESET to continue.'),
+          },
+        });
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  }
+
+  if (dom.ownerUserResendVerificationBtn) {
+    dom.ownerUserResendVerificationBtn.addEventListener('click', async () => {
+      try {
+        await runOwnerUserAction({
+          button: dom.ownerUserResendVerificationBtn,
+          endpoint: (userId) => `/owner/users/${encodeURIComponent(userId)}/resend-verification`,
+          busyLabel: 'Sending...',
+          successMessage: 'Verification email sent.',
+        });
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  }
+
+  if (dom.ownerUserSendResetBtn) {
+    dom.ownerUserSendResetBtn.addEventListener('click', async () => {
+      try {
+        await runOwnerUserAction({
+          button: dom.ownerUserSendResetBtn,
+          endpoint: (userId) => `/owner/users/${encodeURIComponent(userId)}/send-password-reset`,
+          busyLabel: 'Sending...',
+          successMessage: 'Password reset email sent.',
+        });
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  }
+
+  if (dom.ownerUserDeleteBtn) {
+    dom.ownerUserDeleteBtn.addEventListener('click', async () => {
+      try {
+        const selectedUser = getSelectedOwnerUserOrThrow();
+        await runOwnerUserAction({
+          button: dom.ownerUserDeleteBtn,
+          endpoint: (userId) => `/owner/users/${encodeURIComponent(userId)}`,
+          method: 'DELETE',
+          busyLabel: 'Deleting...',
+          successMessage: 'Account deleted.',
+          confirmConfig: {
+            title: 'Delete account',
+            copy: `Type DELETE to permanently remove ${safeText(selectedUser.email || selectedUser.username || selectedUser.userId)}.`,
+            confirmLabel: 'Delete Account',
+            confirmClassName: 'danger-btn',
+            fields: [
+              {
+                id: 'owner-confirm-delete-account',
+                name: 'confirmText',
+                label: 'Type DELETE',
+                placeholder: 'DELETE',
+                required: true,
+              },
+            ],
+            validate: (values) => (safeText(values.confirmText).toUpperCase() === 'DELETE' ? '' : 'Type DELETE to continue.'),
+          },
+        });
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  }
 
   if (dom.sessionsRefreshBtn) {
     dom.sessionsRefreshBtn.addEventListener('click', async () => {

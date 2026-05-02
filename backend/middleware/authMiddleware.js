@@ -3,6 +3,12 @@ const {
   ACCESS_TOKEN_AUDIENCE,
   verifyTypedJwt,
 } = require('../utils/tokenHardening');
+const {
+  isOwnerRole,
+  isSuspendedAccount,
+  normalizeAccountRole,
+  normalizeAccountStatus,
+} = require('../utils/accountAccess');
 
 module.exports = async (req, res, next) => {
   const header = req.headers.authorization || '';
@@ -31,9 +37,15 @@ module.exports = async (req, res, next) => {
   }
 
   try {
-    const user = await User.findById(userId).select('_id refreshTokenVersion refreshSessions');
+    const user = await User.findById(userId).select(
+      '_id refreshTokenVersion refreshSessions accountRole accountStatus'
+    );
     if (!user) {
       return res.status(401).json({ message: 'User not found for token.' });
+    }
+
+    if (isSuspendedAccount(user.accountStatus)) {
+      return res.status(403).json({ message: 'This account is suspended.' });
     }
 
     if (user.refreshTokenVersion !== decoded.tokenVersion) {
@@ -55,6 +67,9 @@ module.exports = async (req, res, next) => {
       id: String(user._id),
       tokenVersion: decoded.tokenVersion,
       sid: sid || null,
+      accountRole: normalizeAccountRole(user.accountRole),
+      accountStatus: normalizeAccountStatus(user.accountStatus),
+      isOwner: isOwnerRole(user.accountRole),
     };
 
     return next();

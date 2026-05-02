@@ -2178,6 +2178,95 @@ footer {
   grid-template-columns: 1fr;
 }
 
+.owner-summary-grid {
+  margin-top: 1rem;
+}
+
+.owner-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+  gap: 1rem;
+}
+
+.owner-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) repeat(2, minmax(150px, 0.7fr)) auto auto;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.owner-filter-bar input,
+.owner-filter-bar select {
+  width: 100%;
+}
+
+.owner-user-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.owner-user-list > li {
+  list-style: none;
+}
+
+.owner-user-button {
+  width: 100%;
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  color: inherit;
+  text-align: left;
+  transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+}
+
+.owner-user-button:hover,
+.owner-user-button:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--line));
+  transform: translateY(-1px);
+}
+
+.owner-user-button.is-selected {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--line));
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 94%, transparent), transparent 34%),
+    var(--surface-strong);
+}
+
+.owner-user-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.owner-user-meta strong {
+  font-size: 1rem;
+}
+
+.owner-user-copy {
+  display: grid;
+  gap: 0.24rem;
+}
+
+.owner-user-copy p {
+  margin: 0;
+}
+
+.owner-user-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.owner-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
 .security-guided-grid,
 .security-primary-grid,
 .advanced-security-grid {
@@ -3216,7 +3305,9 @@ html[data-reduced-motion='true'] *::after {
   }
 
   .security-overview,
-  .mix-chart-shell {
+  .mix-chart-shell,
+  .owner-grid,
+  .owner-filter-bar {
     grid-template-columns: 1fr;
   }
 
@@ -3273,6 +3364,11 @@ html[data-reduced-motion='true'] *::after {
 
   .brand-lockup,
   .hero-brand-head {
+    align-items: flex-start;
+  }
+
+  .owner-user-meta {
+    flex-direction: column;
     align-items: flex-start;
   }
 }

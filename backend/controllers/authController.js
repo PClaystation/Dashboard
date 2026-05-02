@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -47,6 +48,18 @@ const {
   normalizeUsername,
 } = require('../utils/userIdentity');
 const { buildVanguardAccountState } = require('../utils/vanguardIntegration');
+const {
+  ACCOUNT_ROLE_OWNER,
+  ACCOUNT_ROLE_USER,
+  ACCOUNT_STATUS_ACTIVE,
+  ACCOUNT_STATUS_SUSPENDED,
+  buildAuthorityPayload,
+  isOwnerRole,
+  isSuspendedAccount,
+  normalizeAccountRole,
+  normalizeAccountStatus,
+  shouldAutoGrantOwnerRole,
+} = require('../utils/accountAccess');
 
 const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || '15m';
 const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
@@ -164,6 +177,7 @@ const DEFAULT_OAUTH_APP_ORIGINS = [
   DEFAULT_VANGUARD_ORIGIN,
   'https://charlemagne404.github.io',
   'https://grimoire.continental-hub.com',
+  'https://stepcast.continental-hub.com',
   'https://mpmc.ddns.net',
 ];
 const configuredOauthAppOrigins = Array.from(
@@ -192,6 +206,7 @@ const AVATAR_DATA_URL_MAX_LENGTH = 350000;
 const AVATAR_DATA_URL_PATTERN = /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/i;
 const MFA_BACKUP_CODE_COUNT = 8;
 const MAX_FOCUS_AREAS = 8;
+const OWNER_USER_LIST_LIMIT = 100;
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
 
@@ -247,6 +262,11 @@ const createHttpError = (statusCode, message) => {
   error.statusCode = statusCode;
   return error;
 };
+const sanitizeOwnerStatusReason = (value, fallback = '') => sanitizeText(value, 240) || fallback;
+const normalizeOwnerUserListLimit = (value) =>
+  Math.max(1, Math.min(OWNER_USER_LIST_LIMIT, Math.trunc(Number(value) || 25)));
+const normalizeOwnerSearchQuery = (value) => sanitizeText(value, 80);
+const normalizeOwnerUserId = (value) => sanitizeText(value, 120);
 
 const buildActivityDay = (value = new Date()) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -3018,6 +3038,19 @@ const buildMfaSetupPayload = async (user, secret, backupCodes) => {
   };
 };
 
+const clearStoredMfaState = (user) => {
+  if (!user?.security?.mfa) return;
+
+  user.security.mfa.enabled = false;
+  user.security.mfa.secret = '';
+  user.security.mfa.backupCodes = [];
+  user.security.mfa.pendingSecret = '';
+  user.security.mfa.pendingBackupCodes = [];
+  user.security.mfa.pendingCreatedAt = null;
+  user.security.mfa.enrolledAt = null;
+  user.security.mfa.lastUsedAt = null;
+};
+
 const verifyBackupCode = (user, backupCode) => {
   const normalized = sanitizeBackupCode(backupCode);
   if (!normalized) {
@@ -3983,6 +4016,7 @@ const buildUserPayload = (user) => {
     Array.isArray(user.recentLogins) ? user.recentLogins : [],
     Array.isArray(user.loginDayCounts) ? user.loginDayCounts : []
   );
+  const authority = buildAuthorityPayload(user);
 
   return {
     userId: toObjectIdString(user._id),
@@ -4022,6 +4056,7 @@ const buildUserPayload = (user) => {
     linkedAccounts,
     oauthProviders,
     vanguard: buildVanguardAccountState(user),
+    authority,
     preferences: {
       profilePublic: Boolean(
         hasOwn(user.preferences || {}, 'profilePublic') ? user.preferences?.profilePublic : true
@@ -4089,6 +4124,87 @@ const buildUserPayload = (user) => {
       passkeys: getPasskeyState(user),
     },
     migration: buildMigrationPayload(user),
+  };
+};
+
+const buildOwnerUserSummary = (user) => {
+  const authority = buildAuthorityPayload(user);
+  const passkeys = getPasskeyState(user);
+  const mfa = getMfaState(user);
+
+  return {
+    userId: toObjectIdString(user?._id),
+    continentalId: toObjectIdString(user?._id),
+    email: sanitizeText(user?.email, 320),
+    username: getDisplayableUsername(user),
+    handle: `@${getDisplayableUsername(user)}`,
+    displayName: sanitizeDisplayName(user?.displayName, user?.email),
+    isVerified: Boolean(user?.isVerified),
+    createdAt: user?.createdAt || null,
+    updatedAt: user?.updatedAt || null,
+    lastLoginAt: user?.lastLoginAt || null,
+    lastLoginIp: sanitizeText(user?.lastLoginIp, 80),
+    authority,
+    profile: {
+      headline: sanitizeHeadline(user?.profile?.headline, ''),
+      role: sanitizeRole(user?.profile?.role, ''),
+      organization: sanitizeOrganization(user?.profile?.organization, ''),
+      location: sanitizeText(user?.profile?.location, 120),
+      completion: profileCompletion(user),
+    },
+    preferences: {
+      profilePublic: Boolean(user?.preferences?.profilePublic),
+      searchable: Boolean(user?.preferences?.searchable),
+    },
+    security: {
+      activeSessions: Array.isArray(user?.refreshSessions) ? user.refreshSessions.length : 0,
+      knownDevices: Array.isArray(user?.knownDevices) ? user.knownDevices.length : 0,
+      mfaEnabled: Boolean(mfa.enabled),
+      passkeyCount: passkeys.count,
+      passwordChangedAt: user?.security?.passwordChangedAt || null,
+    },
+    vanguard: buildVanguardAccountState(user),
+  };
+};
+
+const buildOwnerSummary = (users = []) => {
+  let verified = 0;
+  let owners = 0;
+  let suspended = 0;
+  let flagged = 0;
+  let mfaEnabled = 0;
+  let passkeysEnabled = 0;
+  let publicProfiles = 0;
+  let recentLogins7d = 0;
+  const cutoff = Date.now() - 7 * DAY_MS;
+
+  for (const user of users) {
+    const authority = buildAuthorityPayload(user);
+    const vanguard = buildVanguardAccountState(user);
+    const passkeys = getPasskeyState(user);
+    const mfa = getMfaState(user);
+    const lastLoginAt = new Date(user?.lastLoginAt || 0).getTime();
+
+    if (user?.isVerified) verified += 1;
+    if (authority.isOwner) owners += 1;
+    if (authority.status === ACCOUNT_STATUS_SUSPENDED) suspended += 1;
+    if (vanguard.flagged || vanguard.bannedFromAi) flagged += 1;
+    if (mfa.enabled) mfaEnabled += 1;
+    if (passkeys.count > 0) passkeysEnabled += 1;
+    if (user?.preferences?.profilePublic) publicProfiles += 1;
+    if (!Number.isNaN(lastLoginAt) && lastLoginAt >= cutoff) recentLogins7d += 1;
+  }
+
+  return {
+    totalUsers: users.length,
+    owners,
+    verified,
+    suspended,
+    flagged,
+    mfaEnabled,
+    passkeysEnabled,
+    publicProfiles,
+    recentLogins7d,
   };
 };
 
@@ -4317,7 +4433,51 @@ const buildActivitySummary = (recentLogins = [], dailyCounts = []) => {
 };
 
 const FULL_USER_SELECT_FIELDS =
-  'email username displayName isVerified verificationToken verificationTokenExpires emailDelivery passwordResetToken passwordResetTokenExpires passwordResetRequestedAt lastLoginAt lastLoginIp recentLogins loginDayCounts knownDevices auditEvents profile linkedAccounts oauthIdentities integrations preferences security refreshTokenVersion refreshSessions createdAt updatedAt password';
+  'email username displayName accountRole accountStatus accountStatusReason isVerified verificationToken verificationTokenExpires emailDelivery passwordResetToken passwordResetTokenExpires passwordResetRequestedAt lastLoginAt lastLoginIp recentLogins loginDayCounts knownDevices auditEvents profile linkedAccounts oauthIdentities integrations preferences security refreshTokenVersion refreshSessions createdAt updatedAt password';
+
+const syncConfiguredOwnerAccess = (user) => {
+  if (!user) return false;
+
+  let changed = false;
+  const normalizedRole = normalizeAccountRole(user.accountRole);
+  const normalizedStatus = normalizeAccountStatus(user.accountStatus);
+  const normalizedReason = sanitizeOwnerStatusReason(user.accountStatusReason, '');
+
+  if (user.accountRole !== normalizedRole) {
+    user.accountRole = normalizedRole;
+    changed = true;
+  }
+  if (user.accountStatus !== normalizedStatus) {
+    user.accountStatus = normalizedStatus;
+    changed = true;
+  }
+  if ((user.accountStatusReason || '') !== normalizedReason) {
+    user.accountStatusReason = normalizedReason;
+    changed = true;
+  }
+  if (shouldAutoGrantOwnerRole(user.email) && !isOwnerRole(user.accountRole)) {
+    user.accountRole = ACCOUNT_ROLE_OWNER;
+    changed = true;
+  }
+
+  return changed;
+};
+
+const maybeAssignBootstrapOwner = async (user) => {
+  if (!user || isOwnerRole(user.accountRole)) return false;
+  if (shouldAutoGrantOwnerRole(user.email)) {
+    user.accountRole = ACCOUNT_ROLE_OWNER;
+    return true;
+  }
+
+  const hasOwner = await User.exists({ accountRole: ACCOUNT_ROLE_OWNER });
+  if (hasOwner) {
+    return false;
+  }
+
+  user.accountRole = ACCOUNT_ROLE_OWNER;
+  return true;
+};
 
 const ensureUserState = async (user, { ensureIdentity = true } = {}) => {
   if (!user) {
@@ -4325,6 +4485,10 @@ const ensureUserState = async (user, { ensureIdentity = true } = {}) => {
   }
 
   let changed = false;
+
+  if (syncConfiguredOwnerAccess(user)) {
+    changed = true;
+  }
 
   if (ensureIdentity && (await ensureUserIdentityFields(user))) {
     changed = true;
@@ -4344,6 +4508,102 @@ const ensureUserState = async (user, { ensureIdentity = true } = {}) => {
 const getUserById = async (id, { ensureIdentity = true } = {}) => {
   const user = await User.findById(id).select(FULL_USER_SELECT_FIELDS);
   return ensureUserState(user, { ensureIdentity });
+};
+
+const getOwnerUserById = async (id) => {
+  const userId = normalizeOwnerUserId(id);
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    throw createHttpError(404, 'User not found.');
+  }
+
+  const user = await getUserById(userId);
+  if (!user) {
+    throw createHttpError(404, 'User not found.');
+  }
+
+  return user;
+};
+
+const countRemainingOwners = async (excludeUserId) => {
+  const filter = { accountRole: ACCOUNT_ROLE_OWNER };
+  if (excludeUserId && mongoose.isValidObjectId(excludeUserId)) {
+    filter._id = { $ne: excludeUserId };
+  }
+  return User.countDocuments(filter);
+};
+
+const assertOwnerRetention = async (user, { nextRole, nextStatus, deleting = false } = {}) => {
+  if (!user || !isOwnerRole(user.accountRole)) return;
+
+  const roleAfterChange = nextRole ? normalizeAccountRole(nextRole) : normalizeAccountRole(user.accountRole);
+  const statusAfterChange = nextStatus
+    ? normalizeAccountStatus(nextStatus)
+    : normalizeAccountStatus(user.accountStatus);
+  const removesOwnerAccess =
+    deleting || roleAfterChange !== ACCOUNT_ROLE_OWNER || statusAfterChange === ACCOUNT_STATUS_SUSPENDED;
+
+  if (!removesOwnerAccess) return;
+
+  const remainingOwners = await countRemainingOwners(user._id);
+  if (remainingOwners <= 0) {
+    throw createHttpError(400, 'At least one active owner account must remain.');
+  }
+};
+
+const buildOwnerUserQuery = ({ query = '', role = '', status = '' } = {}) => {
+  const filters = [];
+  const normalizedQuery = normalizeOwnerSearchQuery(query);
+  const normalizedRole = normalizeAccountRole(role);
+  const normalizedStatus = normalizeAccountStatus(status);
+
+  if (normalizedQuery) {
+    const regex = new RegExp(escapeRegex(normalizedQuery), 'i');
+    filters.push({
+      $or: [
+        { email: regex },
+        { username: regex },
+        { displayName: regex },
+        { 'profile.headline': regex },
+        { 'profile.role': regex },
+        { 'profile.organization': regex },
+      ],
+    });
+  }
+
+  if (String(role || '').trim()) {
+    filters.push({ accountRole: normalizedRole });
+  }
+  if (String(status || '').trim()) {
+    filters.push({ accountStatus: normalizedStatus });
+  }
+
+  if (!filters.length) {
+    return {};
+  }
+
+  return filters.length === 1 ? filters[0] : { $and: filters };
+};
+
+const normalizeOwnerAuthorityInput = (incoming = {}, currentUser) => {
+  const nextRole = hasOwn(incoming, 'role')
+    ? normalizeAccountRole(incoming.role)
+    : normalizeAccountRole(currentUser?.accountRole);
+  const nextStatus = hasOwn(incoming, 'status')
+    ? normalizeAccountStatus(incoming.status)
+    : normalizeAccountStatus(currentUser?.accountStatus);
+  const statusReason =
+    nextStatus === ACCOUNT_STATUS_SUSPENDED
+      ? sanitizeOwnerStatusReason(
+          hasOwn(incoming, 'statusReason') ? incoming.statusReason : currentUser?.accountStatusReason,
+          ''
+        )
+      : '';
+
+  return {
+    role: nextRole,
+    status: nextStatus,
+    statusReason,
+  };
 };
 
 const uniqThrottleKeys = (keys = []) =>
@@ -4786,10 +5046,20 @@ exports.register = async (req, res) => {
     });
 
     await applyUsernameChange(user, requestedUsername);
+    const grantedBootstrapOwner = await maybeAssignBootstrapOwner(user);
     const verification = prepareEmailVerification(user);
     appendAuditEvent(user, req, 'register', 'Account created. Email verification required before sign-in.', {
       username: getDisplayableUsername(user),
     });
+    if (grantedBootstrapOwner) {
+      appendAuditEvent(
+        user,
+        req,
+        'owner_granted',
+        'Owner access granted during account bootstrap.',
+        { reason: shouldAutoGrantOwnerRole(user.email) ? 'configured_email' : 'first_owner_bootstrap' }
+      );
+    }
     await user.save();
     const verificationDelivery = await sendVerificationEmail(user, req, verification);
 
@@ -4863,6 +5133,13 @@ exports.login = async (req, res) => {
     }
 
     await ensureUserIdentityFields(user);
+
+    if (isSuspendedAccount(user.accountStatus)) {
+      await clearLoginFailures(throttleKeys);
+      appendAuditEvent(user, req, 'login_blocked_suspended', 'Sign-in blocked because the account is suspended.');
+      await user.save();
+      return res.status(403).json({ message: 'This account is suspended.' });
+    }
 
     if (!user.isVerified) {
       await clearLoginFailures(throttleKeys);
@@ -5246,6 +5523,409 @@ exports.me = async (req, res) => {
   }
 };
 
+exports.getOwnerSummary = async (req, res) => {
+  try {
+    const users = await User.find({})
+      .select(
+        'isVerified accountRole accountStatus lastLoginAt preferences integrations security refreshSessions knownDevices'
+      )
+      .lean();
+
+    return res.json({
+      message: 'Owner summary loaded.',
+      summary: buildOwnerSummary(users),
+    });
+  } catch (err) {
+    console.error('Owner summary error:', err);
+    return res.status(500).json({ message: 'Failed to load owner summary.' });
+  }
+};
+
+exports.listOwnerUsers = async (req, res) => {
+  const query = normalizeOwnerSearchQuery(req.query?.q);
+  const role = sanitizeText(req.query?.role, 24).toLowerCase();
+  const status = sanitizeText(req.query?.status, 24).toLowerCase();
+  const limit = normalizeOwnerUserListLimit(req.query?.limit);
+
+  try {
+    const users = await User.find(buildOwnerUserQuery({ query, role, status }))
+      .select(FULL_USER_SELECT_FIELDS)
+      .sort({ lastLoginAt: -1, createdAt: -1, _id: -1 })
+      .limit(limit);
+
+    const hydratedUsers = [];
+    for (const user of users) {
+      hydratedUsers.push(await ensureUserState(user));
+    }
+
+    return res.json({
+      message: 'Owner user list loaded.',
+      filters: {
+        query,
+        role,
+        status,
+        limit,
+      },
+      summary: buildOwnerSummary(hydratedUsers),
+      users: hydratedUsers.map((user) => buildOwnerUserSummary(user)),
+    });
+  } catch (err) {
+    console.error('Owner user list error:', err);
+    return res.status(500).json({ message: 'Failed to load users.' });
+  }
+};
+
+exports.getOwnerUser = async (req, res) => {
+  try {
+    const user = await getOwnerUserById(req.params.userId);
+
+    return res.json({
+      message: 'Owner user loaded.',
+      ownerUser: buildOwnerUserSummary(user),
+      auditEvents: Array.isArray(user.auditEvents)
+        ? user.auditEvents.slice(-20).reverse().map((event) => serializeAuditEvent(event))
+        : [],
+    });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    console.error('Owner user lookup error:', err);
+    return res.status(500).json({ message: 'Failed to load user.' });
+  }
+};
+
+exports.updateOwnerUser = async (req, res) => {
+  const incoming = req.body || {};
+
+  try {
+    const actor = await getUserById(req.user.id);
+    const targetUser = await getOwnerUserById(req.params.userId);
+    const changedFields = [];
+
+    if (hasOwn(incoming, 'displayName')) {
+      if (containsBlockedNameTerm(incoming.displayName)) {
+        return res.status(400).json({ message: DISPLAY_NAME_MODERATION_MESSAGE });
+      }
+      targetUser.displayName = sanitizeDisplayName(incoming.displayName, targetUser.email);
+      changedFields.push('displayName');
+    }
+
+    if (hasOwn(incoming, 'username')) {
+      if (containsBlockedNameTerm(incoming.username)) {
+        return res.status(400).json({ message: USERNAME_MODERATION_MESSAGE });
+      }
+      await applyUsernameChange(targetUser, incoming.username);
+      changedFields.push('username');
+    }
+
+    if (incoming.profile && typeof incoming.profile === 'object') {
+      targetUser.profile = normalizeProfile(incoming.profile, targetUser.profile || {});
+      changedFields.push('profile');
+    }
+
+    if (hasOwn(incoming, 'isVerified')) {
+      targetUser.isVerified = Boolean(incoming.isVerified);
+      if (targetUser.isVerified) {
+        targetUser.verificationToken = '';
+        targetUser.verificationTokenExpires = null;
+      }
+      changedFields.push('verification');
+    }
+
+    if (incoming.authority && typeof incoming.authority === 'object') {
+      const nextAuthority = normalizeOwnerAuthorityInput(incoming.authority, targetUser);
+      await assertOwnerRetention(targetUser, {
+        nextRole: nextAuthority.role,
+        nextStatus: nextAuthority.status,
+      });
+
+      const previousStatus = normalizeAccountStatus(targetUser.accountStatus);
+      targetUser.accountRole = nextAuthority.role;
+      targetUser.accountStatus = nextAuthority.status;
+      targetUser.accountStatusReason = nextAuthority.statusReason;
+      if (
+        previousStatus !== ACCOUNT_STATUS_SUSPENDED &&
+        nextAuthority.status === ACCOUNT_STATUS_SUSPENDED
+      ) {
+        revokeAllTrackedSessions(targetUser);
+      }
+      changedFields.push('authority');
+    }
+
+    if (incoming.preferences && typeof incoming.preferences === 'object') {
+      targetUser.preferences = {
+        ...(targetUser.preferences || {}),
+        profilePublic: hasOwn(incoming.preferences, 'profilePublic')
+          ? Boolean(incoming.preferences.profilePublic)
+          : Boolean(targetUser.preferences?.profilePublic),
+        searchable: hasOwn(incoming.preferences, 'searchable')
+          ? Boolean(incoming.preferences.searchable)
+          : Boolean(targetUser.preferences?.searchable),
+      };
+      changedFields.push('preferences');
+    }
+
+    if (incoming.vanguard && typeof incoming.vanguard === 'object') {
+      targetUser.integrations = targetUser.integrations || {};
+      targetUser.integrations.vanguard = targetUser.integrations.vanguard || {};
+      if (hasOwn(incoming.vanguard, 'trusted')) {
+        targetUser.integrations.vanguard.trusted = Boolean(incoming.vanguard.trusted);
+      }
+      if (hasOwn(incoming.vanguard, 'staff')) {
+        targetUser.integrations.vanguard.staff = Boolean(incoming.vanguard.staff);
+      }
+      if (hasOwn(incoming.vanguard, 'bannedFromAi')) {
+        targetUser.integrations.vanguard.aiDenied = Boolean(incoming.vanguard.bannedFromAi);
+      }
+      if (hasOwn(incoming.vanguard, 'flagged')) {
+        targetUser.integrations.vanguard.flagged = Boolean(incoming.vanguard.flagged);
+        targetUser.integrations.vanguard.flaggedAt = targetUser.integrations.vanguard.flagged
+          ? new Date()
+          : null;
+      }
+      if (
+        targetUser.integrations.vanguard.flagged ||
+        hasOwn(incoming.vanguard, 'flagReason')
+      ) {
+        targetUser.integrations.vanguard.flagReason = targetUser.integrations.vanguard.flagged
+          ? sanitizeText(
+              hasOwn(incoming.vanguard, 'flagReason')
+                ? incoming.vanguard.flagReason
+                : targetUser.integrations.vanguard.flagReason,
+              240
+            )
+          : '';
+      }
+      changedFields.push('vanguard');
+    }
+
+    if (!changedFields.length) {
+      return res.status(400).json({ message: 'No owner updates were provided.' });
+    }
+
+    appendAuditEvent(targetUser, req, 'owner_account_updated', 'Owner updated this account.', {
+      actorUserId: toObjectIdString(actor?._id),
+      changedFields,
+    });
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      appendAuditEvent(actor, req, 'owner_user_updated', 'Owner updated another account.', {
+        targetUserId: toObjectIdString(targetUser._id),
+        changedFields,
+      });
+    }
+
+    await targetUser.save();
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      await actor.save();
+    }
+
+    return res.json({
+      message: 'Owner account changes saved.',
+      ownerUser: buildOwnerUserSummary(targetUser),
+    });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    if (isDuplicateKeyError(err)) {
+      return res.status(409).json({ message: getDuplicateUserFieldMessage(err) });
+    }
+    console.error('Owner user update error:', err);
+    return res.status(500).json({ message: 'Failed to update user.' });
+  }
+};
+
+exports.revokeOwnerUserSessions = async (req, res) => {
+  try {
+    const actor = await getUserById(req.user.id);
+    const targetUser = await getOwnerUserById(req.params.userId);
+
+    revokeAllTrackedSessions(targetUser);
+    appendAuditEvent(targetUser, req, 'owner_sessions_revoked', 'Owner revoked all sessions for this account.', {
+      actorUserId: toObjectIdString(actor?._id),
+    });
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      appendAuditEvent(actor, req, 'owner_user_sessions_revoked', 'Owner revoked another account session set.', {
+        targetUserId: toObjectIdString(targetUser._id),
+      });
+    }
+
+    await targetUser.save();
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      await actor.save();
+    }
+
+    return res.json({
+      message: 'All sessions revoked for that account.',
+      ownerUser: buildOwnerUserSummary(targetUser),
+      forceRelogin: true,
+    });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    console.error('Owner revoke sessions error:', err);
+    return res.status(500).json({ message: 'Failed to revoke sessions.' });
+  }
+};
+
+exports.resetOwnerUserMfa = async (req, res) => {
+  try {
+    const actor = await getUserById(req.user.id);
+    const targetUser = await getOwnerUserById(req.params.userId);
+
+    clearStoredMfaState(targetUser);
+    revokeAllTrackedSessions(targetUser);
+    appendAuditEvent(targetUser, req, 'owner_mfa_reset', 'Owner reset MFA and revoked all sessions for this account.', {
+      actorUserId: toObjectIdString(actor?._id),
+    });
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      appendAuditEvent(actor, req, 'owner_user_mfa_reset', 'Owner reset MFA for another account.', {
+        targetUserId: toObjectIdString(targetUser._id),
+      });
+    }
+
+    await targetUser.save();
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      await actor.save();
+    }
+
+    return res.json({
+      message: 'MFA reset. The user must sign in again and enroll MFA from scratch.',
+      ownerUser: buildOwnerUserSummary(targetUser),
+      forceRelogin: true,
+    });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    console.error('Owner reset MFA error:', err);
+    return res.status(500).json({ message: 'Failed to reset MFA.' });
+  }
+};
+
+exports.resendOwnerUserVerification = async (req, res) => {
+  try {
+    const actor = await getUserById(req.user.id);
+    const targetUser = await getOwnerUserById(req.params.userId);
+
+    if (targetUser.isVerified) {
+      return res.status(400).json({ message: 'That account is already verified.' });
+    }
+
+    const verification = prepareEmailVerification(targetUser);
+    appendAuditEvent(
+      targetUser,
+      req,
+      'owner_verification_resent',
+      'Owner resent the verification email for this account.',
+      { actorUserId: toObjectIdString(actor?._id) }
+    );
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      appendAuditEvent(actor, req, 'owner_user_verification_resent', 'Owner resent verification for another account.', {
+        targetUserId: toObjectIdString(targetUser._id),
+      });
+    }
+
+    await targetUser.save();
+    const delivery = await sendVerificationEmail(targetUser, req, verification);
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      await actor.save();
+    }
+
+    return res.json({
+      message: delivery?.sent
+        ? 'Verification email sent.'
+        : 'Verification email could not be sent right now.',
+      ownerUser: buildOwnerUserSummary(targetUser),
+      verificationEmail: serializeVerificationDelivery(delivery),
+    });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    console.error('Owner resend verification error:', err);
+    return res.status(500).json({ message: 'Failed to resend verification email.' });
+  }
+};
+
+exports.sendOwnerUserPasswordReset = async (req, res) => {
+  try {
+    const actor = await getUserById(req.user.id);
+    const targetUser = await getOwnerUserById(req.params.userId);
+
+    const reset = preparePasswordReset(targetUser);
+    appendAuditEvent(
+      targetUser,
+      req,
+      'owner_password_reset_sent',
+      'Owner sent a password reset email for this account.',
+      { actorUserId: toObjectIdString(actor?._id) }
+    );
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      appendAuditEvent(actor, req, 'owner_user_password_reset_sent', 'Owner sent a password reset email for another account.', {
+        targetUserId: toObjectIdString(targetUser._id),
+      });
+    }
+
+    await targetUser.save();
+    await sendPasswordResetEmail(targetUser, req, reset);
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      await actor.save();
+    }
+
+    return res.json({
+      message: 'Password reset email sent.',
+      ownerUser: buildOwnerUserSummary(targetUser),
+    });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    console.error('Owner password reset email error:', err);
+    return res.status(500).json({ message: 'Failed to send password reset email.' });
+  }
+};
+
+exports.deleteOwnerUser = async (req, res) => {
+  try {
+    const actor = await getUserById(req.user.id);
+    const targetUser = await getOwnerUserById(req.params.userId);
+
+    await assertOwnerRetention(targetUser, { deleting: true });
+
+    await sendSecurityAlertEmail(
+      targetUser,
+      'Your Continental ID account was deleted',
+      'Account deleted by an owner',
+      'An owner permanently deleted your Continental ID account.',
+      [`Time: ${new Date().toUTCString()}`]
+    );
+
+    if (actor && toObjectIdString(actor._id) !== toObjectIdString(targetUser._id)) {
+      appendAuditEvent(actor, req, 'owner_user_deleted', 'Owner deleted another account.', {
+        targetUserId: toObjectIdString(targetUser._id),
+      });
+      await actor.save();
+    }
+
+    await User.deleteOne({ _id: targetUser._id });
+
+    return res.json({
+      message: 'Account deleted permanently.',
+      deletedUserId: toObjectIdString(targetUser._id),
+      deletedOwnAccount: toObjectIdString(actor?._id) === toObjectIdString(targetUser._id),
+    });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    console.error('Owner delete user error:', err);
+    return res.status(500).json({ message: 'Failed to delete account.' });
+  }
+};
+
 exports.refreshToken = async (req, res) => {
   try {
     const session = await resolveRefreshSessionFromCookie(req, res);
@@ -5260,6 +5940,14 @@ exports.refreshToken = async (req, res) => {
         authenticated: false,
         requiresVerification: true,
         message: 'Verify your email before signing in.',
+      });
+    }
+
+    if (isSuspendedAccount(session.user.accountStatus)) {
+      clearRefreshCookie(res, req);
+      return res.status(200).json({
+        authenticated: false,
+        message: 'This account is suspended.',
       });
     }
 
@@ -6455,14 +7143,7 @@ exports.disableMfa = async (req, res) => {
       });
     }
 
-    user.security.mfa.enabled = false;
-    user.security.mfa.secret = '';
-    user.security.mfa.backupCodes = [];
-    user.security.mfa.pendingSecret = '';
-    user.security.mfa.pendingBackupCodes = [];
-    user.security.mfa.pendingCreatedAt = null;
-    user.security.mfa.enrolledAt = null;
-    user.security.mfa.lastUsedAt = null;
+    clearStoredMfaState(user);
 
     appendAuditEvent(user, req, 'mfa_disabled', 'Multi-factor authentication disabled.');
     await user.save();
@@ -6800,6 +7481,8 @@ exports.updatePassword = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
+
+    await assertOwnerRetention(user, { deleting: true });
 
     const matches = await user.comparePassword(currentPassword);
     if (!matches) {

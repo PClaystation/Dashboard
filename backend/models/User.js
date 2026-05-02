@@ -127,6 +127,24 @@ const userSchema = new mongoose.Schema(
       trim: true,
       maxlength: 60,
     },
+    accountRole: {
+      type: String,
+      enum: ['user', 'owner'],
+      default: 'user',
+      index: true,
+    },
+    accountStatus: {
+      type: String,
+      enum: ['active', 'suspended'],
+      default: 'active',
+      index: true,
+    },
+    accountStatusReason: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: 240,
+    },
     password: { type: String, required: true },
     refreshTokenVersion: { type: Number, default: 0 },
     refreshSessions: {
@@ -284,6 +302,7 @@ userSchema.index(
   { 'oauthIdentities.provider': 1, 'oauthIdentities.providerUserId': 1 },
   { unique: true, sparse: true }
 );
+userSchema.index({ accountRole: 1, accountStatus: 1, updatedAt: -1 });
 
 userSchema.pre('save', async function onSave(next) {
   if (!this.displayName && this.email) {
